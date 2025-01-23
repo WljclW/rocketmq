@@ -17,7 +17,11 @@
 
 package org.apache.rocketmq.remoting;
 
-public interface RemotingService {
+/**
+ * Romoting是rocketmq的远程通信模块。
+ * RemotingService是这个模块中的顶层接口
+ * */
+public interface RemotingService {  //remoting模块的顶层接口
     void start();
 
     void shutdown();

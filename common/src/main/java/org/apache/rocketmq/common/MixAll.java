@@ -259,13 +259,13 @@ public class MixAll {
 
     public static void printObjectProperties(final Logger logger, final Object object,
         final boolean onlyImportantField) {
-        Field[] fields = object.getClass().getDeclaredFields();
-        for (Field field : fields) {
+        Field[] fields = object.getClass().getDeclaredFields();     //通过反射获取当前对象的所有属性
+        for (Field field : fields) {    //for干的就是拿出满足指定条件的字段并进行打印name和value。不过可以有选择性的打印
             if (!Modifier.isStatic(field.getModifiers())) {
                 String name = field.getName();
                 if (!name.startsWith("this")) {
-                    if (onlyImportantField) {
-                        Annotation annotation = field.getAnnotation(ImportantField.class);
+                    if (onlyImportantField) {      //看一下是不是只需要打印 重要的field
+                        Annotation annotation = field.getAnnotation(ImportantField.class);  //判断当前方法是不是重要方法，底层提供了一个注解来标识
                         if (null == annotation) {
                             continue;
                         }
@@ -351,18 +351,22 @@ public class MixAll {
         return properties;
     }
 
+    /**
+     * 将Properties对象中的值 注入到 Object对象中【利用反射：并且properties中的键值abcd 和 setAbcd 是一一对应的】
+     * 利用反射查找object对象以set为前缀的方法，并判断Properties有没有对应的属性，有的话需要反射调用方法设置属性
+     * */
     public static void properties2Object(final Properties p, final Object object) {
         Method[] methods = object.getClass().getMethods();
         for (Method method : methods) {
             String mn = method.getName();
             if (mn.startsWith("set")) {
                 try {
-                    String tmp = mn.substring(4);
-                    String first = mn.substring(3, 4);
+                    String tmp = mn.substring(4);   //比如:方法名setConfigStorePath就会变成onfigStorePath
+                    String first = mn.substring(3, 4);  //比如：方法名setConfigStorePath就会变成C
 
-                    String key = first.toLowerCase() + tmp;
-                    String property = p.getProperty(key);
-                    if (property != null) {
+                    String key = first.toLowerCase() + tmp; //比如：方法名setConfigStorePath就会变成configStorePath
+                    String property = p.getProperty(key);   //看一下是否有对应的属性
+                    if (property != null) {     //如果根据key得到的值不是空，就利用反射带哦用方法进行属性设定值
                         Class<?>[] pt = method.getParameterTypes();
                         if (pt != null && pt.length > 0) {
                             String cn = pt[0].getSimpleName();

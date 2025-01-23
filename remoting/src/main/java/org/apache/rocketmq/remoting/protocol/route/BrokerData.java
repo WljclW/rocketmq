@@ -29,8 +29,8 @@ import org.apache.rocketmq.common.MixAll;
  * that it belongs to, and all the single instance information for this cluster.
  */
 public class BrokerData implements Comparable<BrokerData> {
-    private String cluster;
-    private String brokerName;
+    private String cluster; // broker所属的集群名称
+    private String brokerName;  //broker的名字
 
     /**
      * The container that store the all single instances for the current broker replication cluster.

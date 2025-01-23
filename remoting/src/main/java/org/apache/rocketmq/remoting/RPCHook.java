@@ -19,6 +19,10 @@ package org.apache.rocketmq.remoting;
 
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ *  RPCHook 类似钩子函数，是 RocketMQ 提供的一个扩展点，允许用
+ *      户在关键的 RPC 调用前后插入自定义逻辑，比如日志记录等。
+ * */
 public interface RPCHook {
     void doBeforeRequest(final String remoteAddr, final RemotingCommand request);
 

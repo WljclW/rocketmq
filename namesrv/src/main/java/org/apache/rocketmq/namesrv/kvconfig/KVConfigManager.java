@@ -41,7 +41,7 @@ public class KVConfigManager {
         this.namesrvController = namesrvController;
     }
 
-    public void load() {
+    public void load() {    //完成KVConfig(json格式)的加载。
         String content = null;
         try {
             content = MixAll.file2String(this.namesrvController.getNamesrvConfig().getKvConfigPath());

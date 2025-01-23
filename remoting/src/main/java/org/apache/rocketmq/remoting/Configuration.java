@@ -44,7 +44,7 @@ public class Configuration {
     /**
      * All properties include configs in object and extend properties.
      */
-    private Properties allConfigs = new Properties();
+    private Properties allConfigs = new Properties();   //存放namesrvConfig,nettyServerConfig中所有的配置信息
 
     public Configuration(Logger log) {
         this.log = log;
@@ -70,6 +70,7 @@ public class Configuration {
 
     /**
      * register config object
+     *  1.将参数中的配置信息,拿出来添加到allConfigs字段中;并将参数对象添加到configObjectList字段中
      *
      * @return the current Configuration object
      */
@@ -120,6 +121,7 @@ public class Configuration {
 
     /**
      * The store path will be gotten from the field of object.
+     * 设置存储路径 字段
      *
      * @throws java.lang.RuntimeException if the field of object is not exist.
      */
@@ -318,10 +320,10 @@ public class Configuration {
         return stringBuilder.toString();
     }
 
-    private void merge(Properties from, Properties to) {
+    private void merge(Properties from, Properties to) {    //从from中拿去配置设置到to里面去
         for (Entry<Object, Object> next : from.entrySet()) {
             Object fromObj = next.getValue(), toObj = to.get(next.getKey());
-            if (toObj != null && !toObj.equals(fromObj)) {
+            if (toObj != null && !toObj.equals(fromObj)) {  //如果键值相等，就没必要打印了。【可能之前打印过了？？】
                 log.info("Replace, key: {}, value: {} -> {}", next.getKey(), toObj, fromObj);
             }
             to.put(next.getKey(), fromObj);

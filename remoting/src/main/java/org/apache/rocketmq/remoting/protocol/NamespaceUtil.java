@@ -41,9 +41,9 @@ public class NamespaceUtil {
 
         StringBuilder stringBuilder = new StringBuilder();
         if (isRetryTopic(resourceWithNamespace)) {
-            stringBuilder.append(MixAll.RETRY_GROUP_TOPIC_PREFIX);
+            stringBuilder.append(MixAll.RETRY_GROUP_TOPIC_PREFIX);  //对于空消息的处理
         }
-        if (isDLQTopic(resourceWithNamespace)) {
+        if (isDLQTopic(resourceWithNamespace)) {    //对于延迟消息的处理
             stringBuilder.append(MixAll.DLQ_GROUP_TOPIC_PREFIX);
         }
 

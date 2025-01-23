@@ -81,49 +81,69 @@ public class NamesrvStartup {
         return null;
     }
 
+    /**
+     * 1.解析命令行参数和配置文件
+     * 2.该方法首先设置Remoting框架的版本属性，然后解析命令行参数，接着加载配置文件（如果有提供）
+     * 3.最后，根据命令行参数和配置文件初始化相关的配置对象
+     * 4.带有-c参数即指定了配置文件，此时会拿出配置文件的东西赋值给相应的xxxxConfig对象，这些对象主要包括：namesrvConfig、
+     *      nettyServerConfig、nettyClientConfig、controllerConfig、JraftConfig。
+     * 5.如何根据 配置文件 的东西赋值给对象？通过反射拿到对象的setAbcd方法，判断abcd这个属性是不是在配置文件中，如果在的话
+     *      就将对应的值拿出来，通过反射执行xxxConfig的setAbcd方法完成赋值.
+     * 6.-p参数是打印配置信息,就是将上面XxxxConfig对应的状态信息(即对象的字段值)打印出来.
+     *
+     * @param args 命令行参数数组
+     * @throws Exception 如果解析命令行参数或加载配置文件时发生错误，则抛出异常
+     */
     public static void parseCommandlineAndConfigFile(String[] args) throws Exception {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
-
+        //构建命令行选项，添加 -h -n选项
         Options options = ServerUtil.buildCommandlineOptions(new Options());
+        // 会添加 -c,-p 参数
         CommandLine commandLine = ServerUtil.parseCmdLine("mqnamesrv", args, buildCommandlineOptions(options), new DefaultParser());
         if (null == commandLine) {
             System.exit(-1);
             return;
         }
-
+        //下面的三行初始化配置对象
         namesrvConfig = new NamesrvConfig();
         nettyServerConfig = new NettyServerConfig();
         nettyClientConfig = new NettyClientConfig();
-        nettyServerConfig.setListenPort(9876);
+        nettyServerConfig.setListenPort(9876);  // 设置Netty服务器的监听端口  也就是默认的 NameServer 端口是 9876
+        //-c选项可以指定namesrv配置文件的地址。根据指定的文件拿出属性赋给xxxxxConfig对象的对应字段
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
                 InputStream in = new BufferedInputStream(Files.newInputStream(Paths.get(file)));
                 properties = new Properties();
                 properties.load(in);
+                /**
+                 * 将配置文件中的属性通过反射setter方法设置到namesrvConfig、nettyServerConfig、nettyClientConfig
+                 * 中
+                 * */
                 MixAll.properties2Object(properties, namesrvConfig);
                 MixAll.properties2Object(properties, nettyServerConfig);
                 MixAll.properties2Object(properties, nettyClientConfig);
-                if (namesrvConfig.isEnableControllerInNamesrv()) {
+                if (namesrvConfig.isEnableControllerInNamesrv()) {      // 如果配置中启用了控制器功能，初始化并配置控制器
                     controllerConfig = new ControllerConfig();
                     JraftConfig jraftConfig = new JraftConfig();
                     controllerConfig.setJraftConfig(jraftConfig);
                     MixAll.properties2Object(properties, controllerConfig);
                     MixAll.properties2Object(properties, jraftConfig);
                 }
-                namesrvConfig.setConfigStorePath(file);
+                namesrvConfig.setConfigStorePath(file);     //设置配置文件的路径
 
                 System.out.printf("load config properties file OK, %s%n", file);
                 in.close();
             }
         }
-
+        //将命令行选项的完整名称（eg：-n-->namesrvAddr）对应的选项值设置到NameSrvConfig的对应属性上
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
+        //-p选项可以将所有的属性条目打印在控制台，借助printObjectProperties方法进行打印
         if (commandLine.hasOption('p')) {
             MixAll.printObjectProperties(logConsole, namesrvConfig);
             MixAll.printObjectProperties(logConsole, nettyServerConfig);
             MixAll.printObjectProperties(logConsole, nettyClientConfig);
-            if (namesrvConfig.isEnableControllerInNamesrv()) {
+            if (namesrvConfig.isEnableControllerInNamesrv()) {      //同样如果配置文件设置了raft配置，也需要打印出关于它的配置
                 MixAll.printObjectProperties(logConsole, controllerConfig);
             }
             System.exit(0);
@@ -133,6 +153,7 @@ public class NamesrvStartup {
             System.out.printf("Please set the %s variable in your environment to match the location of the RocketMQ installation%n", MixAll.ROCKETMQ_HOME_ENV);
             System.exit(-2);
         }
+        //日志打印NamesrvConfig和NettyServerConfig和配置
         MixAll.printObjectProperties(log, namesrvConfig);
         MixAll.printObjectProperties(log, nettyServerConfig);
 
@@ -140,7 +161,7 @@ public class NamesrvStartup {
 
     public static NamesrvController createAndStartNamesrvController() throws Exception {
 
-        NamesrvController controller = createNamesrvController();
+        NamesrvController controller = createNamesrvController();   //创建namesrv控制器实例，在创建过程中做了一些事
         start(controller);
         NettyServerConfig serverConfig = controller.getNettyServerConfig();
         String tip = String.format("The Name Server boot success. serializeType=%s, address %s:%d", RemotingCommand.getSerializeTypeConfigInThisServer(), serverConfig.getBindAddress(), serverConfig.getListenPort());
@@ -226,6 +247,7 @@ public class NamesrvStartup {
         controllerManager.shutdown();
     }
 
+    //这两个方法其实继续添加了options元素。其中一个是 namesrv的配置文件，一个是 打印所有的config条目
     public static Options buildCommandlineOptions(final Options options) {
         Option opt = new Option("c", "configFile", true, "Name server config properties file");
         opt.setRequired(false);

@@ -46,7 +46,7 @@ public class ServerUtil {
         hf.setWidth(110);
         CommandLine commandLine = null;
         try {
-            commandLine = parser.parse(options, args);
+            commandLine = parser.parse(options, args);      //进行命令行的解析，底层有一个默认实现见DefaultParser(实现CommandLineParser接口)
             if (commandLine.hasOption('h')) {
                 hf.printHelp(appName, options, true);
                 System.exit(0);
@@ -66,6 +66,9 @@ public class ServerUtil {
         hf.printHelp(appName, options, true);
     }
 
+    /**
+     * 从参数commandLine 构建出 Properties对象
+     * */
     public static Properties commandLine2Properties(final CommandLine commandLine) {
         Properties properties = new Properties();
         Option[] opts = commandLine.getOptions();

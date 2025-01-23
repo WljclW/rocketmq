@@ -99,8 +99,8 @@ public class NamesrvController {
     }
 
     public boolean initialize() {
-        loadConfig();
-        initiateNetworkComponents();
+        loadConfig();   //加载KV配置表...加载系统配置，这是系统运行所必需的配置信息
+        initiateNetworkComponents();  //创建网络处理对象
         initiateThreadExecutors();
         registerProcessor();
         startScheduleService();

@@ -25,6 +25,15 @@ import org.apache.rocketmq.remoting.exception.RemotingTooMuchRequestException;
 import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ * 关于RemotingServer和RemotingClient的说明：
+ *      RomotingClient主要是Producer发送消息与Consumer拉取消息时用到；RomotingServer主要是Broker进行回
+ *      调，获取Consumer状态等的时候用到。
+ *      这里重点需要关注下registerProcessor注册命令处理器这个方法。RocketMQ 会按照业务逻辑进行拆分，例如
+ *      消息发送、消息拉取等每一个网络操作会定义一个请求编码（requestCode），然后每一个类型对应一个业务处
+ *      理器 NettyRequestProcessor，并可以按照不同的 requestCode 定义不同的线程池，实现不同请求的线程池
+ *      隔离。
+ * */
 public interface RemotingServer extends RemotingService {
 
     void registerProcessor(final int requestCode, final NettyRequestProcessor processor,
@@ -34,6 +43,7 @@ public interface RemotingServer extends RemotingService {
 
     int localListenPort();
 
+    //根据请求编码获取对应的请求业务处理器与线程池
     Pair<NettyRequestProcessor, ExecutorService> getProcessorPair(final int requestCode);
 
     Pair<NettyRequestProcessor, ExecutorService> getDefaultProcessorPair();
