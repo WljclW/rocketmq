@@ -59,29 +59,30 @@ public class Validators {
         }
     }
 
+    // msg 当前要发送的消息；defaultMQProducer 生产者
     public static void checkMessage(Message msg, DefaultMQProducer defaultMQProducer) throws MQClientException {
-        if (null == msg) {
+        if (null == msg) {  //检查消息对象是不是空
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL, "the message is null");
         }
         // topic
-        Validators.checkTopic(msg.getTopic());
-        Validators.isNotAllowedSendTopic(msg.getTopic());
+        Validators.checkTopic(msg.getTopic());  // 检查消息的主题是否合法 主题是否为空  是否大于127个字符
+        Validators.isNotAllowedSendTopic(msg.getTopic());   // 检查消息的主题是否被禁止发送  RocketMQ 内置了一些 TOPIC 不能跟人家内置的一样 比如RMQ_SYS_TRANS_HALF_TOPIC 都在TopicValidator类里定义着
 
         // body
-        if (null == msg.getBody()) {
+        if (null == msg.getBody()) {    // 检查消息体是否为空
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL, "the message body is null");
         }
 
-        if (0 == msg.getBody().length) {
+        if (0 == msg.getBody().length) {    // 检查消息体长度是否为零
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL, "the message body length is zero");
         }
 
-        if (msg.getBody().length > defaultMQProducer.getMaxMessageSize()) {
+        if (msg.getBody().length > defaultMQProducer.getMaxMessageSize()) { // 检查消息体大小是否超过最大限制 默认不能超过 4M
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL,
                 "the message body size over max value, MAX: " + defaultMQProducer.getMaxMessageSize());
         }
 
-        String lmqPath = msg.getUserProperty(MessageConst.PROPERTY_INNER_MULTI_DISPATCH);
+        String lmqPath = msg.getUserProperty(MessageConst.PROPERTY_INNER_MULTI_DISPATCH);   // 检查消息中的LMQ路径是否包含非法字符
         if (StringUtils.contains(lmqPath, File.separator)) {
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL,
                 "INNER_MULTI_DISPATCH " + lmqPath + " can not contains " + File.separator + " character");

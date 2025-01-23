@@ -21,11 +21,11 @@
 package org.apache.rocketmq.remoting.protocol.route;
 
 public class QueueData implements Comparable<QueueData> {
-    private String brokerName;
-    private int readQueueNums;
-    private int writeQueueNums;
-    private int perm;
-    private int topicSysFlag;
+    private String brokerName;  //broker的名词(同一个集群(cluster)中所有broker的brokerName是一样的)
+    private int readQueueNums;  //读队列数量
+    private int writeQueueNums; //写队列数量
+    private int perm;   //读写的权限信息
+    private int topicSysFlag;   //topic同步标记
 
     public QueueData() {
 

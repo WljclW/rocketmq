@@ -134,19 +134,29 @@ public class MQFaultStrategy {
         this.latencyFaultTolerance.shutdown();
     }
 
+    /*
+     * @description: 
+     * @param tpInfo: tryToFindTopicPublishInfo获取的路由信息
+     * @param lastBrokerName: 上一次选择的执行发送消息失败的Broker名称。。启用 Broker 故障延迟机制时会用到
+     * @param resetIndex: 第一次发送为false 重试发送为true
+     * @return org.apache.rocketmq.common.message.MessageQueue
+     * @author: Zhou
+     * @date: 2024/11/16 18:02
+     */
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName, final boolean resetIndex) {
-        BrokerFilter brokerFilter = threadBrokerFilter.get();
+        BrokerFilter brokerFilter = threadBrokerFilter.get();   // 获取当前线程的 Broker 过滤器
         brokerFilter.setLastBrokerName(lastBrokerName);
-        if (this.sendLatencyFaultEnable) {
-            if (resetIndex) {
+        if (this.sendLatencyFaultEnable) {  // 是否开启Broker 故障延迟机制 默认关闭
+            if (resetIndex) {   // 重置索引 重置 TopicPublishInfo内部的sendWhichQueue队列的索引
                 tpInfo.resetIndex();
             }
+            // 尝试选择一个满足可用性过滤器和Broker过滤器的消息队列
             MessageQueue mq = tpInfo.selectOneMessageQueue(availableFilter, brokerFilter);
             if (mq != null) {
                 return mq;
             }
 
-            mq = tpInfo.selectOneMessageQueue(reachableFilter, brokerFilter);
+            mq = tpInfo.selectOneMessageQueue(reachableFilter, brokerFilter);   // 如果上述选择失败，尝试选择一个满足可访问性过滤器和Broker过滤器的消息队列
             if (mq != null) {
                 return mq;
             }
@@ -154,11 +164,11 @@ public class MQFaultStrategy {
             return tpInfo.selectOneMessageQueue();
         }
 
-        MessageQueue mq = tpInfo.selectOneMessageQueue(brokerFilter);
+        MessageQueue mq = tpInfo.selectOneMessageQueue(brokerFilter);   // 如果未启用Broker 故障延迟机制，则直接使用Broker过滤器选择消息队列
         if (mq != null) {
             return mq;
         }
-        return tpInfo.selectOneMessageQueue();
+        return tpInfo.selectOneMessageQueue();   // 如果选择失败，退而求其次，选择任意一个消息队列
     }
 
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation,

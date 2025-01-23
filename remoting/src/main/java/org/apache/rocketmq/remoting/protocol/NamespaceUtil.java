@@ -93,11 +93,11 @@ public class NamespaceUtil {
         String resourceWithoutRetryAndDLQ = withOutRetryAndDLQ(resourceWithOutNamespace);
         StringBuilder stringBuilder = new StringBuilder();
 
-        if (isRetryTopic(resourceWithOutNamespace)) {
+        if (isRetryTopic(resourceWithOutNamespace)) {   //对于RETRY消息的处理
             stringBuilder.append(MixAll.RETRY_GROUP_TOPIC_PREFIX);
         }
 
-        if (isDLQTopic(resourceWithOutNamespace)) {
+        if (isDLQTopic(resourceWithOutNamespace)) {     //对于 延迟消息 的处理
             stringBuilder.append(MixAll.DLQ_GROUP_TOPIC_PREFIX);
         }
 

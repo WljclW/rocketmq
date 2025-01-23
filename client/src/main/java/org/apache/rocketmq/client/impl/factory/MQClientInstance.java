@@ -88,6 +88,10 @@ import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
 import static org.apache.rocketmq.remoting.rpc.ClientMetadata.topicRouteData2EndpointsForStaticTopic;
 
+/*
+ * @description: 无论是生产者还是消费者，在底层都要和Broker打交道，进行消息收发。在源码层面，底层的功能被抽
+ 象成同一个类，负责和Broker打交道,就是这个类
+ */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final static Logger log = LoggerFactory.getLogger(MQClientInstance.class);
@@ -97,16 +101,19 @@ public class MQClientInstance {
 
     /**
      * The container of the producer in the current client. The key is the name of producerGroup.
+     * 用于缓存group和生产者的对应关系
      */
     private final ConcurrentMap<String, MQProducerInner> producerTable = new ConcurrentHashMap<>();
 
     /**
      * The container of the consumer in the current client. The key is the name of consumerGroup.
+     * 用于缓存group和消费者的对于关系
      */
     private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
 
     /**
      * The container of the adminExt in the current client. The key is the name of adminExtGroup.
+     * 用于缓存group和管理员的对于关系
      */
     private final ConcurrentMap<String, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<>();
     private final NettyClientConfig nettyClientConfig;
@@ -114,13 +121,16 @@ public class MQClientInstance {
     private final MQAdminImpl mQAdminImpl;
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<>();
     private final ConcurrentMap<String/* Topic */, ConcurrentMap<MessageQueue, String/*brokerName*/>> topicEndPointsTable = new ConcurrentHashMap<>();
-    private final Lock lockNamesrv = new ReentrantLock();
-    private final Lock lockHeartbeat = new ReentrantLock();
+    //下面是两个可重入锁。分别是从远程获取Topic信息的时候和进行Broker心跳检测的时候，这两个时候由于会有多线程对当前信息进行读
+    // 写，但是在同一时间只能有一个线程进行读写操作，所以这样的操作就需要进行加锁。
+    private final Lock lockNamesrv = new ReentrantLock();   //updateTopicRouteInfoFromNameServer和cleanOfflineBroker会用到
+    private final Lock lockHeartbeat = new ReentrantLock(); //sendHeartbeatToAllBrokerWithLock和unregisterClientWithLock会用到
 
     /**
      * The container which stores the brokerClusterInfo. The key of the map is the brokerCluster name.
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
+     * 对集群中的broker地址的缓存
      */
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
 
@@ -147,7 +157,11 @@ public class MQClientInstance {
     }
 
     public MQClientInstance(ClientConfig clientConfig, int instanceIndex, String clientId, RPCHook rpcHook) {
-        this.clientConfig = clientConfig;
+        /**
+         * clientConfig是对作为rocketmq客户端的配置；NettyClientConfig是作为netty客户端的配置。因此这个类就有了这两个配置的
+         *      所有优点
+         * */
+        this.clientConfig = clientConfig;   //客户端配置类
         this.nettyClientConfig = new NettyClientConfig();
         this.nettyClientConfig.setClientCallbackExecutorThreads(clientConfig.getClientCallbackExecutorThreads());
         this.nettyClientConfig.setUseTLS(clientConfig.isUseTLS());
@@ -223,6 +237,10 @@ public class MQClientInstance {
             MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
+    /**
+     * 将topicRouteData中的List<QueueData> 转换成topicPublishInfo的List <MessageQueue>列表，具体实现
+     * 在topicRouteData2TopicPublishInfo中。然后更新该MQClientInstance管辖的所有消息，发送关于topic的路由信息
+     * */
     public static TopicPublishInfo topicRouteData2TopicPublishInfo(final String topic, final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
         // TO DO should check the usage of raw route, it is better to remove such field
@@ -247,6 +265,11 @@ public class MQClientInstance {
             info.getMessageQueueList().addAll(mqEndPoints.keySet());
             info.getMessageQueueList().sort((mq1, mq2) -> MixAll.compareInteger(mq1.getQueueId(), mq2.getQueueId()));
         } else {
+            /**
+             * 循环遍历路由信息的QueueData信息，如果队列没有写权限，则继续遍历下一个QueueData。根据brokerName找到brokerData信息，如果
+             * 找不到或没有找到主节点，则遍历下一个QueueData。根据写队列个数，topic+序号创建MessageQueue，填充topicPublishInfo的
+             * List<MessageQueue>，完成消息发送的路由查找
+             * */
             List<QueueData> qds = route.getQueueDatas();
             Collections.sort(qds);
             for (QueueData qd : qds) {
@@ -303,27 +326,28 @@ public class MQClientInstance {
     public void start() throws MQClientException {
 
         synchronized (this) {
+            // 根据当前服务状态执行相应操作
             switch (this.serviceState) {
                 case CREATE_JUST:
-                    this.serviceState = ServiceState.START_FAILED;
+                    this.serviceState = ServiceState.START_FAILED;  // 初始将服务状态标记为启动失败，以确保安全
                     // If not specified,looking address from name server
-                    if (null == this.clientConfig.getNamesrvAddr()) {
+                    if (null == this.clientConfig.getNamesrvAddr()) {   // 如果未指定 Name Server 地址，则从 NameServer 获取地址
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
                     // Start request-response channel
-                    this.mQClientAPIImpl.start();
+                    this.mQClientAPIImpl.start();   // 启动请求-响应通道
                     // Start various schedule tasks
-                    this.startScheduledTask();
+                    this.startScheduledTask();  //启动各种定时任务
                     // Start pull service
-                    this.pullMessageService.start();
+                    this.pullMessageService.start();    // 启动消息拉取服务
                     // Start rebalance service
-                    this.rebalanceService.start();
+                    this.rebalanceService.start();  //启动再平衡机制
                     // Start push service
-                    this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
+                    this.defaultMQProducer.getDefaultMQProducerImpl().start(false);     // 启动推送服务
                     log.info("the client factory [{}] start OK", this.clientId);
-                    this.serviceState = ServiceState.RUNNING;
+                    this.serviceState = ServiceState.RUNNING;   // 将服务状态设置为运行中
                     break;
-                case START_FAILED:
+                case START_FAILED:  // 如果之前已创建且启动失败，抛出异常
                     throw new MQClientException("The Factory object[" + this.getClientId() + "] has been created before, and failed.", null);
                 default:
                     break;
@@ -779,16 +803,20 @@ public class MQClientInstance {
         return true;
     }
 
+    //功能是更新消息生产者和维护路由缓存
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {
             if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
                     TopicRouteData topicRouteData;
+                    // 根据是否是默认主题和是否有默认消息生产者，获取主题路由信息
                     if (isDefault && defaultMQProducer != null) {
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(clientConfig.getMqClientApiTimeout());
+                        // 调整队列数量为生产者配置的默认值
                         if (topicRouteData != null) {
                             for (QueueData data : topicRouteData.getQueueDatas()) {
+                                //取的是较小值，因此最大的可能值是4
                                 int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
                                 data.setReadQueueNums(queueNums);
                                 data.setWriteQueueNums(queueNums);
@@ -820,7 +848,7 @@ public class MQClientInstance {
                                 }
                             }
 
-                            // Update Pub info
+                            // Update Pub info...更新 MQClientlnstance Broker 地址缓存表
                             {
                                 TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
                                 publishInfo.setHaveTopicRouterInfo(true);
@@ -832,7 +860,8 @@ public class MQClientInstance {
                                 }
                             }
 
-                            // Update sub info
+                            // Update sub info...根据topicRouteData 中的 List<QueueData>转换成 topicPublicInfo 的 List<MessageQueue> 列表。
+                            //  然后会更新该 MQClientInstance所管辖的所有消息发送关于topic 的路由信息。
                             if (!consumerTable.isEmpty()) {
                                 Set<MessageQueue> subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
                                 for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {

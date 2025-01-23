@@ -74,6 +74,21 @@ import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESUL
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESULT_PROCESS_REQUEST_FAILED;
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESULT_WRITE_CHANNEL_FAILED;
 
+/**
+ * Netty 远程服务抽象实现类，定义网络远程调用、请求，响应等处理逻辑。
+ * Netty通信处理的抽象类，定义并封装了Netty处理的公共处理方法。
+ * 该类抽象了invokeSync、invokeOneway等公用的方法实现。
+ * */
+/**
+ * RocketMQ 支持同步、异步、Oneway 三种消息发送方式。
+ *
+ * 同步：客户端发起一次消息发送后会同步等待服务器的响应结果。
+ * 异步：客户端发起一下消息发起请求后不等待服务器响应结果而是立即返回，这样不会阻塞客户端
+ *      子线程，当客户端收到服务端（Broker）的响应结果后会自动调用回调函数。
+ * Oneway：客户端发起消息发送请求后并不会等待服务器的响应结果，也不会调用回调函数，即不关
+ *      心消息的最终发送结果。
+ * */
+
 public abstract class NettyRemotingAbstract {
 
     /**
@@ -82,22 +97,32 @@ public abstract class NettyRemotingAbstract {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.ROCKETMQ_REMOTING_NAME);
 
     /**
+     * 控制 oneway 发送方式的并发度的信号量，默认为 65535 个许可。
      * Semaphore to limit maximum number of on-going one-way requests, which protects system memory footprint.
      */
     protected final Semaphore semaphoreOneway;
 
     /**
+     * 控制异步发送方式的并发度的信号量，默认为 65535 个许可。
      * Semaphore to limit maximum number of on-going asynchronous requests, which protects system memory footprint.
      */
     protected final Semaphore semaphoreAsync;
 
     /**
+     * 当前正在等
+     * 待对端返回的请求处理表，其中 opaque 表示请求的编号，全局唯一，通常采用原子递增，客户端向
+     * 对端发送网络请求时，通常会采取单一长连接，故发送请求后会向调用端立即返回
+     * ResponseFuture，同时会将请求放入到该映射表中，当响应处理完成后（响应会包含请求
+     * code），然后从该映射表中获取对应的 ResponseFutre，然后通知调用端的返回结果，这里是
+     * Future 模式在网络编程中的经典运用。
      * This map caches all on-going requests.
      */
     protected final ConcurrentMap<Integer /* opaque */, ResponseFuture> responseTable =
         new ConcurrentHashMap<>(256);
 
     /**
+     * 注册的请求处理命令。RocketMQ 的设计中采用了不同
+     * 请求命令支持不同的线程池，即实现业务线程池的隔离。
      * This container holds all processors per request code, aka, for each incoming request, we may look up the
      * responding processor in this map to handle the request.
      */

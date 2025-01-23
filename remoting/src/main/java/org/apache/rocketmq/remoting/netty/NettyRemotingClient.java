@@ -92,19 +92,29 @@ import org.apache.rocketmq.remoting.proxy.SocksProxyConfig;
 
 import static org.apache.rocketmq.remoting.common.RemotingHelper.convertChannelFutureToCompletableFuture;
 
+/**
+ *
+  * @description: NettyRemotingClient以及NettyRemotingServer：分别实现了RemotingClient和
+ *          RemotingServer，都继承了NettyRemotingAbstract抽象类。RocketMQ中其他的组件（如client、
+ *          nameServer、broker在进行消息的发送和接收时均使用这两个组件）。
+  * @param:
+  * @return
+  * @author: Zhou
+  * @date: 2024/11/4 22:49
+  */
 public class NettyRemotingClient extends NettyRemotingAbstract implements RemotingClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.ROCKETMQ_REMOTING_NAME);
 
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
     private static final long MIN_CLOSE_TIMEOUT_MILLIS = 100;
 
-    private final NettyClientConfig nettyClientConfig;
-    private final Bootstrap bootstrap = new Bootstrap();
-    private final EventLoopGroup eventLoopGroupWorker;
+    private final NettyClientConfig nettyClientConfig;  //网络相关的配置
+    private final Bootstrap bootstrap = new Bootstrap();    //客户端启动帮助类。
+    private final EventLoopGroup eventLoopGroupWorker;  //Netty 客户端 Work 线程组，俗称 IO 线程。
     private final Lock lockChannelTables = new ReentrantLock();
     private final Map<String /* cidr */, SocksProxyConfig /* proxy */> proxyMap = new HashMap<>();
     private final ConcurrentHashMap<String /* cidr */, Bootstrap> bootstrapMap = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();   //当前客户端已创建的连接（网络通道、Netty Cannel），每一个地址一条长连接。
     private final ConcurrentMap<Channel, ChannelWrapper> channelWrapperTables = new ConcurrentHashMap<>();
 
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ClientHouseKeepingService"));
@@ -115,7 +125,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
     private final Lock namesrvChannelLock = new ReentrantLock();
 
-    private final ExecutorService publicExecutor;
+    private final ExecutorService publicExecutor;   //默认任务线程池。
     private final ExecutorService scanExecutor;
 
     /**
@@ -123,7 +133,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
      */
     private ExecutorService callbackExecutor;
     private final ChannelEventListener channelEventListener;
-    private EventExecutorGroup defaultEventExecutorGroup;
+    private EventExecutorGroup defaultEventExecutorGroup;   //Netty ChannelHandler 线程执行组，即 Netty ChannelHandler 在这些线程中执行。
 
     public NettyRemotingClient(final NettyClientConfig nettyClientConfig) {
         this(nettyClientConfig, null);
@@ -190,11 +200,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+        //创建默认事件执行线程组，后续事件处理器即（ChannelPipeline 中 addLast 中事件处理器）在该线程组中执行
         if (this.defaultEventExecutorGroup == null) {
             this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
                 nettyClientConfig.getClientWorkerThreads(),
                 new ThreadFactoryImpl("NettyClientWorkerThread_"));
         }
+        //创建Netty客户端，group指定Work线程组，读写事件都会在这个线程组里执行（也就是IO线程）；channel指定通道类型，这里使用NIO通道
         Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker).channel(NioSocketChannel.class)
             .option(ChannelOption.TCP_NODELAY, true)
             .option(ChannelOption.SO_KEEPALIVE, false)
@@ -211,13 +223,14 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                             LOGGER.warn("Connections are insecure as SSLContext is null!");
                         }
                     }
-                    ch.pipeline().addLast(
+                    /**addLast里要是没有传入EventExecutorGroup，那事件的执行默认在 Work 线程组*/
+                    ch.pipeline().addLast(  //Netty 的核心扩展点，应用程序的业务逻辑可以通过该事件处理器进行扩展
                         nettyClientConfig.isDisableNettyWorkerGroup() ? null : defaultEventExecutorGroup,
-                        new NettyEncoder(),
+                        new NettyEncoder(),     //RocketMQ 请求编码器，即协议编码器
                         new NettyDecoder(),
-                        new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
-                        new NettyConnectManageHandler(),
-                        new NettyClientHandler());
+                        new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),     //空闲检测
+                        new NettyConnectManageHandler(),    //连接管理器
+                        new NettyClientHandler());  //Netty 客户端业务处理器，进行业务逻辑的处理
                 }
             });
         if (nettyClientConfig.getClientSocketSndBufSize() > 0) {
@@ -240,6 +253,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         nettyEventExecutor.start();
 
+        //删除过期请求的定时任务
         TimerTask timerTaskScanResponseTable = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
@@ -726,6 +740,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback)
         throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException,
         RemotingSendRequestException {
+        /**
+         * NettyRemotingClient 根据地址信息获取或者创建channel，接着会进行invokeAsyncImpl方法的调
+         * 用，此时客户端会将数据流转给公共的抽象类NettyRemotingAbstract 进行统一处理，在此类中完成
+         * 真正的请求发送动作。
+         * */
         long beginStartTime = System.currentTimeMillis();
         final ChannelFuture channelFuture = this.getAndCreateChannelAsync(addr);
         if (channelFuture == null) {
@@ -741,6 +760,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     if (timeoutMillis < costTime) {
                         invokeCallback.operationFail(new RemotingTooMuchRequestException("invokeAsync call the addr[" + channelRemoteAddr + "] timeout"));
                     }
+                    //最终会调用父类的方法来进行统一的处理
                     this.invokeAsyncImpl(channel, request, timeoutMillis - costTime, new InvokeCallbackWrapper(invokeCallback, addr));
                 } else {
                     this.closeChannel(addr, channel);

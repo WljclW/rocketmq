@@ -69,6 +69,7 @@ import org.apache.rocketmq.remoting.protocol.header.namesrv.WipeWritePermOfBroke
 import org.apache.rocketmq.remoting.protocol.namesrv.RegisterBrokerResult;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
+//网络处理器解析请求类型
 public class DefaultRequestProcessor implements NettyRequestProcessor {
     private static Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
@@ -101,7 +102,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 request);
         }
 
-        switch (request.getCode()) {
+        switch (request.getCode()) {    //根据不同的请求码进行不同的处理
             case RequestCode.PUT_KV_CONFIG:
                 return this.putKVConfig(ctx, request);
             case RequestCode.GET_KV_CONFIG:
@@ -220,7 +221,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         return response;
     }
 
-    public RemotingCommand registerBroker(ChannelHandlerContext ctx,
+    public RemotingCommand registerBroker(ChannelHandlerContext ctx,    //请求最终会由RouteInfoManager().registerBroker处理
         RemotingCommand request) throws RemotingCommandException {
         final RemotingCommand response = RemotingCommand.createResponseCommand(RegisterBrokerResponseHeader.class);
         final RegisterBrokerResponseHeader responseHeader = (RegisterBrokerResponseHeader) response.readCustomHeader();

@@ -34,7 +34,7 @@ public class Configuration {
 
     private final Logger log;
 
-    private List<Object> configObjectList = new ArrayList<>(4);
+    private List<Object> configObjectList = new ArrayList<>(4);  //存放xxxConfig对象
     private String storePath;
     private boolean storePathFromConfig = false;
     private Object storePathObject;
@@ -44,7 +44,7 @@ public class Configuration {
     /**
      * All properties include configs in object and extend properties.
      */
-    private Properties allConfigs = new Properties();
+    private Properties allConfigs = new Properties();   //存放namesrvConfig,nettyServerConfig中所有的配置信息
 
     public Configuration(Logger log) {
         this.log = log;
@@ -59,7 +59,7 @@ public class Configuration {
             if (configObject == null) {
                 continue;
             }
-            registerConfig(configObject);
+            registerConfig(configObject);   //对于每一个xxxConfig对象,进行注册
         }
     }
 
@@ -70,6 +70,7 @@ public class Configuration {
 
     /**
      * register config object
+     * 1.将参数中的配置信息,拿出来添加到allConfigs字段中;并将参数对象添加到configObjectList字段中
      *
      * @return the current Configuration object
      */
@@ -120,6 +121,7 @@ public class Configuration {
 
     /**
      * The store path will be gotten from the field of object.
+     * 存储的路径需要从object的fieldName这个字段中得到
      *
      * @throws java.lang.RuntimeException if the field of object is not exist.
      */
@@ -318,9 +320,9 @@ public class Configuration {
         return stringBuilder.toString();
     }
 
-    private void merge(Properties from, Properties to) {
+    private void merge(Properties from, Properties to) {    //从from拿配置合到to里面去
         for (Entry<Object, Object> next : from.entrySet()) {
-            Object fromObj = next.getValue(), toObj = to.get(next.getKey());
+            Object fromObj = next.getValue(), toObj = to.get(next.getKey());    //判断to中key对应的value是不是等于from中,如果不是的话才put,相等的话没必要put
             if (toObj != null && !toObj.equals(fromObj)) {
                 log.info("Replace, key: {}, value: {} -> {}", next.getKey(), toObj, fromObj);
             }

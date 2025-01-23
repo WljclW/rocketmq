@@ -46,6 +46,11 @@ public class ClientConfig {
     private String clientIP = NetworkUtil.getLocalAddress();
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
+    /**
+     * namespace 属性是继承的 ClientConfig，这个属性主要是 RocketMQ 中用于逻辑隔离和组织消息的重要机制。通
+     *  过 namespace，可以实现不同应用或环境的消息隔离，提高系统的灵活性和可管理性。合理配置和使用 namespace 可
+     *  以帮助更好地管理和优化消息传递系统。
+     */
     @Deprecated
     protected String namespace;
     private boolean namespaceInitialized = false;
@@ -53,7 +58,7 @@ public class ClientConfig {
     protected AccessChannel accessChannel = AccessChannel.LOCAL;
 
     /**
-     * Pulling topic information interval from the named server
+     * Pulling topic information interval from the named server.从namesrv拉取信息的间隔
      */
     private int pollNameServerInterval = 1000 * 30;
     /**
@@ -103,6 +108,7 @@ public class ClientConfig {
 
     /**
      * The switch for message trace
+     * 是否开启消息追踪
      */
     protected boolean enableTrace = false;
 
@@ -111,18 +117,19 @@ public class ClientConfig {
      */
     protected String traceTopic;
 
+    //综合下面的构建过程，clientld的值为：客户端 IP + instance（之前完成构造即 PID+“#”+当前纳秒值） + (unitname 可选）+ （流式可选）
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
-        sb.append(this.getClientIP());
+        sb.append(this.getClientIP());  // 首先添加客户端IP地址，作为MQ客户端ID的一部分
 
         sb.append("@");
-        sb.append(this.getInstanceName());
-        if (!UtilAll.isBlank(this.unitName)) {
+        sb.append(this.getInstanceName());  // 添加实例名称前缀，以分隔不同实例的请求
+        if (!UtilAll.isBlank(this.unitName)) {  // 如果单元名称非空，则添加单元名称，进一步细化请求的来源
             sb.append("@");
             sb.append(this.unitName);
         }
 
-        if (enableStreamRequestType) {
+        if (enableStreamRequestType) {   // 如果启用了流式请求类型，则在ID中添加流式请求标记
             sb.append("@");
             sb.append(RequestType.STREAM);
         }
@@ -154,7 +161,7 @@ public class ClientConfig {
         this.instanceName = instanceName;
     }
 
-    public void changeInstanceNameToPID() {
+    public void changeInstanceNameToPID() {     //给当前的实例起名字：PID + 当前的纳秒值
         if (this.instanceName.equals("DEFAULT")) {
             this.instanceName = UtilAll.getPid() + "#" + System.nanoTime();
         }

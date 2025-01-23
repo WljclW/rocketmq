@@ -74,6 +74,11 @@ public interface RemotingClient extends RemotingService {
         return future;
     }
 
+    /**
+     * requestCode 命令编码
+     * processor RocketMQ请求业务处理器，例如消息发送的处理器为 SendMessageProcessor，PullMessageProcessor 为消息拉取的业务处理器。
+     * executor 线程池，NettyRequestProcessor 具体业务逻辑在该线程池中执行
+     */
     void registerProcessor(final int requestCode, final NettyRequestProcessor processor,
         final ExecutorService executor);
 

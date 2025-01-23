@@ -19,6 +19,10 @@ package org.apache.rocketmq.remoting;
 
 import org.apache.rocketmq.remoting.pipeline.RequestPipeline;
 
+/**
+ * Romating是rocketmq的远程通信模块。
+ * RemotingService是这个模块中的顶层接口
+ * */
 public interface RemotingService {
     void start();
 

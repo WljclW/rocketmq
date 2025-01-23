@@ -94,17 +94,18 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private static final Logger TRAFFIC_LOGGER = LoggerFactory.getLogger(LoggerName.ROCKETMQ_TRAFFIC_NAME);
 
     private final ServerBootstrap serverBootstrap;
-    private final EventLoopGroup eventLoopGroupSelector;
-    private final EventLoopGroup eventLoopGroupBoss;
-    private final NettyServerConfig nettyServerConfig;
+    private final EventLoopGroup eventLoopGroupSelector;    ////这个其实就是netty中的work线程池，默认用来处理Handler方法的调用————即主从多 Reactor 中的从 Reactor，主要负责读写事件的处理。
+    private final EventLoopGroup eventLoopGroupBoss;    // Netty的Boss线程————Netty Boss 线程组,即主从 Reactor 线程模型中的主 Reactor，主要负责 OP_ACCEPT 事件（创建连接）。
+    private final NettyServerConfig nettyServerConfig;  //服务端配置
 
-    private final ExecutorService publicExecutor;
+    private final ExecutorService publicExecutor;   // 公共线程池，这里用来处理RocketMQ的业务调用，这个有Netty没有什么关系
     private final ScheduledExecutorService scheduledExecutorService;
     private final ChannelEventListener channelEventListener;
 
+    //定时扫描器，对 NettyRemotingAbstract 中的 responseTable 进行扫描，将超时的请求移除。
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ServerHouseKeepingService"));
 
-    private DefaultEventExecutorGroup defaultEventExecutorGroup;
+    private DefaultEventExecutorGroup defaultEventExecutorGroup;    // 用来处理Handler的线程池 或说 Netty ChannelHandler 线程执行组。
 
     /**
      * NettyRemotingServer may hold multiple SubRemotingServer, each server will be stored in this container with a
@@ -121,9 +122,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     // sharable handlers
     private TlsModeHandler tlsModeHandler;
-    private NettyEncoder encoder;
-    private NettyConnectManageHandler connectionManageHandler;
-    private NettyServerHandler serverHandler;
+    private NettyEncoder encoder;   //RocketMQ 通信协议（编码器）。
+    private NettyConnectManageHandler connectionManageHandler;  //Netty 连接管路器 Handler，主要实现对连接的状态跟踪。
+    private NettyServerHandler serverHandler;   //NettyServer 端核心业务处理器。
     private RemotingCodeDistributionHandler distributionHandler;
 
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig) {
@@ -192,6 +193,10 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     }
 
     private boolean useEpoll() {
+        /**
+         * epoll是Linux下多路复用IO接口select/poll的增强版本，它能显著
+         * 减少程序在大量并发连接中只有少量活跃的情况下的系统CPU利用率。
+         * */
         return NetworkUtil.isLinuxPlatform()
             && nettyServerConfig.isUseEpollNativeSelector()
             && Epoll.isAvailable();
@@ -199,12 +204,13 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+        // 创建一个DefaultEventExecutorGroup实例，用于处理连接和请求
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyServerConfig.getServerWorkerThreads(),
             new ThreadFactoryImpl("NettyServerCodecThread_"));
 
-        prepareSharableHandlers();
+        prepareSharableHandlers();      // 准备共享的处理器，这些处理器可以在多个通道中共享
 
-        serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
+        serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)     // 配置服务器的引导程序
             .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
             .option(ChannelOption.SO_BACKLOG, 1024)
             .option(ChannelOption.SO_REUSEADDR, true)
@@ -219,27 +225,28 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 }
             });
 
-        addCustomConfig(serverBootstrap);
+        addCustomConfig(serverBootstrap);       // 添加自定义配置，如果有的话
 
         try {
-            ChannelFuture sync = serverBootstrap.bind().sync();
+            ChannelFuture sync = serverBootstrap.bind().sync();     // 尝试绑定服务器到指定的端口，并等待操作完成  这里就是绑定我们的 9876端口
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
-            if (0 == nettyServerConfig.getListenPort()) {
+            if (0 == nettyServerConfig.getListenPort()) {       // 如果配置的端口为0，则使用分配的端口
                 this.nettyServerConfig.setListenPort(addr.getPort());
             }
+            // 记录服务器启动信息
             log.info("RemotingServer started, listening {}:{}", this.nettyServerConfig.getBindAddress(),
                 this.nettyServerConfig.getListenPort());
-            this.remotingServerTable.put(this.nettyServerConfig.getListenPort(), this);
+            this.remotingServerTable.put(this.nettyServerConfig.getListenPort(), this);     // 将服务器实例添加到服务器表中
         } catch (Exception e) {
             throw new IllegalStateException(String.format("Failed to bind to %s:%d", nettyServerConfig.getBindAddress(),
                 nettyServerConfig.getListenPort()), e);
         }
 
-        if (this.channelEventListener != null) {
+        if (this.channelEventListener != null) {        // 如果存在通道事件监听器，则启动Netty事件执行器
             this.nettyEventExecutor.start();
         }
 
-        TimerTask timerScanResponseTable = new TimerTask() {
+        TimerTask timerScanResponseTable = new TimerTask() {         // 创建并启动一个定时任务，定期扫描响应表
             @Override
             public void run(Timeout timeout) {
                 try {
@@ -253,7 +260,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         };
         this.timer.newTimeout(timerScanResponseTable, 1000 * 3, TimeUnit.MILLISECONDS);
 
-        scheduledExecutorService.scheduleWithFixedDelay(() -> {
+        scheduledExecutorService.scheduleWithFixedDelay(() -> {     // 定期执行任务，打印远程代码分布
             try {
                 NettyRemotingServer.this.printRemotingCodeDistribution();
             } catch (Throwable e) {
@@ -304,6 +311,19 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * 服务优雅的关闭，是指在服务需要关闭的时候，在关闭之前，需要把任务处理完，而且在收到关闭时，不再接收
+     * 新的任务。在所有的Netty业务中，有业务相关的线程池就是NettyRemotingServer中创建的四个线程池，所以在
+     * 关闭服务的时候，只需要关闭这几个线程池即可。并等待线程池中的任务处理完。
+     *
+     * shutdownGracefully()就是优雅关闭连接的实现
+     * 何时调用的这个shutdown()方法呢？？在RocketMQ服务启动的时候，会添加一个回调钩子，比如Namesrv服务在
+     * 启动的时候会执行 Runtime.getRuntime().addShutdownHook，这个方法就是添加了shutdown钩子方法。这样在
+     * 服务器关闭的时候，就会触发controller.shudown()。然后执行关闭线程池的操作。
+     * 注意，关闭服务器一般使用kill pid的命令，RocketMQ的发布包里面的bin下面，有一个mqshutdown的脚本，就是
+     * 使用的kill pid 命令，mqshutdown脚本的执行逻辑就是先“`ps ax | grep -i '”得到rocketmq进程，然后使用kill
+     * 命令杀死进程。。但不是kill-9，因为这个命令不会等待进程进行收尾工作
+     * */
     @Override
     public void shutdown() {
         try {

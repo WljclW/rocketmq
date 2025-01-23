@@ -69,10 +69,15 @@ public class RouteInfoManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private static final long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    //topic消息队列的路由信息
     private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;
+    //broker的基础信息：brokername、所属集群、主备broker地址
     private final Map<String/* brokerName */, BrokerData> brokerAddrTable;
+    //broker集群信息：key是集群名称、value是这个集群中所有的brokername
     private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    //Broker状态信息，NameServer每次收到心跳包时会替换该信息。
     private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+    //Broker上的FilterServer列表，用于类模式消息过滤
     private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
     private final Map<String/* topic */, Map<String/*brokerName*/, TopicQueueMappingInfo>> topicQueueMappingInfoTable;
 
@@ -237,16 +242,22 @@ public class RouteInfoManager {
         final Channel channel) {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
+            /**
+             * 第一部分：路由注册需要加写锁，防止并发修改RouteInfoManager中的路由表。首先判断Broker所属集群是否存在，如果不存在，则创
+             * 建集群，然后将broker名加入集群Broker集合
+             * */
             this.lock.writeLock().lockInterruptibly();
 
-            //init or update the cluster info
+            //init or update the cluster info...
+            //根据clusterName去map里面查不到说明没有，因此需要创建，但是创建时可能存在并发问题，rockermq通过ConcurrentHashMapUtils.computeIfAbsent来
+            //解决jdk8中的这个并发问题，也就是说在更高的jdk版本中，这个问题应该是在jdk中就解决了
             Set<String> brokerNames = ConcurrentHashMapUtils.computeIfAbsent((ConcurrentHashMap<String, Set<String>>) this.clusterAddrTable, clusterName, k -> new HashSet<>());
             brokerNames.add(brokerName);
 
             boolean registerFirst = false;
 
-            BrokerData brokerData = this.brokerAddrTable.get(brokerName);
-            if (null == brokerData) {
+            BrokerData brokerData = this.brokerAddrTable.get(brokerName);   //map接口对于某个key，如果没有对应的vaue，返回null！不会报错
+            if (null == brokerData) {   //如果brokerAddrTable中没有某个brokerName的信息，创建brokerData作为value放入brokerAddrTable
                 registerFirst = true;
                 brokerData = new BrokerData(clusterName, brokerName, new HashMap<>());
                 this.brokerAddrTable.put(brokerName, brokerData);
@@ -256,7 +267,7 @@ public class RouteInfoManager {
             brokerData.setEnableActingMaster(!isOldVersionBroker && enableActingMaster);
             brokerData.setZoneName(zoneName);
 
-            Map<Long, String> brokerAddrsMap = brokerData.getBrokerAddrs();
+            Map<Long, String> brokerAddrsMap = brokerData.getBrokerAddrs(); //经过上面的处理brokerData就不是null了。根据brokerData拿到里面的brokerAddrs
 
             boolean isMinBrokerIdChanged = false;
             long prevMinBrokerId = 0;
@@ -305,6 +316,11 @@ public class RouteInfoManager {
             boolean isPrimeSlave = !isOldVersionBroker && !isMaster
                 && brokerId == Collections.min(brokerAddrsMap.keySet());
 
+            /**
+             * 维护BrokerData信息，首先从brokerAddrTable中根据broker名尝试获取Broker信息，如果不存在，则新建BrokerData并放
+             * 入brokerAddrTable，registerFirst设置为true；如果存在，直接替换原先的Broker信息，registerFirst设置为false，表
+             * 示非第一次注册
+             * */
             if (null != topicConfigWrapper && (isMaster || isPrimeSlave)) {
 
                 ConcurrentMap<String, TopicConfig> tcTable =
@@ -1178,7 +1194,7 @@ class BrokerAddrInfo {
 }
 
 class BrokerLiveInfo {
-    private long lastUpdateTimestamp;
+    private long lastUpdateTimestamp;   //上次收到心跳包的时间
     private long heartbeatTimeoutMillis;
     private DataVersion dataVersion;
     private Channel channel;

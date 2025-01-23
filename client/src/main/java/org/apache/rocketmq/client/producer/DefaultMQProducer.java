@@ -67,6 +67,7 @@ import java.util.concurrent.ExecutorService;
  * <p> <strong>Thread Safety:</strong> After configuring and starting process, this class can be regarded as thread-safe
  * and used among multiple threads context. </p>
  */
+//同步发送消息可以设置时间、指定队列；异步发送消息的方法会有个参数callBack(发送成功的回调)；单向发送方法是sendOneway.
 public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
@@ -92,6 +93,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * For non-transactional messages, it does not matter as long as it's unique per process. </p>
      * <p>
      * See <a href="https://rocketmq.apache.org/docs/introduction/02concepts">core concepts</a> for more discussion.
+     * // 生产者所属组，消息服务器在回查事务状态时会随机选择该组中任何一个生产者发起事务回查请求
      */
     private String producerGroup;
 
@@ -102,21 +104,25 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Just for testing or demo program
+     * // 默认 topicKey：TBW102
      */
     private String createTopicKey = TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC;
 
     /**
      * Number of queues to create per default topic.
+     * // 默认主题在每一个 Broker 队列数量
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
      * Timeout for sending messages.
+     * // 发送消息默认超时时间， 默认 3s
      */
     private int sendMsgTimeout = 3000;
 
     /**
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
+     * // 消息体超过该值则启用压缩，默认 4K
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
@@ -124,23 +130,27 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      * <p>
      * This may potentially cause message duplication which is up to application developers to resolve.
+     * // 同步方式发送消息重试次数，默认为 2，总共执行 3 次
      */
-    private int retryTimesWhenSendFailed = 2;
+    private int retryTimesWhenSendFailed = 2;   //注意消息重试机制可能导致消息重复，需要业务端进行处理
 
     /**
      * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode. </p>
      * <p>
      * This may potentially cause message duplication which is up to application developers to resolve.
+     * // 异步方式发送消息重试次数，默认为 2
      */
     private int retryTimesWhenSendAsyncFailed = 2;
 
     /**
      * Indicate whether to retry another broker on sending failure internally.
+     * // 消息重试时选择另外一个 Broker 时 是否不等待存储结果就返回， 默认为false
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
     /**
      * Maximum allowed message body size in bytes.
+     * // 允许发送的最大消息长度，默认为 4M
      */
     private int maxMessageSize = 1024 * 1024 * 4; // 4M
 
@@ -151,27 +161,31 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Switch flag instance for automatic batch message
+     * // 允许生产者在发送消息时自动将多条消息打包成一个批次进行发送，从而提高消息发送的效率 默认为false
      */
     private boolean autoBatch = false;
     /**
-     * Instance for batching message automatically
+     * Instance for batching message automatically..打包多个消息的实例
      */
     private ProduceAccumulator produceAccumulator = null;
 
     /**
      * Indicate whether to block message when asynchronous sending traffic is too heavy.
+     * // 是否开启异步发送消息时帮助控制发送速率
      */
     private boolean enableBackpressureForAsyncMode = false;
 
     /**
      * on BackpressureForAsyncMode, limit maximum number of on-going sending async messages
      * default is 10000
+     * // 控制生产者最多同时发送多少个消息 默认10000
      */
     private int backPressureForAsyncSendNum = 10000;
 
     /**
      * on BackpressureForAsyncMode, limit maximum message size of on-going sending async messages
      * default is 100M
+     * // 控制生产者最多同时发送消息的最大大小 默认100M
      */
     private int backPressureForAsyncSendSize = 100 * 1024 * 1024;
 
@@ -208,7 +222,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private int compressLevel = Integer.parseInt(System.getProperty(MixAll.MESSAGE_COMPRESS_LEVEL, "5"));
 
     /**
-     * Compress type of compress algorithm, default using ZLIB.
+     * Compress type of compress algorithm, default using ZLIB...压缩消息的算法，默认是ZLIB
      */
     private CompressionType compressType = CompressionType.of(System.getProperty(MixAll.MESSAGE_COMPRESS_TYPE, "ZLIB"));
 
@@ -367,12 +381,12 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      */
     @Override
     public void start() throws MQClientException {
-        this.setProducerGroup(withNamespace(this.producerGroup));
-        this.defaultMQProducerImpl.start();
-        if (this.produceAccumulator != null) {
+        this.setProducerGroup(withNamespace(this.producerGroup));   // 设置生产者组，应用命名空间前缀(准确的说前缀应该是RETRY 或者 延迟标志 或者 命名空间前缀)
+        this.defaultMQProducerImpl.start();     // 启动实际的生产者实现类
+        if (this.produceAccumulator != null) {  // 如果生产者累积器不为空，则启动它，用于累积生产者相关的数据
             this.produceAccumulator.start();
         }
-        if (enableTrace) {
+        if (enableTrace) {  // 如果开始消息追踪调度器，则进入if逻辑
             try {
                 AsyncTraceDispatcher dispatcher = new AsyncTraceDispatcher(producerGroup, TraceDispatcher.Type.PRODUCE, getTraceMsgBatchNum(), traceTopic, rpcHook);
                 dispatcher.setHostProducer(this.defaultMQProducerImpl);
@@ -388,13 +402,15 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
                 logger.error("system mqtrace hook init failed ,maybe can't send msg trace data");
             }
         }
-        if (null != traceDispatcher) {
+        if (null != traceDispatcher) {  //如果消息追踪调度器不为空，则尝试启动它，用于追踪消息发送过程
             if (traceDispatcher instanceof AsyncTraceDispatcher) {
                 ((AsyncTraceDispatcher) traceDispatcher).getTraceProducer().setUseTLS(isUseTLS());
             }
             try {
-                traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());
+                traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());  // 启动追踪调度器，传入Name Server地址和访问通道
             } catch (MQClientException e) {
+                // 如果启动失败，记录警告日志，但不抛出异常，确保生产者能够继续启动。。换句话说，如果我们要确保消息的追踪，就不能
+                // 仅仅使用warn。
                 logger.warn("trace dispatcher start failed ", e);
             }
         }
@@ -461,11 +477,11 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws MQBrokerException    if there is any error with broker.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override
+    @Override   //同步发送消息
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
-        msg.setTopic(withNamespace(msg.getTopic()));
-        if (this.getAutoBatch() && !(msg instanceof MessageBatch)) {
+        msg.setTopic(withNamespace(msg.getTopic()));    //topic包装一层
+        if (this.getAutoBatch() && !(msg instanceof MessageBatch)) {    // 开启批量的话
             return sendByAccumulator(msg, null, null);
         } else {
             return sendDirect(msg, null, null);
@@ -485,9 +501,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws InterruptedException if the sending thread is interrupted.
      */
     @Override
-    public SendResult send(Message msg,
+    public SendResult send(Message msg,     //同步发送消息，如果发送超过timeout则抛出超时异常
         long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
-        msg.setTopic(withNamespace(msg.getTopic()));
+        msg.setTopic(withNamespace(msg.getTopic()));    // Topic 用名称空间包一层
         return this.defaultMQProducerImpl.send(msg, timeout);
     }
 
@@ -507,7 +523,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws InterruptedException if the sending thread is interrupted.
      */
     @Override
-    public void send(Message msg,
+    public void send(Message msg,       //异步发送消息，sendCallback参数是消息发送成功后的回调方法
         SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
         try {
@@ -532,7 +548,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws InterruptedException if the sending thread is interrupted.
      */
     @Override
-    public void send(Message msg, SendCallback sendCallback, long timeout)
+    public void send(Message msg, SendCallback sendCallback, long timeout)  //异步发送消息，超过时间抛出异常
         throws MQClientException, RemotingException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
         this.defaultMQProducerImpl.send(msg, sendCallback, timeout);
@@ -753,8 +769,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     public SendResult sendDirect(Message msg, MessageQueue mq,
         SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException, MQBrokerException {
+        // 这个方法内部可以看到最后都交给了 defaultMQProducerImpl 来发送
         // send in sync mode
-        if (sendCallback == null) {
+        if (sendCallback == null) {     //回调是null，其实就是同步发送方式
             if (mq == null) {
                 return this.defaultMQProducerImpl.send(msg);
             } else {
@@ -965,10 +982,10 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Create a topic on broker. This method will be removed in a certain version after April 5, 2020, so please do not
      * use this method.
      *
-     * @param key          accessKey
-     * @param newTopic     topic name
-     * @param queueNum     topic's queue number
-     * @param topicSysFlag topic system flag
+     * @param key          accessKey。目前无实际作用，可以与newTopic一样
+     * @param newTopic     topic name。主题名称
+     * @param queueNum     topic's queue number。队列数量
+     * @param topicSysFlag topic system flag。主题系统标签，默认是0
      * @param attributes
      * @throws MQClientException if there is any client error.
      */
@@ -980,7 +997,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
-     * Search consume queue offset of the given time stamp.
+     * Search consume queue offset of the given time stamp....根据时间戳从队列中查找偏移量
      *
      * @param mq        Instance of MessageQueue
      * @param timestamp from when in milliseconds.
@@ -993,7 +1010,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
-     * Query maximum offset of the given message queue.
+     * Query maximum offset of the given message queue....查找指定队列的最大偏移量
      * <p>
      * This method will be removed in a certain version after April 5, 2020, so please do not use this method.
      *
