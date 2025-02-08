@@ -451,7 +451,7 @@ public class BrokerOuterAPI {
     /**
      * Considering compression brings much CPU overhead to name server, stream API will not support compression and
      * compression feature is deprecated.
-     *
+     *  registerBrokerAll方法用于将broker注册到所有可用的NameServer节点上
      * @param clusterName
      * @param brokerAddr
      * @param brokerName
@@ -482,7 +482,7 @@ public class BrokerOuterAPI {
         final List<RegisterBrokerResult> registerBrokerResultList = new CopyOnWriteArrayList<>();
         List<String> nameServerAddressList = this.remotingClient.getAvailableNameSrvList();
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
-
+            //创建请求头
             final RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
             requestHeader.setBrokerAddr(brokerAddr);
             requestHeader.setBrokerId(brokerId);
@@ -494,7 +494,7 @@ public class BrokerOuterAPI {
             if (heartbeatTimeoutMillis != null) {
                 requestHeader.setHeartbeatTimeoutMillis(heartbeatTimeoutMillis);
             }
-
+            //创建请求体
             RegisterBrokerBody requestBody = new RegisterBrokerBody();
             requestBody.setTopicConfigSerializeWrapper(TopicConfigAndMappingSerializeWrapper.from(topicConfigWrapper));
             requestBody.setFilterServerList(filterServerList);
@@ -502,14 +502,14 @@ public class BrokerOuterAPI {
             final int bodyCrc32 = UtilAll.crc32(body);
             requestHeader.setBodyCrc32(bodyCrc32);
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
-            for (final String namesrvAddr : nameServerAddressList) {
+            for (final String namesrvAddr : nameServerAddressList) {    //对每个NameServer地址发起注册请求，使用多线程并发执行。
                 brokerOuterExecutor.execute(new AbstractBrokerRunnable(brokerIdentity) {
                     @Override
                     public void run0() {
                         try {
                             RegisterBrokerResult result = registerBroker(namesrvAddr, oneway, timeoutMills, requestHeader, body);
                             if (result != null) {
-                                registerBrokerResultList.add(result);
+                                registerBrokerResultList.add(result);   //这里会收集所有的注册结果并返回
                             }
 
                             LOGGER.info("Registering current broker to name server completed. TargetHost={}", namesrvAddr);
@@ -541,10 +541,11 @@ public class BrokerOuterAPI {
         final byte[] body
     ) throws RemotingCommandException, MQBrokerException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
         InterruptedException {
+        //创建请求命令并设置请求体
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER, requestHeader);
         request.setBody(body);
 
-        if (oneway) {
+        if (oneway) {   //如果是单项通信，发送后直接返回null
             try {
                 this.remotingClient.invokeOneway(namesrvAddr, request, timeoutMills);
             } catch (RemotingTooMuchRequestException e) {
@@ -555,8 +556,8 @@ public class BrokerOuterAPI {
 
         RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
         assert response != null;
-        switch (response.getCode()) {
-            case ResponseCode.SUCCESS: {
+        switch (response.getCode()) {   //根据响应的状态码做处理
+            case ResponseCode.SUCCESS: {    //成功时解析响应头和kv表并返回结果
                 RegisterBrokerResponseHeader responseHeader =
                     (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);
                 RegisterBrokerResult result = new RegisterBrokerResult();

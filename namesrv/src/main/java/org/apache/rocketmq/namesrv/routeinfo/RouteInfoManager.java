@@ -69,11 +69,11 @@ public class RouteInfoManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;
-    private final Map<String/* brokerName */, BrokerData> brokerAddrTable;
-    private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
-    private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
-    private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
+    private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;   //消息队列的路由信息，根据这个属性进行负载均衡
+    private final Map<String/* brokerName */, BrokerData> brokerAddrTable;  //broker名称到broker的基本信息，包括：名称、所属集群名、主备broker地址
+    private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;   //集群名称和broker名称的映射，用于快速查找broker
+    private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;  //broker的状态信息，每次收到心跳响应时会更新此信息
+    private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;   //broker上的filterserver列表，实现类模式消息过滤
     private final Map<String/* topic */, Map<String/*brokerName*/, TopicQueueMappingInfo>> topicQueueMappingInfoTable;
 
     private final BatchUnregistrationService unRegisterService;
