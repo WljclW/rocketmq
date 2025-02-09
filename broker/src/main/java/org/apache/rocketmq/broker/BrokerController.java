@@ -1652,7 +1652,7 @@ public class BrokerController {
             changeSpecialServiceStatus(this.brokerConfig.getBrokerId() == MixAll.MASTER_ID);
             this.registerBrokerAll(true, false, true);
         }
-
+        //broker发送心跳包
         scheduledFutures.add(this.scheduledExecutorService.scheduleAtFixedRate(new AbstractBrokerRunnable(this.getBrokerIdentity()) {
             @Override
             public void run0() {
@@ -1783,7 +1783,7 @@ public class BrokerController {
     public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway, boolean forceRegister) {
         ConcurrentMap<String, TopicConfig> topicConfigMap = this.getTopicConfigManager().getTopicConfigTable();
         ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<>();
-
+        //根据 BrokerPermission 来决定是否修改 TopicConfig 的权限。
         for (TopicConfig topicConfig : topicConfigMap.values()) {
             if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
                 || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
@@ -1793,7 +1793,7 @@ public class BrokerController {
             } else {
                 topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
             }
-
+            //当 topicConfigTable 达到一定大小时，触发批量注册操作，并清空 topicConfigTable
             if (this.brokerConfig.isEnableSplitRegistration()
                 && topicConfigTable.size() >= this.brokerConfig.getSplitRegistrationSize()) {
                 TopicConfigAndMappingSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildSerializeWrapper(topicConfigTable);

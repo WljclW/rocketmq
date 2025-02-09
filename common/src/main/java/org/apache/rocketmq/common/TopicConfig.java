@@ -29,15 +29,20 @@ import static org.apache.rocketmq.common.TopicAttributes.TOPIC_MESSAGE_TYPE_ATTR
 
 public class TopicConfig {
     private static final String SEPARATOR = " ";
+    //默认的读写队列数量都是16
     public static int defaultReadQueueNums = 16;
     public static int defaultWriteQueueNums = 16;
     private static final TypeReference<Map<String, String>> ATTRIBUTES_TYPE_REFERENCE = new TypeReference<Map<String, String>>() {
     };
+    //主题名称
     private String topicName;
     private int readQueueNums = defaultReadQueueNums;
     private int writeQueueNums = defaultWriteQueueNums;
+    //权限
     private int perm = PermName.PERM_READ | PermName.PERM_WRITE;
+    //主题过滤类型
     private TopicFilterType topicFilterType = TopicFilterType.SINGLE_TAG;
+    //主题系统标志
     private int topicSysFlag = 0;
     private boolean order = false;
     // Field attributes should not have ' ' char in key or value, otherwise will lead to decode failure.

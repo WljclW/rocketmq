@@ -56,10 +56,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public class TopicConfigManager extends ConfigManager {
     protected static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
-    private static final long LOCK_TIMEOUT_MILLIS = 3000;
-    private static final int SCHEDULE_TOPIC_QUEUE_NUM = 18;
+    private static final long LOCK_TIMEOUT_MILLIS = 3000;  //锁超时时间3s
+    private static final int SCHEDULE_TOPIC_QUEUE_NUM = 18; //调度队列数量18个
 
-    private transient final Lock topicConfigTableLock = new ReentrantLock();
+    private transient final Lock topicConfigTableLock = new ReentrantLock();  //topic元数据锁
+    // 核心，topic元数据表，key是topicName， value是topic元数据
     protected ConcurrentMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<>(1024);
     private DataVersion dataVersion = new DataVersion();
     protected transient BrokerController brokerController;
@@ -80,7 +81,7 @@ public class TopicConfigManager extends ConfigManager {
     }
 
     protected void init() {
-        {
+        {   //系统测试topic
             String topic = TopicValidator.RMQ_SYS_SELF_TEST_TOPIC;
             TopicConfig topicConfig = new TopicConfig(topic);
             TopicValidator.addSystemTopic(topic);
@@ -88,7 +89,7 @@ public class TopicConfigManager extends ConfigManager {
             topicConfig.setWriteQueueNums(1);
             putTopicConfig(topicConfig);
         }
-        {
+        {   //自动创建topic
             if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
                 String topic = TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC;
                 TopicConfig topicConfig = new TopicConfig(topic);
@@ -102,7 +103,7 @@ public class TopicConfigManager extends ConfigManager {
                 putTopicConfig(topicConfig);
             }
         }
-        {
+        {   //性能测试topic
             String topic = TopicValidator.RMQ_SYS_BENCHMARK_TOPIC;
             TopicConfig topicConfig = new TopicConfig(topic);
             TopicValidator.addSystemTopic(topic);
@@ -110,7 +111,7 @@ public class TopicConfigManager extends ConfigManager {
             topicConfig.setWriteQueueNums(1024);
             putTopicConfig(topicConfig);
         }
-        {
+        {   //集群topic
             String topic = this.brokerController.getBrokerConfig().getBrokerClusterName();
             TopicConfig topicConfig = new TopicConfig(topic);
             TopicValidator.addSystemTopic(topic);
@@ -121,7 +122,7 @@ public class TopicConfigManager extends ConfigManager {
             topicConfig.setPerm(perm);
             putTopicConfig(topicConfig);
         }
-        {
+        {   //broker topic
 
             String topic = this.brokerController.getBrokerConfig().getBrokerName();
             TopicConfig topicConfig = new TopicConfig(topic);
@@ -135,7 +136,7 @@ public class TopicConfigManager extends ConfigManager {
             topicConfig.setPerm(perm);
             putTopicConfig(topicConfig);
         }
-        {
+        {   //offset moved event
             String topic = TopicValidator.RMQ_SYS_OFFSET_MOVED_EVENT;
             TopicConfig topicConfig = new TopicConfig(topic);
             TopicValidator.addSystemTopic(topic);
@@ -143,7 +144,7 @@ public class TopicConfigManager extends ConfigManager {
             topicConfig.setWriteQueueNums(1);
             putTopicConfig(topicConfig);
         }
-        {
+        {   //schedule调度topic
             String topic = TopicValidator.RMQ_SYS_SCHEDULE_TOPIC;
             TopicConfig topicConfig = new TopicConfig(topic);
             TopicValidator.addSystemTopic(topic);
@@ -151,7 +152,7 @@ public class TopicConfigManager extends ConfigManager {
             topicConfig.setWriteQueueNums(SCHEDULE_TOPIC_QUEUE_NUM);
             putTopicConfig(topicConfig);
         }
-        {
+        {   //trace topic
             if (this.brokerController.getBrokerConfig().isTraceTopicEnable()) {
                 String topic = this.brokerController.getBrokerConfig().getMsgTraceTopicName();
                 TopicConfig topicConfig = new TopicConfig(topic);
@@ -161,7 +162,7 @@ public class TopicConfigManager extends ConfigManager {
                 putTopicConfig(topicConfig);
             }
         }
-        {
+        {   //reply topic
             String topic = this.brokerController.getBrokerConfig().getBrokerClusterName() + "_" + MixAll.REPLY_TOPIC_POSTFIX;
             TopicConfig topicConfig = new TopicConfig(topic);
             TopicValidator.addSystemTopic(topic);
@@ -221,6 +222,7 @@ public class TopicConfigManager extends ConfigManager {
         return this.topicConfigTable.remove(topicName);
     }
 
+    //查询topic元数据
     public TopicConfig selectTopicConfig(final String topic) {
         return getTopicConfig(topic);
     }
@@ -231,21 +233,25 @@ public class TopicConfigManager extends ConfigManager {
         boolean createNew = false;
 
         try {
+            // 获取一把全局锁，防止并发创建topic，超时时间3秒
             if (this.topicConfigTableLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
+                    //如果存在topic元数据直接返回topic元数据
                     topicConfig = getTopicConfig(topic);
                     if (topicConfig != null) {
                         return topicConfig;
                     }
-
+                    //获取默认topic元数据
                     TopicConfig defaultTopicConfig = getTopicConfig(defaultTopic);
                     if (defaultTopicConfig != null) {
+                        //如果默认topic是
                         if (defaultTopic.equals(TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC)) {
+                            // 如果禁止自动创建，则默认topic元数据权限为只读
                             if (!this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
                                 defaultTopicConfig.setPerm(PermName.PERM_READ | PermName.PERM_WRITE);
                             }
                         }
-
+                        // 如果默认topic元数据是允许继承，根据默认topic创建
                         if (PermName.isInherited(defaultTopicConfig.getPerm())) {
                             topicConfig = new TopicConfig(topic);
 
@@ -274,14 +280,14 @@ public class TopicConfigManager extends ConfigManager {
                     if (topicConfig != null) {
                         log.info("Create new topic by default topic:[{}] config:[{}] producer:[{}]",
                             defaultTopic, topicConfig, remoteAddress);
-
+                        // 将topic元数据添加到topicConfigTable中
                         putTopicConfig(topicConfig);
 
                         long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
-                        dataVersion.nextVersion(stateMachineVersion);
+                        dataVersion.nextVersion(stateMachineVersion);   //升级版本号
 
                         createNew = true;
-
+                        //持久化元数据
                         this.persist();
                     }
                 } finally {
@@ -364,8 +370,10 @@ public class TopicConfigManager extends ConfigManager {
         boolean createNew = false;
 
         try {
+            // 获取一把全局锁，防止并发创建topic，超时时间3秒
             if (this.topicConfigTableLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
+                    // 如果存在元数据，直接返回
                     topicConfig = getTopicConfig(topic);
                     if (topicConfig != null) {
                         return topicConfig;
@@ -377,28 +385,29 @@ public class TopicConfigManager extends ConfigManager {
                     topicConfig.setPerm(perm);
                     topicConfig.setTopicSysFlag(topicSysFlag);
                     topicConfig.setOrder(isOrder);
-
+                    //如果不存在，则创建
                     log.info("create new topic {}", topicConfig);
                     putTopicConfig(topicConfig);
                     createNew = true;
                     long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
                     dataVersion.nextVersion(stateMachineVersion);
-                    this.persist();
+                    this.persist(); //持久化
                 } finally {
-                    this.topicConfigTableLock.unlock();
+                    this.topicConfigTableLock.unlock(); //finally块中释放锁
                 }
             }
         } catch (InterruptedException e) {
             log.error("createTopicInSendMessageBackMethod exception", e);
         }
 
-        if (createNew) {
+        if (createNew) { //注册所有broker信息到namesrv
             registerBrokerData(topicConfig);
         }
 
         return topicConfig;
     }
 
+    //创建事务消息检查最大时间的topic
     public TopicConfig createTopicOfTranCheckMaxTime(final int clientDefaultTopicQueueNums, final int perm) {
         TopicConfig topicConfig = getTopicConfig(TopicValidator.RMQ_SYS_TRANS_CHECK_MAX_TIME_TOPIC);
         if (topicConfig != null)
@@ -440,10 +449,12 @@ public class TopicConfigManager extends ConfigManager {
         return topicConfig;
     }
 
+    //更新topic的unit flag
     public void updateTopicUnitFlag(final String topic, final boolean unit) {
 
         TopicConfig topicConfig = getTopicConfig(topic);
         if (topicConfig != null) {
+            //更新单元标
             int oldTopicSysFlag = topicConfig.getTopicSysFlag();
             if (unit) {
                 topicConfig.setTopicSysFlag(TopicSysFlag.setUnitFlag(oldTopicSysFlag));
@@ -458,12 +469,13 @@ public class TopicConfigManager extends ConfigManager {
 
             long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
             dataVersion.nextVersion(stateMachineVersion);
-
+            //持久化
             this.persist();
-            registerBrokerData(topicConfig);
+            registerBrokerData(topicConfig); //注册所有broker信息到namesrv
         }
     }
 
+    // 更新topic的unit sub flag
     public void updateTopicUnitSubFlag(final String topic, final boolean hasUnitSub) {
         TopicConfig topicConfig = getTopicConfig(topic);
         if (topicConfig != null) {
@@ -487,6 +499,7 @@ public class TopicConfigManager extends ConfigManager {
         }
     }
 
+    //更新topic元数据
     public void updateTopicConfig(final TopicConfig topicConfig) {
         checkNotNull(topicConfig, "topicConfig shouldn't be null");
 
@@ -510,16 +523,19 @@ public class TopicConfigManager extends ConfigManager {
         }
 
         long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
-        dataVersion.nextVersion(stateMachineVersion);
+        dataVersion.nextVersion(stateMachineVersion);   //更新数据版本号
 
-        this.persist(topicConfig.getTopicName(), topicConfig);
+        this.persist(topicConfig.getTopicName(), topicConfig);  //持久化到磁盘
     }
 
+    //更新
     public void updateOrderTopicConfig(final KVTable orderKVTableFromNs) {
 
         if (orderKVTableFromNs != null && orderKVTableFromNs.getTable() != null) {
             boolean isChange = false;
             Set<String> orderTopics = orderKVTableFromNs.getTable().keySet();
+            //遍历 KVTable 中的所有有序Topic，检查本地是否存在对应的 TopicConfig，如果
+            // 存在且不是有序Topic，则将其设置为有序，并记录变更。
             for (String topic : orderTopics) {
                 TopicConfig topicConfig = getTopicConfig(topic);
                 if (topicConfig != null && !topicConfig.isOrder()) {
@@ -545,7 +561,7 @@ public class TopicConfigManager extends ConfigManager {
                 }
             }*/
 
-            if (isChange) {
+            if (isChange) { //如果存在变更，则更新数据版本号 并 持久化到磁盘
                 long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
                 dataVersion.nextVersion(stateMachineVersion);
                 this.persist();
@@ -616,7 +632,7 @@ public class TopicConfigManager extends ConfigManager {
         return BrokerPathConfigHelper.getTopicConfigPath(this.brokerController.getMessageStoreConfig().getStorePathRootDir());
     }
 
-    @Override
+    @Override   //解码json字符串，解析为topic元数据结构
     public void decode(String jsonString) {
         if (jsonString != null) {
             TopicConfigSerializeWrapper topicConfigSerializeWrapper =
@@ -629,6 +645,7 @@ public class TopicConfigManager extends ConfigManager {
         }
     }
 
+    //将核心数据结构内容编码为json字符串
     public String encode(final boolean prettyFormat) {
         TopicConfigSerializeWrapper topicConfigSerializeWrapper = new TopicConfigSerializeWrapper();
         topicConfigSerializeWrapper.setTopicConfigTable(this.topicConfigTable);

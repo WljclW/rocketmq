@@ -52,13 +52,17 @@ public class NamesrvStartup {
     private static ControllerConfig controllerConfig = null;
 
     public static void main(String[] args) {
-        main0(args);
-        controllerManagerMain();
+        main0(args);    //启动namesrvController
+        controllerManagerMain();   //启动ControllerManager
     }
 
     public static NamesrvController main0(String[] args) {
         try {
-            parseCommandlineAndConfigFile(args);
+            parseCommandlineAndConfigFile(args); //解析命令行和配置文件，为NamesrvConfig、NettyServerConfig、NettyClientConfig属性设置值
+            /**
+             * 创建并启动 NamesrvController 对象，该对象是namesrv的核
+             * 心控制器，它持有各种配置对象、网络通信对象、路由管理对象等
+             * */
             NamesrvController controller = createAndStartNamesrvController();
             return controller;
         } catch (Throwable e) {
@@ -82,6 +86,8 @@ public class NamesrvStartup {
     }
 
     /**
+     * 【主要目的】填充NamesevConfig(NameServer业务参数)、NettyServerConfig(NameServer网络参数)、
+     *      NettyClientConfig属性值
      * 1.解析命令行参数和配置文件
      * 2.该方法首先设置Remoting框架的版本属性，然后解析命令行参数，接着加载配置文件（如果有提供）
      * 3.最后，根据命令行参数和配置文件初始化相关的配置对象
@@ -162,16 +168,26 @@ public class NamesrvStartup {
     public static NamesrvController createAndStartNamesrvController() throws Exception {
 
         NamesrvController controller = createNamesrvController();   //创建namesrv控制器实例，在创建过程中做了一些事
-        start(controller);
+        start(controller);  //启动上一步创建好的NamesrvController
         NettyServerConfig serverConfig = controller.getNettyServerConfig();
         String tip = String.format("The Name Server boot success. serializeType=%s, address %s:%d", RemotingCommand.getSerializeTypeConfigInThisServer(), serverConfig.getBindAddress(), serverConfig.getListenPort());
-        log.info(tip);
+        log.info(tip);  //将上面格式化后的提示信息tip记录在日志文件
         System.out.printf("%s%n", tip);
         return controller;
     }
 
+    /**
+     * 创建namesrvController的流程信息：
+     * step1:创建一个NamesrvController对象，传入namesrvConfig、nettyServerConfig和nettyClientConfig对象，这
+     *      些对象存储了namesrv的业务配置和网络配置
+     * step2:调用NamesrvController对象的getConfiguration方法，获取一个Configuration对象，该对象负责管理namesrv
+     *      的配置信息
+     * step3:调用Configuration对象的registerConfig方法，传入properties对象，将properties对象中的配置信息注册
+     *      到Configuration对象中
+     * step4:返回NamesrvController对象
+     * */
     public static NamesrvController createNamesrvController() {
-
+        // 创建 NamesrvController，传入namesrvConfig、nettyServerConfig、nettyClientConfig配置
         final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig, nettyClientConfig);
         // remember all configs to prevent discard
         controller.getConfiguration().registerConfig(properties);
@@ -183,13 +199,17 @@ public class NamesrvStartup {
         if (null == controller) {
             throw new IllegalArgumentException("NamesrvController is null");
         }
-
+        //初始化NamesrvController
         boolean initResult = controller.initialize();
         if (!initResult) {
             controller.shutdown();
             System.exit(-3);
         }
 
+        // 如何理解jvm钩子函数：当jvm关闭的时候，会执行系统中已经设置的所有通过方
+        // 法addShutdownHook添加的钩子，当系统执行完这些钩子后，jvm才会关闭。所以
+        // 这些钩子可以在jvm关闭的时候进行内存清理、对象销毁等操作。
+        //通过addShutdownHook注册jvm钩子函数，当程序关闭时，会调用controller的shutdown方法
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, (Callable<Void>) () -> {
             controller.shutdown();
             return null;
@@ -222,13 +242,13 @@ public class NamesrvStartup {
         if (null == controllerManager) {
             throw new IllegalArgumentException("ControllerManager is null");
         }
-
+        //调用initialize方法初始化controllerManager
         boolean initResult = controllerManager.initialize();
         if (!initResult) {
             controllerManager.shutdown();
             System.exit(-3);
         }
-
+        //注册jvm钩子函数，当程序关闭时，会调用controllerManager的shutdown方法
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, (Callable<Void>) () -> {
             controllerManager.shutdown();
             return null;

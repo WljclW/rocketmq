@@ -39,6 +39,15 @@ public class ZoneRouteRPCHook implements RPCHook {
 
     }
 
+    /**
+     * 重写了 doAfterResponse 方法，它会在处理GET_ROUTEINFO_BY_TOPIC请求（即请求的 requestCode =
+     *      RequestCode.GET_ROUTEINFO_BY_TOPIC）时，根据请求中的zoneName参数，过滤掉不属于该区域
+     *      的broker和queue数据，从而实现区域隔离的功能。
+     * 具体的实现逻辑：
+     *      设置 response 的 body 为  namesrv.route.ZoneRouteRPCHook#filterByZoneName  方法返回
+     *      值的字节数组格式，filterByZoneName 方法作用是返回过滤掉不属于该区域的broker和queue数据
+     *      后的TopicRouteData数据对象
+     * */
     @Override
     public void doAfterResponse(String remoteAddr, RemotingCommand request, RemotingCommand response) {
         if (RequestCode.GET_ROUTEINFO_BY_TOPIC != request.getCode()) {

@@ -23,16 +23,18 @@ public class NettyServerConfig implements Cloneable {
      * By default, it's wildcard address, listening all network interfaces.
      */
     private String bindAddress = "0.0.0.0";     // NameServer 默认绑定地址
-    private int listenPort = 0;
+    private int listenPort = 0; //NameServer监听端口，默认初始化为9876
     private int serverWorkerThreads = 8;    // Netty 业务线程池线程个数
-    private int serverCallbackExecutorThreads = 0;  // Netty public 任务线程池线程个数， Netty 网络设计，根据业务类型会创建不同的线程池，比如处理消息发送、消息消费、心跳检测等。如果该业务类型（RequestCode）未注册线程池， 则由 public线程池执行
-    private int serverSelectorThreads = 3;  //  IO 线程池线程个数，主要是 NameServer、Broker 端解析请求、返回相应的线程个数，这类线程主要是处理网络请求的，解析请求包， 然后转发到各个业务线程池完成具体的业务操作，然后将结果再返回调用方
-    private int serverOnewaySemaphoreValue = 256;   // send oneway 消息请求井发度（Broker 端参数）
-    private int serverAsyncSemaphoreValue = 64;     // 异步消息发送最大并发度（Broker 端参数）
-    private int serverChannelMaxIdleTimeSeconds = 120;  // 网络连接最大空闲时间，默认 120s。如果连接空闲时间超过该参数设置的值，连接将被关闭
+    //业务线程池
+    private int serverCallbackExecutorThreads = 0;  // Netty public 任务线程池线程个数， Netty 网络根据业务类型会创建不同的线程池，比如处理消息发送、消息消费、心跳检测等。如果该业务类型（RequestCode）未注册线程池， 则由 public线程池执行
+    //解析请求并转发给特定的业务线程池
+    private int serverSelectorThreads = 3;  //  IO 线程池线程个数，主要是 NameServer、Broker 端解析请求、返回相应的线程个数。。这类线程主要是处理网络请求的，解析请求包， 然后转发到各个业务线程池完成具体的业务操作，然后将结果再返回调用方
+    private int serverOnewaySemaphoreValue = 256;   // send oneway 消息请求的并发度（Broker 端参数）
+    private int serverAsyncSemaphoreValue = 64;     // 异步消息发送最大并发度（Broker端参数）
+    private int serverChannelMaxIdleTimeSeconds = 120;  // 网络连接所允许的最大空闲时间，默认120s。如果连接空闲时间超过该参数设置的值，连接将被关闭
 
-    private int serverSocketSndBufSize = NettySystemConfig.socketSndbufSize;    // 网络 socket 发送缓存区大小， 默认 64k
-    private int serverSocketRcvBufSize = NettySystemConfig.socketRcvbufSize;    // 网络 socket 接受缓存区大小， 默认 64k
+    private int serverSocketSndBufSize = NettySystemConfig.socketSndbufSize;    // 网络 socket 发送缓存区大小，默认 64k
+    private int serverSocketRcvBufSize = NettySystemConfig.socketRcvbufSize;    // 网络 socket 接受缓存区大小，默认 64k
     /**
      * 高水位标记，当Channel的待写入数据量达到此值时，Netty会自动关闭Channel的写操作，
      * 需要用户手动调用Channel的flush方法来刷新缓冲区以继续写入数据。
@@ -45,9 +47,9 @@ public class NettyServerConfig implements Cloneable {
      * 这有助于在数据量减少到一个合理水平时恢复写操作，保证数据传输的流畅。
      */
     private int writeBufferLowWaterMark = NettySystemConfig.writeBufferLowWaterMark;
-    private int serverSocketBacklog = NettySystemConfig.socketBacklog;  // 同时处理的连接请求的最大数量 默认1024
-//    private boolean serverNettyWorkerGroupEnable = true;    // ByteBuffer 是否开启缓存， 建议开启
-    private boolean serverPooledByteBufAllocatorEnable = true;  // 是否启用 Epoll IO 模型， Linux 环境建议开启
+    private int serverSocketBacklog = NettySystemConfig.socketBacklog;  // 同时处理的连接请求的最大数量默认1024
+//    private boolean serverNettyWorkerGroupEnable = true;    // ByteBuffer是否开启缓存，建议开启
+    private boolean serverPooledByteBufAllocatorEnable = true;  // 是否启用Epoll IO模型，Linux环境建议开启
 
     private boolean enableShutdownGracefully = false;
     private int shutdownWaitTimeSeconds = 30;
