@@ -58,7 +58,7 @@ public class NamesrvStartup {
 
     public static NamesrvController main0(String[] args) {
         try {
-            parseCommandlineAndConfigFile(args); //解析命令行和配置文件，为NamesrvConfig、NettyServerConfig、NettyClientConfig属性设置值
+            parseCommandlineAndConfigFile(args); //解析命令行和配置文件，最后达成：为NamesrvConfig、NettyServerConfig、NettyClientConfig属性设置值
             /**
              * 创建并启动 NamesrvController 对象，该对象是namesrv的核
              * 心控制器，它持有各种配置对象、网络通信对象、路由管理对象等
@@ -207,8 +207,8 @@ public class NamesrvStartup {
         }
 
         // 如何理解jvm钩子函数：当jvm关闭的时候，会执行系统中已经设置的所有通过方
-        // 法addShutdownHook添加的钩子，当系统执行完这些钩子后，jvm才会关闭。所以
-        // 这些钩子可以在jvm关闭的时候进行内存清理、对象销毁等操作。
+        //      法addShutdownHook添加的钩子，当系统执行完这些钩子后，jvm才会关闭。所以
+        //      这些钩子可以在jvm关闭的时候进行内存清理、对象销毁等操作。
         //通过addShutdownHook注册jvm钩子函数，当程序关闭时，会调用controller的shutdown方法
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, (Callable<Void>) () -> {
             controller.shutdown();
@@ -237,6 +237,13 @@ public class NamesrvStartup {
         return controllerManager;
     }
 
+    /**
+     * 重载的方法start。用于启动ControllerManager，逻辑上和start(final NamesrvController controller)是一样的，即————
+     *      1.先是进行初始化方法的调用
+     *      2.如果初始化是没有成功就直接返回
+     *      3.到这里说明初始化成功了。这一步会注册jvm钩子函数实现优雅关闭
+     *      4.调用ControllerManager的start方法启动controllerManager
+     * */
     public static ControllerManager start(final ControllerManager controllerManager) throws Exception {
 
         if (null == controllerManager) {

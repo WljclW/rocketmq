@@ -23,6 +23,11 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * 这个类是底层创建服务线程的抽象类
+ *      1. 基本上所需要的功能都已经实现了
+ *      2. 唯一的抽象方法是getServiceName()方法，这个方法会返回一个字符串，这个字符串代表当前线程的名字(暗示该线程是干什么活的)
+ * */
 public abstract class ServiceThread implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
@@ -41,6 +46,9 @@ public abstract class ServiceThread implements Runnable {
 
     }
 
+    /**
+     * 这个方法会返回一个字符串，这个字符串代表当前线程的名字(暗示该线程是干什么活的)
+     * */
     public abstract String getServiceName();
 
     public void start() {

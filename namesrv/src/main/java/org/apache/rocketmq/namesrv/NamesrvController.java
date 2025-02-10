@@ -98,7 +98,7 @@ public class NamesrvController {
         this.configuration.setStorePathFromConfig(this.namesrvConfig, "configStorePath");
     }
 
-    public boolean initialize() {
+    public boolean initialize() {   /**做一些初始化操作*/
         loadConfig();   //加载KV配置表...加载系统配置，这是系统运行所必需的配置信息
         initiateNetworkComponents();  //创建网络处理组件。包括：remotingClient和remotingServer
         initiateThreadExecutors();
@@ -274,7 +274,7 @@ public class NamesrvController {
 
         this.remotingClient.updateNameServerAddressList(Collections.singletonList(NetworkUtil.getLocalAddress()
             + ":" + nettyServerConfig.getListenPort()));
-        this.remotingClient.start();
+        this.remotingClient.start();    //向其他服务发送请求
 
         if (this.fileWatchService != null) {    //动态加载证书文件的服务
             this.fileWatchService.start();
@@ -283,6 +283,9 @@ public class NamesrvController {
         this.routeInfoManager.start(); //路由信息管理器启动，目的是维护Broker和Topic的路由关系
     }
 
+    /**
+     * 通过这个方法来执行所有的需要关闭的操作，然后将这个方法作为回调添加为jvm钩子，从而实现优雅关闭
+     * */
     public void shutdown() {
         this.remotingClient.shutdown();
         this.remotingServer.shutdown();

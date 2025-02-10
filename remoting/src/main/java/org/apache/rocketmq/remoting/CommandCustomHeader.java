@@ -18,6 +18,9 @@ package org.apache.rocketmq.remoting;
 
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
+/**
+ * 这个接口是所有自定义的请求头必须实现的接口
+ * */
 public interface CommandCustomHeader {
     void checkFields() throws RemotingCommandException;
 }

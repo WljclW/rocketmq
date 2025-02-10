@@ -37,14 +37,14 @@ public abstract class ConcurrentHashMapUtils {
     /**
      * A temporary workaround for Java 8 specific performance issue JDK-8161372 .<br> Use implementation of
      * ConcurrentMap.computeIfAbsent instead.
-     * 
+     * 作用：检查map中是不是存在指定的key。。存在的话返回对应的value;否则会根据第三个参数创建key对应的value，然后将键值对存到map
      * Requirement: <strong>The mapping function should not modify this map during computation.</strong>
      *
      * @see <a href="https://bugs.openjdk.java.net/browse/JDK-8161372">https://bugs.openjdk.java.net/browse/JDK-8161372</a>
      */
     public static <K, V> V computeIfAbsent(ConcurrentMap<K, V> map, K key, Function<? super K, ? extends V> func) {
         Objects.requireNonNull(func);
-        if (isJdk8) {
+        if (isJdk8) {   //仅仅是对于jdk8的一个解决
             V v = map.get(key);
             if (null == v) {
                 // this bug fix methods maybe cause `func.apply` multiple calls.
@@ -60,7 +60,7 @@ public abstract class ConcurrentHashMapUtils {
                 }
             }
             return v;
-        } else {
+        } else {    //对于后面的版本，jdk内部就解决了
             return map.computeIfAbsent(key, func);
         }
     }

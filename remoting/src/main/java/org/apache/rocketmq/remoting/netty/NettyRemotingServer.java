@@ -198,6 +198,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             && Epoll.isAvailable();
     }
 
+    /**
+     * 下面的代码就是netty服务端启动的典型代码
+     * */
     @Override
     public void start() {
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyServerConfig.getServerWorkerThreads(),
@@ -205,9 +208,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         prepareSharableHandlers();  //准备共享的处理器，这个处理器可以在多个通道中共享
 
-        serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector) //配置服务器的引导程序
-            .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
-            .option(ChannelOption.SO_BACKLOG, 1024)
+        serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector) //配置服务器的引导程序。前者负责接受连接，后者后者负责处理IO操作(处理已建立的连接)
+            .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)  //根据os是否支持epoll进行选择
+            .option(ChannelOption.SO_BACKLOG, 1024) //
             .option(ChannelOption.SO_REUSEADDR, true)
             .childOption(ChannelOption.SO_KEEPALIVE, false)
             .childOption(ChannelOption.TCP_NODELAY, true)
@@ -236,7 +239,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 nettyServerConfig.getListenPort()), e);
         }
 
-        if (this.channelEventListener != null) {    //如果存在通道事件监听器，则启动Netty事件执行器
+        if (this.channelEventListener != null) {    //如果存在通道事件监听器，则启动Netty事件执行器处理通道事件
             this.nettyEventExecutor.start();
         }
 
@@ -433,12 +436,13 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     private void printRemotingCodeDistribution() {
         if (distributionHandler != null) {
+            //获取并打印入站 请求码分布信息
             String inBoundSnapshotString = distributionHandler.getInBoundSnapshotString();
             if (inBoundSnapshotString != null) {
                 TRAFFIC_LOGGER.info("Port: {}, RequestCode Distribution: {}",
                     nettyServerConfig.getListenPort(), inBoundSnapshotString);
             }
-
+            //获取并打印出站 响应码分布信息
             String outBoundSnapshotString = distributionHandler.getOutBoundSnapshotString();
             if (outBoundSnapshotString != null) {
                 TRAFFIC_LOGGER.info("Port: {}, ResponseCode Distribution: {}",

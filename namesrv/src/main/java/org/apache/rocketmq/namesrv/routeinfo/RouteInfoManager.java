@@ -70,7 +70,7 @@ public class RouteInfoManager {
     private final static long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;   //消息队列的路由信息，根据这个属性进行负载均衡
-    private final Map<String/* brokerName */, BrokerData> brokerAddrTable;  //broker名称到broker的基本信息，包括：名称、所属集群名、主备broker地址
+    private final Map<String/* brokerName */, BrokerData> brokerAddrTable;  //broker名称到broker的基本信息，包括：名称、所属集群名、主备broker地址(该broker集群的所有broker实例)
     private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;   //集群名称和broker名称的映射，用于快速查找broker
     private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;  //broker的状态信息，每次收到心跳响应时会更新此信息
     private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;   //broker上的filterserver列表，实现类模式消息过滤
@@ -244,18 +244,19 @@ public class RouteInfoManager {
             brokerNames.add(brokerName);
 
             boolean registerFirst = false;
-
+            //根据brokerName获取BrokerData，如果获取不到则标识需要新建
             BrokerData brokerData = this.brokerAddrTable.get(brokerName);
             if (null == brokerData) {
                 registerFirst = true;
                 brokerData = new BrokerData(clusterName, brokerName, new HashMap<>());
                 this.brokerAddrTable.put(brokerName, brokerData);
             }
-
+            //根据enableActingMaster属性判断是不是旧版本的broker。根据是否旧版本broker，设置brokerData的enableActingMaster属性。
             boolean isOldVersionBroker = enableActingMaster == null;
             brokerData.setEnableActingMaster(!isOldVersionBroker && enableActingMaster);
             brokerData.setZoneName(zoneName);
 
+            //从brokerData拿到这个集群所有的broker地址。并对这里拿到的map进行筛选————目的是排除冲突的broker(删除地址相等，但是brokerId不相等的映射)
             Map<Long, String> brokerAddrsMap = brokerData.getBrokerAddrs();
 
             boolean isMinBrokerIdChanged = false;
@@ -290,8 +291,8 @@ public class RouteInfoManager {
                     }
                 }
             }
-
-            if (!brokerAddrsMap.containsKey(brokerId) && topicConfigWrapper.getTopicConfigTable().size() == 1) {
+            //情况2：如果brokerAddrTable中已经存在这个brokerId，并且brokerAddrTable中这个brokerId对应的topicConfigTable只有一个topic，则返回null
+            if (!brokerAddrsMap.containsKey(brokerId) && topicConfigWrapper.getTopicConfigTable().size() == 1) {    //为什么？？
                 log.warn("Can't register topicConfigWrapper={} because broker[{}]={} has not registered.",
                     topicConfigWrapper.getTopicConfigTable(), brokerId, brokerAddr);
                 return null;
@@ -574,36 +575,36 @@ public class RouteInfoManager {
             Set<String> reducedBroker = new HashSet<>();
             Map<String, BrokerStatusChangeInfo> needNotifyBrokerMap = new HashMap<>();
 
-            this.lock.writeLock().lockInterruptibly();
+            this.lock.writeLock().lockInterruptibly();  //拿到写锁
             for (final UnRegisterBrokerRequestHeader unRegisterRequest : unRegisterRequests) {
                 final String brokerName = unRegisterRequest.getBrokerName();
                 final String clusterName = unRegisterRequest.getClusterName();
                 final String brokerAddr = unRegisterRequest.getBrokerAddr();
 
                 BrokerAddrInfo brokerAddrInfo = new BrokerAddrInfo(clusterName, brokerAddr);
-
+                //操作1：更新brokerLiveTable————删除指定的broker信息
                 BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.remove(brokerAddrInfo);
                 log.info("unregisterBroker, remove from brokerLiveTable {}, {}",
                     brokerLiveInfo != null ? "OK" : "Failed",
                     brokerAddrInfo
                 );
-
+                //操作2：更新filterServerTable————删除指定的broker信息
                 this.filterServerTable.remove(brokerAddrInfo);
-
+                //操作3：更新brokerAddrTable————删除指定的broker信息
                 boolean removeBrokerName = false;
                 boolean isMinBrokerIdChanged = false;
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
-                if (null != brokerData) {
+                if (null != brokerData) {   //确保这个对象不是null（下面是根据brokerAddrTable得到的value来进行操作）
                     if (!brokerData.getBrokerAddrs().isEmpty() &&
                         unRegisterRequest.getBrokerId().equals(Collections.min(brokerData.getBrokerAddrs().keySet()))) {
                         isMinBrokerIdChanged = true;
                     }
-                    boolean removed = brokerData.getBrokerAddrs().entrySet().removeIf(item -> item.getValue().equals(brokerAddr));
+                    boolean removed = brokerData.getBrokerAddrs().entrySet().removeIf(item -> item.getValue().equals(brokerAddr));  //从broker集群中删除当前的这个broker
                     log.info("unregisterBroker, remove addr from brokerAddrTable {}, {}",
                         removed ? "OK" : "Failed",
                         brokerAddrInfo
                     );
-                    if (brokerData.getBrokerAddrs().isEmpty()) {
+                    if (brokerData.getBrokerAddrs().isEmpty()) {  //如果broker集群中已经没有broker了，则从brokerAddrTable中删除这个broker集群
                         this.brokerAddrTable.remove(brokerName);
                         log.info("unregisterBroker, remove name from brokerAddrTable OK, {}",
                             brokerName
@@ -618,13 +619,13 @@ public class RouteInfoManager {
 
                 if (removeBrokerName) {
                     Set<String> nameSet = this.clusterAddrTable.get(clusterName);
-                    if (nameSet != null) {
+                    if (nameSet != null) {  //源码中在每一次对某东西做操作时，先确保该东西不是null
                         boolean removed = nameSet.remove(brokerName);
                         log.info("unregisterBroker, remove name from clusterAddrTable {}, {}",
                             removed ? "OK" : "Failed",
                             brokerName);
 
-                        if (nameSet.isEmpty()) {
+                        if (nameSet.isEmpty()) {  //如果clusterAddrTable中已经没有broker集群了，则从clusterAddrTable中删除这个cluster
                             this.clusterAddrTable.remove(clusterName);
                             log.info("unregisterBroker, remove cluster from clusterAddrTable {}",
                                 clusterName
@@ -709,7 +710,7 @@ public class RouteInfoManager {
 
         try {
             this.lock.readLock().lockInterruptibly();
-            Map<String, QueueData> queueDataMap = this.topicQueueTable.get(topic);
+            Map<String, QueueData> queueDataMap = this.topicQueueTable.get(topic);  // 从topicQueueTable中获取topic对应的QueueData
             if (queueDataMap != null) {
                 topicRouteData.setQueueDatas(new ArrayList<>(queueDataMap.values()));
                 foundQueueData = true;
@@ -898,6 +899,14 @@ public class RouteInfoManager {
         return false;
     }
 
+    /**
+     * 这段代码的功能是遍历需要通知的Broker状态变更信息，对于每个Broker，如果其启用了代理主节点功能，则调用notifyMinBrokerIdChanged方
+     *      法进行最小Broker ID变更通知。
+     * 具体步骤如下：
+     *      遍历needNotifyBrokerMap中的每个Broker名称。
+     *      获取该Broker的状态变更信息和对应的Broker数据。
+     *      如果Broker数据不为空且启用了代理主节点功能，则调用notifyMinBrokerIdChanged方法，传递Broker地址、离线Broker地址和HA Broker地址。
+     * */
     private void notifyMinBrokerIdChanged(Map<String, BrokerStatusChangeInfo> needNotifyBrokerMap)
         throws InterruptedException, RemotingConnectException, RemotingTimeoutException, RemotingSendRequestException,
         RemotingTooMuchRequestException {
@@ -929,9 +938,9 @@ public class RouteInfoManager {
         List<String> brokerAddrsNotify = chooseBrokerAddrsToNotify(brokerAddrMap, offlineBrokerAddr);
         log.info("min broker id changed to {}, notify {}, offline broker addr {}", minBrokerId, brokerAddrsNotify, offlineBrokerAddr);
         RemotingCommand request =
-            RemotingCommand.createRequestCommand(RequestCode.NOTIFY_MIN_BROKER_ID_CHANGE, requestHeader);
-        for (String brokerAddr : brokerAddrsNotify) {
-            this.namesrvController.getRemotingClient().invokeOneway(brokerAddr, request, 300);
+            RemotingCommand.createRequestCommand(RequestCode.NOTIFY_MIN_BROKER_ID_CHANGE, requestHeader); //封装请求
+        for (String brokerAddr : brokerAddrsNotify) { //
+            this.namesrvController.getRemotingClient().invokeOneway(brokerAddr, request, 300); //基于底层的封装，这里就直接做到了请求的发送
         }
     }
 
@@ -941,6 +950,7 @@ public class RouteInfoManager {
             return new ArrayList<>(brokerAddrMap.values());
         }
 
+        //否则将 除了最小的broker id 的其他所有的broker实例添加到列表返回
         // new broker registered, notify previous brokers.
         long minBrokerId = Collections.min(brokerAddrMap.keySet());
         List<String> brokerAddrList = new ArrayList<>();
@@ -1242,9 +1252,9 @@ class BrokerLiveInfo {
 }
 
 class BrokerStatusChangeInfo {
-    Map<Long, String> brokerAddrs;
-    String offlineBrokerAddr;
-    String haBrokerAddr;
+    Map<Long, String> brokerAddrs;  // brokerId -> brokerAddr，表示broker集群中的各个broker实例的地址
+    String offlineBrokerAddr;   // 是broker集群中已经下线的broker实例的地址
+    String haBrokerAddr;    // broker集群中ha模式的broker实例的地址
 
     public BrokerStatusChangeInfo(Map<Long, String> brokerAddrs, String offlineBrokerAddr, String haBrokerAddr) {
         this.brokerAddrs = brokerAddrs;
