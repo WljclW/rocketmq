@@ -811,6 +811,7 @@ public class MQClientInstance {
         return true;
     }
 
+    //更新消息生产者和路由缓存
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {

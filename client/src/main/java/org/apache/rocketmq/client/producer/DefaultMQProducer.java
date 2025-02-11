@@ -386,7 +386,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Fetch message queues of topic <code>topic</code>, to which we may send/publish messages.
-     *
+     * 查找该主题下所有的消息队列
      * @param topic Topic to fetch.
      * @return List of message queues readily to send messages to
      * @throws MQClientException if there is any client error.
@@ -431,7 +431,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws MQBrokerException    if there is any error with broker.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override
+    @Override //同步发送消息，具体发送到哪个队列由负载均衡策略决定
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -454,7 +454,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws MQBrokerException    if there is any error with broker.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override
+    @Override //同步发送消息，超过参数指定的超时时间，则抛出异常
     public SendResult send(Message msg,
         long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -476,7 +476,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws RemotingException    if there is any network-tier error.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override
+    @Override //异步发送消息，sendCallback在消息发送成功后会执行
     public void send(Message msg,
         SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -685,7 +685,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws RemotingException    if there is any network-tier error.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override
+    @Override //selector参数是消息选择算法(取代默认的负载均衡)；sendCallback参数是发送成功后的回调
     public void send(Message msg, MessageQueueSelector selector, Object arg, SendCallback sendCallback)
         throws MQClientException, RemotingException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -951,7 +951,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Search consume queue offset of the given time stamp.
-     *
+     * 根据时间戳在队列中查找偏移量
      * @param mq        Instance of MessageQueue
      * @param timestamp from when in milliseconds.
      * @return Consume queue offset.

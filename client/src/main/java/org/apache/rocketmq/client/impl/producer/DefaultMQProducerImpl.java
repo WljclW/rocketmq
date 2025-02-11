@@ -714,12 +714,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
-        this.makeSureStateOK();
-        Validators.checkMessage(msg, this.defaultMQProducer);
+        this.makeSureStateOK(); //确保生产者处于运行态
+        Validators.checkMessage(msg, this.defaultMQProducer); //检查消息符合规范
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
+        //查找topic的路由信息。这样才知道需要发给哪一个broker
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             boolean callTimeout = false;
@@ -859,8 +860,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /**
-     * tryToFindTopicPublishlnfo 是查找主题的路由信息的方法。 如果生产者中缓存了 topic 的路由信息，且该路由信息中包含了消息
-     *  队列，则直接返回该路由信息，如果没有缓存或没有包含消息队列， 则向NameServer查询该topic 的路由信息。 如果最终未找到路由
+     * tryToFindTopicPublishlnfo 是查找主题的路由信息的方法。
+     *      如果生产者中缓存了 topic 的路由信息，且该路由信息中包含了消息队列，则直接返回该路由信息;
+     *      如果没有缓存或没有包含消息队列， 则向NameServer查询该topic 的路由信息。 如果最终未找到路由
      *  信息，则抛出异常：无法找到主题相关路由信息异常
      * */
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {

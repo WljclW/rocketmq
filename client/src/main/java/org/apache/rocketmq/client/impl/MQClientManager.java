@@ -34,6 +34,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
  *      送消息到Broker。
  * 既然MQClientInstance实现的是底层通信功能和获取并保存元数据的功能，就没必要每个Consumer或Producer都创建一个对象，一
  *      个MQClientInstance对象可以被多个Consumer或Producer公用。
+ * MQClientInstance封装了RocketMQ的网络处理API，是消息生产者、消息消费者与NameServer、Broker打交道的网络通道
  * */
 public class MQClientManager {
     private final static Logger log = LoggerFactory.getLogger(MQClientManager.class);
