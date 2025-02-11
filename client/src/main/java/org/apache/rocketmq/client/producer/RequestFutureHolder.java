@@ -35,6 +35,9 @@ import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * 管理异步请求的未来结果
+ * */
 public class RequestFutureHolder {
     private static final Logger log = LoggerFactory.getLogger(RequestFutureHolder.class);
     private static final RequestFutureHolder INSTANCE = new RequestFutureHolder();
@@ -71,6 +74,14 @@ public class RequestFutureHolder {
         }
     }
 
+    /**
+     * 方法用于 扫描 和 处理 过期的异步请求。
+     * 【注意】这里的异步请求并不是send方法消息的那种异步回调，区别：
+     *      1.在 send 方法中传入一个回调函数，当消息发送成功或失败时，会调用这个回调函数。这种方式
+     *      不需要等待服务器的响应，只需要等待服务器的确认。
+     *      2.在 RocketMQ 4.7.0 后加入的 Request-Reply 特性，这种方式是模拟 RPC 调用，需要等
+     *      待服务器的响应，并返回一个结果。这种方式需要使用 RequestResponseFuture 对象来封装请求和响应的信息。
+     * */
     public synchronized void startScheduledTask(DefaultMQProducerImpl producer) {
         this.producerSet.add(producer);
         if (null == scheduledExecutorService) {

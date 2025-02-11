@@ -22,6 +22,11 @@ import org.apache.rocketmq.client.producer.TransactionListener;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.remoting.protocol.header.CheckTransactionStateRequestHeader;
 
+/**
+ * 【】用于规范 创建MQProducer(应该理解成MQ的消息生产者)的逻辑，而创建的接口。
+ *      ~目前唯一的实现类是DefaultMQProducerImpl；
+ *      ~而我们想实现自定义的 消息生产者逻辑时，只需要继承于DefaultMQProducerImpl即可
+ * */
 public interface MQProducerInner {
     Set<String> getPublishTopicList();
 

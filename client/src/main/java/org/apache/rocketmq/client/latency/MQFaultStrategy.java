@@ -22,6 +22,9 @@ import org.apache.rocketmq.client.impl.producer.TopicPublishInfo;
 import org.apache.rocketmq.client.impl.producer.TopicPublishInfo.QueueFilter;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 实现消息的 故障转移 和 负载均衡
+ * */
 public class MQFaultStrategy {
     private LatencyFaultTolerance<String> latencyFaultTolerance;
     private volatile boolean sendLatencyFaultEnable;
@@ -137,7 +140,7 @@ public class MQFaultStrategy {
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName, final boolean resetIndex) {
         BrokerFilter brokerFilter = threadBrokerFilter.get();
         brokerFilter.setLastBrokerName(lastBrokerName);
-        if (this.sendLatencyFaultEnable) {
+        if (this.sendLatencyFaultEnable) {  //判断是否开启认错开关，默认是false
             if (resetIndex) {
                 tpInfo.resetIndex();
             }

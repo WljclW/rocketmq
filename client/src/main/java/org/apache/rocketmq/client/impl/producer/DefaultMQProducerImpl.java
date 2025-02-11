@@ -132,7 +132,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
-        this.defaultMQProducer = defaultMQProducer;
+        this.defaultMQProducer = defaultMQProducer; //保证了这个DefaultMQProducerImpl类对象也会持有DefaultMQProducer对象
         this.rpcHook = rpcHook;
 
         this.asyncSenderThreadPoolQueue = new LinkedBlockingQueue<>(50000);
@@ -248,19 +248,21 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * （6）日志、检测以及发送心跳
      * */
     public void start(final boolean startFactory) throws MQClientException {
-        //根据当前服务端逻辑的不同执行不同的逻辑。。初始值见上面的默认初始化————private ServiceState serviceState = ServiceState.CREATE_JUST;
+        //根据当前服务端状态的不同执行不同的逻辑。。初始值见上面的默认初始化————private ServiceState serviceState = ServiceState.CREATE_JUST;
         switch (this.serviceState) {
             case CREATE_JUST:
                 this.serviceState = ServiceState.START_FAILED;
 
-                this.checkConfig(); //检查配置文件。。主要是检查 producerGroup 不能为空、不能超过255个字符、不能跟默认的DEFAULT_PRODUCER名字相同
+                this.checkConfig(); //检查配置文件。。主要是检查 producerGroup(生产者组名) 的命名是否合法
 
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
-                    this.defaultMQProducer.changeInstanceNameToPID();   // 如果生产者组不是内部使用的组，则修改实例名为PID(jps命令可查) +"#"+ 当前的纳秒值
+                    this.defaultMQProducer.changeInstanceNameToPID();   // 如果生产者组不是CLIENT_INNER_PRODUCER
                 }
                 // 获取 或 创建MQ客户端工厂实例。mQClientFactory其实是MQClientInstance的对象
                 this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
-                // 尝试在MQ客户端工厂中注册生产者组。。向MQClientInstance注册服务，将当前生产者加入MQClientInstance管理，方便后续调用网络请求、进行心跳检测等。
+                // 尝试在MQ客户端工厂中注册生产者组。。向MQClientInstance注册服务，将
+                // 当前生产者加入MQClientInstance管理，方便后续调用网络请求、进行心跳检测等。
+                // producerGroup(生产者组名)——》DefaultMQProducerImpl
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
                 if (!registerOK) {       // 如果注册失败，恢复到创建状态，并抛出异常
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -270,7 +272,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 }
 
                 if (startFactory) {     //根据参数决定是否启动MQ客户端工厂
-                    mQClientFactory.start();
+                    mQClientFactory.start();    //启动MQClientInstance实例，里面包括了多项任务
                 }
 
                 this.initTopicRoute();
@@ -299,6 +301,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     private void checkConfig() throws MQClientException {
+        //DefaultMQProducerImpl内部持有DefaultMQProducer对象，所以也就能拿到DefaultMQProducer对象的所有属性
         Validators.checkGroup(this.defaultMQProducer.getProducerGroup());
 
         if (this.defaultMQProducer.getProducerGroup().equals(MixAll.DEFAULT_PRODUCER_GROUP)) {

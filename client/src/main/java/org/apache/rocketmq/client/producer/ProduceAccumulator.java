@@ -42,6 +42,10 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
+/**
+ * 抽象出此类目的：进行消息的累积发送.
+ * ProduceAccumulator会将消息根据Topic和tag进行分组存储，然后包装为MessageBatch调用DefaultMQProducer进行发送
+ * */
 public class ProduceAccumulator {
     // totalHoldSize normal value
     private long totalHoldSize = 32 * 1024 * 1024;

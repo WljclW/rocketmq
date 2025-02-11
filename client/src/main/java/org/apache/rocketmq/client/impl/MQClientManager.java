@@ -38,8 +38,8 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 public class MQClientManager {
     private final static Logger log = LoggerFactory.getLogger(MQClientManager.class);
     private static MQClientManager instance = new MQClientManager();
-    private AtomicInteger factoryIndexGenerator = new AtomicInteger();
-    //整个JVM实例中只存在一个MQClientManager实例，维护一个MQClientInstance缓存表ConcurrentMap<String, MQClientInstance>,即
+    private AtomicInteger factoryIndexGenerator = new AtomicInteger();  //后面在创建MQClientInstance实例的时候，会使用并自增该值。。最终会记录日志，除此以外没其他作用
+    //整个JVM实例中只存在一个MQClientManager实例，维护一个MQClientInstance缓存表ConcurrentMap<String, MQClientInstance> factoryTable,即
     //同一个clientId只会创建一个MQClientInstance实例
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<>();      //clientId的格式是“clientIp”+@+“InstanceName”
@@ -66,7 +66,6 @@ public class MQClientManager {
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();   // 根据客户端配置生成唯一的客户端ID
         MQClientInstance instance = this.factoryTable.get(clientId);     // 尝试从实例表中获取已存在的MQ客户端实例
-        /**
         /**
          * 从下面的逻辑可以看出来，对于同样的clientId，MQClientInstance实例只会创建一个。
          * */

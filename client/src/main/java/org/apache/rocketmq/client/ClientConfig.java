@@ -31,7 +31,7 @@ import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 import org.apache.rocketmq.remoting.protocol.RequestType;
 
 /**
- * Client Common configuration
+ * Client Common configuration....配置客户端的通用配置
  */
 public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
@@ -98,13 +98,14 @@ public class ClientConfig {
 
     private boolean enableHeartbeatChannelEventListener = true;
 
+    //根据client的ip、instanceName、unitName构建mqClientId..完整的名称：IP地址@InstanceName@unitName@0
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClientIP());
 
         sb.append("@");
         sb.append(this.getInstanceName());
-        if (!UtilAll.isBlank(this.unitName)) {
+        if (!UtilAll.isBlank(this.unitName)) {  //unitName不是空则拼接
             sb.append("@");
             sb.append(this.unitName);
         }
@@ -133,7 +134,7 @@ public class ClientConfig {
         this.instanceName = instanceName;
     }
 
-    public void changeInstanceNameToPID() {
+    public void changeInstanceNameToPID() { //修改实例名为PID(jps命令可查) +"#"+ 当前的纳秒值
         if (this.instanceName.equals("DEFAULT")) {
             this.instanceName = UtilAll.getPid() + "#" + System.nanoTime();
         }

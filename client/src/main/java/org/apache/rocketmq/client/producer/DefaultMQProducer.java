@@ -50,6 +50,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
+ * 【总述】这个类是发送消息的入口类，它封装了发送消息的各种方法，
  * This class is the entry point for applications intending to send messages. </p>
  * <p>
  * It's fine to tune fields which exposes getter/setter methods, but keep in mind, all of them should work well out of
@@ -57,7 +58,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
  * <p>
  * This class aggregates various <code>send</code> methods to deliver messages to broker(s). Each of them has pros and
  * cons; you'd better understand strengths and weakness of them before actually coding. </p>
- *
+ * 方法继承了很多的send方法，有不同的优缺点。需要了解并合理使用
  * <p> <strong>Thread Safety:</strong> After configuring and starting process, this class can be regarded as thread-safe
  * and used among multiple threads context. </p>
  */
@@ -65,6 +66,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Wrapping internal implementations for virtually all methods presented in this class.
+     * 其实是一个内部实现类，封装了各种发送消息的方法，
      */
     protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
     private final Logger logger = LoggerFactory.getLogger(DefaultMQProducer.class);
@@ -190,7 +192,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      */
     public DefaultMQProducer(final String producerGroup) {
         this.producerGroup = producerGroup;
-        defaultMQProducerImpl = new DefaultMQProducerImpl(this, null);
+        defaultMQProducerImpl = new DefaultMQProducerImpl(this, null); //DefaultMQProducerImpl和DefaultMQProducer基于这一步就形成了互相引用的关系
         produceAccumulator = MQClientManager.getInstance().getOrCreateProduceAccumulator(this);
     }
 
@@ -351,7 +353,10 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      */
     @Override
     public void start() throws MQClientException {
+        // 设置生产者所属的组，并设置命名空间。。会对创建时声明的生产者组做修正(但namespace属性显示被弃用)
         this.setProducerGroup(withNamespace(this.producerGroup));
+        //真正干活的是下面的方法：defaultMQProducerImpl.start()。由于两个类相互引用，因此是可以调用。。。。。并且这里的调用关系
+        //类似于静态代理的例子，见SSM项目
         this.defaultMQProducerImpl.start();
         if (this.produceAccumulator != null) {
             this.produceAccumulator.start();

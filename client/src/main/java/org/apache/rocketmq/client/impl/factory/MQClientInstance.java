@@ -130,10 +130,14 @@ public class MQClientInstance {
      * The container which stores the brokerClusterInfo. The key of the map is the brokerCluster name.
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
-     * 对集群中broker地址的缓存
+     * 对集群中broker地址的缓存。。broker集群名————>该集群所有的broker实例(broker的id———>broker实例的地址)
      */
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
 
+    /**
+     * brokerVersionTable的key是broker集群的名称，value是该集群所有broker的版本信息
+     * value的map：key是broker的地址，value是该broker的版本号
+     * */
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable = new ConcurrentHashMap<>();
     private final Set<String/* Broker address */> brokerSupportV2HeartbeatSet = new HashSet();
     private final ConcurrentMap<String, Integer> brokerAddrHeartbeatFingerprintTable = new ConcurrentHashMap();
@@ -221,9 +225,12 @@ public class MQClientInstance {
         this.pullMessageService = new PullMessageService(this);
 
         this.rebalanceService = new RebalanceService(this);
-
+        /*
+          这里也会创建一个DefaultMQProducer，这个producer是作为内部使用的。。刚开始发送消息就
+          会创建一个DefaultMQProducer实例，这两个是不一样的，这个实例的生产者组是CLIENT_INNER_PRODUCER_GROUP
+        * **/
         this.defaultMQProducer = new DefaultMQProducer(MixAll.CLIENT_INNER_PRODUCER_GROUP);
-        this.defaultMQProducer.resetClientConfig(clientConfig);
+        this.defaultMQProducer.resetClientConfig(clientConfig); //将参数clientConfig设置到DefaultMQProducer的clientConfig属性
 
         this.consumerStatsManager = new ConsumerStatsManager(this.scheduledExecutorService);
 
@@ -328,17 +335,17 @@ public class MQClientInstance {
                 case CREATE_JUST:
                     this.serviceState = ServiceState.START_FAILED;  //初始状态标记为启动失败
                     // If not specified,looking address from name server
-                    if (null == this.clientConfig.getNamesrvAddr()) {   // 如果未指定 Name Server 地址，则从 NameServer 获取地址
+                    if (null == this.clientConfig.getNamesrvAddr()) {   // 如果未指定 Name Server 地址，则从 NameServer 获取地址。一般到这里已经完成设置了
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
                     // Start request-response channel
-                    this.mQClientAPIImpl.start();   // 启动请求-响应通道
+                    this.mQClientAPIImpl.start();   // 启动请求-响应通道，就是启动 和broker进行通信的客户端
                     // Start various schedule tasks
                     this.startScheduledTask();  //启动各种定时任务
                     // Start pull service
                     this.pullMessageService.start();    //启动消息拉取服务
                     // Start rebalance service
-                    this.rebalanceService.start();  //启动在平衡机制
+                    this.rebalanceService.start();  //启动在平衡机制，对MQConsumer生效
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);  // 启动消息推送服务
                     log.info("the client factory [{}] start OK", this.clientId);
@@ -353,6 +360,7 @@ public class MQClientInstance {
     }
 
     private void startScheduledTask() {
+        //如果没有指定namesrv地址，则定时获取namesrv地址
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(() -> {
                 try {
@@ -362,7 +370,7 @@ public class MQClientInstance {
                 }
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
-
+        //定期从namesrv更新路由信息
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.updateTopicRouteInfoFromNameServer();
@@ -370,7 +378,7 @@ public class MQClientInstance {
                 log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
             }
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
-
+        // 定时清楚所有的离线broker，向所有的broker发送心跳
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.cleanOfflineBroker();
@@ -379,7 +387,7 @@ public class MQClientInstance {
                 log.error("ScheduledTask sendHeartbeatToAllBroker exception", e);
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
-
+        //定期持久化所有Consumer的offset(即消费进度)
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.persistAllConsumerOffset();
@@ -579,6 +587,7 @@ public class MQClientInstance {
         }
     }
 
+    //根据当时场景 调整线程池参数
     public void adjustThreadPool() {
         for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
@@ -644,13 +653,24 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 【总述】
+     * */
     private boolean sendHeartbeatToBroker(long id, String brokerName, String addr, HeartbeatData heartbeatData) {
         try {
             int version = this.mQClientAPIImpl.sendHeartbeat(addr, heartbeatData, clientConfig.getMqClientApiTimeout());
-            if (!this.brokerVersionTable.containsKey(brokerName)) {
+            if (!this.brokerVersionTable.containsKey(brokerName)) { //如果还没有这个broker集群的信息，则创建key放进去
                 this.brokerVersionTable.put(brokerName, new HashMap<>(4));
             }
+            /*
+            经过第一步就知道了信条是成功响应了。。。。这里会进行版本的更新
+                   将broker地址——>版本号这样的映射存到brokerVersionTable的value中。
+                   具体做法：先是拿到brokerVersionTable的value，value是一个map，因此将映
+                        射broker地址————>version放进去，如果本来value就有这样的映射，根据
+                        jdk源码可知就会更新原来的值
+            * **/
             this.brokerVersionTable.get(brokerName).put(addr, version);
+            //AtomicLong类型的sendHeartbeatTimesTotal，每心跳成功一次，就加一
             long times = this.sendHeartbeatTimesTotal.getAndIncrement();
             if (times % 20 == 0) {
                 log.info("send heart beat to broker[{} {} {}] success", brokerName, id, addr);
@@ -672,20 +692,24 @@ public class MQClientInstance {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData(false);
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
         final boolean consumerEmpty = heartbeatData.getConsumerDataSet().isEmpty();
-        if (producerEmpty && consumerEmpty) {
+        if (producerEmpty && consumerEmpty) {  //在发送心跳之前会先检查是否有生产者和消费者，如果没有则直接返回
             log.warn("sending heartbeat, but no consumer and no producer. [{}]", this.clientId);
             return false;
         }
-
+        /**
+         * 下面才是方法主体：
+         *     检查broker实例集合是否为空，为空则直接返回;
+         * */
         if (this.brokerAddrTable.isEmpty()) {
             return false;
         }
         for (Entry<String, HashMap<Long, String>> brokerClusterInfo : this.brokerAddrTable.entrySet()) {
-            String brokerName = brokerClusterInfo.getKey();
+            String brokerName = brokerClusterInfo.getKey(); //拿到的key是broker集群的名称
             HashMap<Long, String> oneTable = brokerClusterInfo.getValue();
             if (oneTable == null) {
                 continue;
             }
+            //brokerAddrTable的value是一个map，存放的是一个broker集群下所有的broker实例
             for (Entry<Long, String> singleBrokerInstance : oneTable.entrySet()) {
                 Long id = singleBrokerInstance.getKey();
                 String addr = singleBrokerInstance.getValue();
@@ -695,7 +719,7 @@ public class MQClientInstance {
                 if (consumerEmpty && MixAll.MASTER_ID != id) {
                     continue;
                 }
-
+                //向某一个具体的broker实例发送心跳
                 sendHeartbeatToBroker(id, brokerName, addr, heartbeatData);
             }
         }
@@ -1036,6 +1060,7 @@ public class MQClientInstance {
         }
     }
 
+    //将produceGroup(生产者组名)和producer实现类DefaultMQProducerImpl注册到producerTable中
     public synchronized boolean registerProducer(final String group, final DefaultMQProducerImpl producer) {
         if (null == group || null == producer) {
             return false;

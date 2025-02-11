@@ -23,6 +23,9 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * 一个线程工厂，RocketMQ中涉及到”创建线程池“任务的时候，创建参数的线程工厂类 都是继承于这个基类类似实现的类。
+ * */
 public class ThreadFactoryImpl implements ThreadFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
