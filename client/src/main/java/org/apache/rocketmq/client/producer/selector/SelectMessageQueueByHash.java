@@ -23,7 +23,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 public class SelectMessageQueueByHash implements MessageQueueSelector {
 
-    @Override
+    @Override   //是根据args参数来决定hash值的，而不是具体的消息对象msg.
     public MessageQueue select(List<MessageQueue> mqs, Message msg, Object arg) {
         int value = arg.hashCode() % mqs.size();
         if (value < 0) {

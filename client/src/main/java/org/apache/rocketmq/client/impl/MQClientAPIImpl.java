@@ -539,6 +539,11 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         return sendMessage(addr, brokerName, msg, requestHeader, timeoutMillis, communicationMode, null, null, null, 0, context, producer);
     }
 
+    /**
+     * 发送消息的最终入口。。不论哪一种方式，最后的最后调用的是netty底层的invokeOneWay 或者 invokeSync 或者 invokeAsync 方
+     *      法，区别就是后面的两个不是在这个方法被调用，还包装了一层，主要是做了"同步发送消息时出现异常的处理" 以及 "异步发送消息
+     *      时回调的设置"
+     * */
     public SendResult sendMessage(
         final String addr,
         final String brokerName,
@@ -576,7 +581,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
 
         switch (communicationMode) {
             case ONEWAY:
-                this.remotingClient.invokeOneway(addr, request, timeoutMillis);
+                this.remotingClient.invokeOneway(addr, request, timeoutMillis); //单向发送的时候直接调用NettyClient的invokeOneway方法
                 return null;
             case ASYNC:
                 final AtomicInteger times = new AtomicInteger();
@@ -585,14 +590,14 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
                     throw new RemotingTooMuchRequestException("sendMessage call timeout");
                 }
                 this.sendMessageAsync(addr, brokerName, msg, timeoutMillis - costTimeAsync, request, sendCallback, topicPublishInfo, instance,
-                    retryTimesWhenSendFailed, times, context, producer);
+                    retryTimesWhenSendFailed, times, context, producer);   //异步的方式这里还包装了一层
                 return null;
             case SYNC:
                 long costTimeSync = System.currentTimeMillis() - beginStartTime;
                 if (timeoutMillis < costTimeSync) {
                     throw new RemotingTooMuchRequestException("sendMessage call timeout");
                 }
-                return this.sendMessageSync(addr, brokerName, msg, timeoutMillis - costTimeSync, request);
+                return this.sendMessageSync(addr, brokerName, msg, timeoutMillis - costTimeSync, request);  //同步的方式这里也包装了一层
             default:
                 assert false;
                 break;

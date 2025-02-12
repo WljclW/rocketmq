@@ -20,6 +20,13 @@ import java.util.List;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 消息选择器，rocketmq内部提供了三种实现：
+ *      1.SelectMessageQueueByHash：如果要保证相同key消息的严格顺序，需要使用这种选择器。。因为这种选择器下
+ *            相同的args会发送到相同的消息队列。
+ *      2.SelectMessageQueueByMachineRoom：
+ *      3.SelectMessageQueueByRandom：默认选择器，随机选择一个消息队列。
+ * */
 public interface MessageQueueSelector {
     MessageQueue select(final List<MessageQueue> mqs, final Message msg, final Object arg);
 }

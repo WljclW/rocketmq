@@ -50,7 +50,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
- * 【总述】这个类是发送消息的入口类，它封装了发送消息的各种方法，
+ * 【总述】这个类是应用发送消息的入口类，它封装了发送消息的各种方法，
  * This class is the entry point for applications intending to send messages. </p>
  * <p>
  * It's fine to tune fields which exposes getter/setter methods, but keep in mind, all of them should work well out of
@@ -66,7 +66,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Wrapping internal implementations for virtually all methods presented in this class.
-     * 其实是一个内部实现类，封装了各种发送消息的方法，
+     * 其实是一个内部实现类，封装了各种发送消息的方法，保证了能通过这个类拿到实现类的各个属性
      */
     protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
     private final Logger logger = LoggerFactory.getLogger(DefaultMQProducer.class);
@@ -87,7 +87,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * <p>
      * See <a href="https://rocketmq.apache.org/docs/introduction/02concepts">core concepts</a> for more discussion.
      */
-    private String producerGroup;
+    private String producerGroup; //消费者组，注解指出：对于事务消息很重要
 
     /**
      * Topics that need to be initialized for transaction producer
@@ -154,6 +154,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Indicate whether to block message when asynchronous sending traffic is too heavy.
+     * 是否启用back-press机制,指的是发送消息超过broker的处理速度后，减缓消息的发送速率
      */
     private boolean enableBackpressureForAsyncMode = false;
 

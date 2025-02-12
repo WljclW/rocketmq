@@ -89,8 +89,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import static org.apache.rocketmq.remoting.rpc.ClientMetadata.topicRouteData2EndpointsForStaticTopic;
 
 /*！！！！！！！！！！！重要
- * @description: 无论是生产者还是消费者，在底层都要和Broker打交道，进行消息收发。在源码层面，底层的功能被抽
- 象成同一个类，负责和Broker打交道,就是这个类
+ *1. @description: 无论是生产者还是消费者，在底层都要和Broker打交道，进行消息收发。在源码层面，底层的功能被抽
+        象成同一个类，负责和Broker打交道,就是这个类
+  2. 通常上，可以将这个类理解为客户端的顶层类，可以认为每一个客户端都会对应一个MQClientInstance对象。
+  3. 对于创建的MQClientInstance，会在MQClientManager中的factoryTable中进行注册。
  */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;

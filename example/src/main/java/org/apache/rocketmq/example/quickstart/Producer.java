@@ -61,6 +61,13 @@ public class Producer {
          * Launch the instance.
          */
         producer.setNamesrvAddr(DEFAULT_NAMESRVADDR);   //设置namesrv的地址
+        /*
+        生产者的 启动过程 中，涉及到以下几个类，这几个类的作用如下
+            DefaultMQProducerImpl：Producer 的内部实现类，大部分 Producer 的业务逻辑，也就是发消息的逻辑，都在这个类中。
+            MQClientInstance：这个类中封装了客户端一些通用的业务逻辑，无论是 Producer 还是 Consumer，最终需要与服务端交互时，都需要调用这个类中的方法；
+            MQClientAPIImpl：这个类中封装了客户端服务端的 RPC，对调用者隐藏了真正网络通信部分的具体实现；
+            NettyRemotingClient：RocketMQ 各进程之间网络通信的底层实现类。
+         * */
         producer.start();
 
         for (int i = 0; i < MESSAGE_COUNT; i++) {

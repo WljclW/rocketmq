@@ -124,8 +124,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final Compressor compressor = CompressorFactory.getCompressor(compressType);
 
     // backpressure related
-    private Semaphore semaphoreAsyncSendNum;
-    private Semaphore semaphoreAsyncSendSize;
+    private Semaphore semaphoreAsyncSendNum; //控制同时进行的异步发送消息数量
+    private Semaphore semaphoreAsyncSendSize;  //控制当前正在发送的消息的总大小
 
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer) {
         this(defaultMQProducer, null);
@@ -238,7 +238,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /**
-     * 主要做了几件事:
+     * 1.主要做了几件事:
      * （1）检查配置，主要是检查 producerGroup 属性
      * （2）初始化当前生产者的 instanceName（按照进程PID + 纳秒值组成）
      * （3）获取或者创建 MQClientInstance，它封装了 RocketMQ 网络处理 API，是消息生产者（ Producer）、消息消费
@@ -246,11 +246,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * （4）registerProducer 注册生产者，这步很简单就是将将当前生产者加入到 MQClientlnstance 管理
      * （5）启动 MQClientInstance
      * （6）日志、检测以及发送心跳
+     * 2.使用到了状态模式的设计思想。。去背在于没有将状态模式封装到专门的类中
      * */
     public void start(final boolean startFactory) throws MQClientException {
         //根据当前服务端状态的不同执行不同的逻辑。。初始值见上面的默认初始化————private ServiceState serviceState = ServiceState.CREATE_JUST;
         switch (this.serviceState) {
-            case CREATE_JUST:
+            case CREATE_JUST:   //是一个中间状态
                 this.serviceState = ServiceState.START_FAILED;
 
                 this.checkConfig(); //检查配置文件。。主要是检查 producerGroup(生产者组名) 的命名是否合法
@@ -627,7 +628,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 long costTime = System.currentTimeMillis() - beginStartTime;
                 isSemaphoreAsyncNumAquired = timeout - costTime > 0
                     && semaphoreAsyncSendNum.tryAcquire(timeout - costTime, TimeUnit.MILLISECONDS);
-                if (!isSemaphoreAsyncNumAquired) {
+                if (!isSemaphoreAsyncNumAquired) {  //尝试获取并发许可证超时时
                     sendCallback.onException(
                         new RemotingTooMuchRequestException("send message tryAcquire semaphoreAsyncNum timeout"));
                     return;
@@ -635,7 +636,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 costTime = System.currentTimeMillis() - beginStartTime;
                 isSemaphoreAsyncSizeAquired = timeout - costTime > 0
                     && semaphoreAsyncSendSize.tryAcquire(msgLen, timeout - costTime, TimeUnit.MILLISECONDS);
-                if (!isSemaphoreAsyncSizeAquired) {
+                if (!isSemaphoreAsyncSizeAquired) { //尝试获取发送消息缓存时超时
                     sendCallback.onException(
                         new RemotingTooMuchRequestException("send message tryAcquire semaphoreAsyncSize timeout"));
                     return;
@@ -883,6 +884,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /*
+    【总述】方法的逻辑：构建消息头SendMessageRequestHeader、消息上下文SendMessageContext，调
+               用MQClientAPIImpl#sendMessage()，将消息发送给队列所在的 Broker。
+          后续的逻辑就是
      * @description:
      * @param msg: 待发送的消息
      * @param mq: 消息将发送到该消息队列上
@@ -894,7 +898,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * @author: Zhou
      * @date: 2024/11/16 18:54
      */
-    private SendResult sendKernelImpl(final Message msg,    //消息发送 API 核心人口 : DefaultMQProducerimpl#sendKernelImpl
+    private SendResult sendKernelImpl(final Message msg,    //消息发送 API 核心入口 : DefaultMQProducerimpl#sendKernelImpl
         final MessageQueue mq,
         final CommunicationMode communicationMode,
         final SendCallback sendCallback,
@@ -902,7 +906,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         long beginStartTime = System.currentTimeMillis();
         /**
-         * 根据 MessageQueue获取 Broker的网络地址。 如果 MQC!ientlnstance的 brokerAddrTable未缓存该 Broker 的信息，则从
+         * 根据 MessageQueue获取 Broker的网络地址。 如果 MQClientlnstance的 brokerAddrTable未缓存该 Broker 的信息，则从
          *      NameServer 主动更新一下 topic 的路由信息。 如果路由更新后还是找不到 Broker信息，则抛出 MQClientException，提
          *      示 Broker不存在 。
          * */
@@ -1338,7 +1342,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginStartTime = System.currentTimeMillis();
         this.makeSureStateOK();
         Validators.checkMessage(msg, this.defaultMQProducer);
-
+        //选择将消息发送到哪一个消息队列
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             MessageQueue mq = null;
@@ -1349,7 +1353,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 String userTopic = NamespaceUtil.withoutNamespace(userMessage.getTopic(), mQClientFactory.getClientConfig().getNamespace());
                 userMessage.setTopic(userTopic);
 
-                mq = mQClientFactory.getClientConfig().queueWithNamespace(selector.select(messageQueueList, userMessage, arg));
+                mq = mQClientFactory.getClientConfig().queueWithNamespace(selector.select(messageQueueList, userMessage, arg));//根据消息选择器选择一个消息队列
             } catch (Throwable e) {
                 throw new MQClientException("select message queue threw exception.", e);
             }
