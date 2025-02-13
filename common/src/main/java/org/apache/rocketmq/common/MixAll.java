@@ -163,6 +163,10 @@ public class MixAll {
         return DLQ_GROUP_TOPIC_PREFIX + consumerGroup;
     }
 
+    /**
+     * 可以通过参数"com.rocketmq.sendMessageWithVIPChannel"设置是不是启用vip通道，启用的话会执行下面的方法：
+     *      方法的作用就是将brokerAddr的端口减2，主机ip不变，拼接为新的brokerAdder然后返回
+     * */
     public static String brokerVIPChannel(final boolean isChange, final String brokerAddr) {
         if (isChange) {
             int split = brokerAddr.lastIndexOf(":");

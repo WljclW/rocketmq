@@ -540,7 +540,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
     }
 
     /**
-     * 发送消息的最终入口。。不论哪一种方式，最后的最后调用的是netty底层的invokeOneWay 或者 invokeSync 或者 invokeAsync 方
+     * 发送消息的最终出口。。不论哪一种方式，最后的最后调用的是netty底层的invokeOneWay 或者 invokeSync 或者 invokeAsync 方
      *      法，区别就是后面的两个不是在这个方法被调用，还包装了一层，主要是做了"同步发送消息时出现异常的处理" 以及 "异步发送消息
      *      时回调的设置"
      * */

@@ -886,7 +886,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     /*
     【总述】方法的逻辑：构建消息头SendMessageRequestHeader、消息上下文SendMessageContext，调
                用MQClientAPIImpl#sendMessage()，将消息发送给队列所在的 Broker。
-          后续的逻辑就是
+          后续的逻辑就是进行序列化然后发送
      * @description:
      * @param msg: 待发送的消息
      * @param mq: 消息将发送到该消息队列上
@@ -898,7 +898,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * @author: Zhou
      * @date: 2024/11/16 18:54
      */
-    private SendResult sendKernelImpl(final Message msg,    //消息发送 API 核心入口 : DefaultMQProducerimpl#sendKernelImpl
+    private SendResult sendKernelImpl(final Message msg,    /**消息发送 API 核心入口 : DefaultMQProducerimpl#sendKernelImpl*/
         final MessageQueue mq,
         final CommunicationMode communicationMode,
         final SendCallback sendCallback,
@@ -907,8 +907,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginStartTime = System.currentTimeMillis();
         /**
          * 根据 MessageQueue获取 Broker的网络地址。 如果 MQClientlnstance的 brokerAddrTable未缓存该 Broker 的信息，则从
-         *      NameServer 主动更新一下 topic 的路由信息。 如果路由更新后还是找不到 Broker信息，则抛出 MQClientException，提
+         *      NameServer 主动更新一下 topic 的路由信息。
+         *      （1）如果路由更新后还是找不到 Broker信息，则抛出 MQClientException，提
          *      示 Broker不存在 。
+         *      （2）经过上面的过程如果找到了Broker，就会在if块中进行消息的组装和发送。
          * */
         String brokerName = this.mQClientFactory.getBrokerNameFromMessageQueue(mq);
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(brokerName);
@@ -961,7 +963,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 }
 
                 /**
-                 * 如果注册了消息发送钩子函数， 则执行消息发送之前的增强逻辑。 通过 DefaultMQProducerlmpl#registerSendMessageHook 注
+                 * 如果注册了消息发送钩子函数， 则执行消息发送之前的增强逻辑。
+                 * 如何注册发送消息钩子函数：通过 DefaultMQProducerlmpl#registerSendMessageHook 注
                  *  册钩子处理类，并且可以注册多个
                  * */
                 if (this.hasSendMessageHook()) {
@@ -982,7 +985,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     if (msg.getProperty("__STARTDELIVERTIME") != null || msg.getProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL) != null) {
                         context.setMsgType(MessageType.Delay_Msg);
                     }
-                    this.executeSendMessageHookBefore(context);
+                    this.executeSendMessageHookBefore(context); //执行发送消息时的前置钩子函数(即前置逻辑)
                 }
 
                 /**
@@ -1087,7 +1090,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                  * */
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
-                    this.executeSendMessageHookAfter(context);
+                    this.executeSendMessageHookAfter(context);  //消息发送后执行钩子函数的sendMessageAfter方法(后置逻辑)
                 }
 
                 return sendResult;
