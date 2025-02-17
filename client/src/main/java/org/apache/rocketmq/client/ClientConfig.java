@@ -43,7 +43,7 @@ public class ClientConfig {
     public static final String HEART_BEAT_V2 = "com.rocketmq.heartbeat.v2";
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
     private String clientIP = NetworkUtil.getLocalAddress();
-    private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
+    private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");  //构建clientid的时候使用
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     @Deprecated
     protected String namespace;
@@ -65,7 +65,7 @@ public class ClientConfig {
     private int persistConsumerOffsetInterval = 1000 * 5;
     private long pullTimeDelayMillsWhenException = 1000;
     private boolean unitMode = false;
-    private String unitName;
+    private String unitName;  //自定义字段(构建clientid的时候会用到)，作用：在构建客户端 ID 时进一步区分不同的逻辑单元或业务单元。有助于在多租户或分布式环境中更精确地管理和识别客户端。
     private boolean decodeReadBody = Boolean.parseBoolean(System.getProperty(DECODE_READ_BODY, "true"));
     private boolean decodeDecompressBody = Boolean.parseBoolean(System.getProperty(DECODE_DECOMPRESS_BODY, "true"));
     private boolean vipChannelEnabled = Boolean.parseBoolean(System.getProperty(SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY, "false"));

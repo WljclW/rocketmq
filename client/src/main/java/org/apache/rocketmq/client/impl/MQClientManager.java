@@ -60,9 +60,12 @@ public class MQClientManager {
         return getOrCreateMQClientInstance(clientConfig, null);
     }
     /**
-     * 整个 JVM 实例中只存在一个MQClientManager实例，维护一个 MQClientlnstance 缓存表
+     * 1. 整个 JVM 实例中只存在一个MQClientManager实例，维护一个 MQClientlnstance 缓存表
      *      ConcurrentMap<String， MQClientinstance＞ factoryTable = new ConcurrentHashMap<String， MQClientlnstance＞（），
      *      也就是同一个 clientId 只会创建一个MQClientinstance。
+     * 2. clientId为客户端IP+instance+unitname（可选），如果在同一台物理服务器部署两个应用程序，应用程序的clientId岂不是相同，这样是不是会造成混乱？
+     *      为了避免出现这个问题，如果instance为默认值DEFAULT，RocketMQ会自动将instance设置为进程ID，这样就避免了不同进程相
+            互影响，但同一个JVM中相同clientId的消费者和生产者在启动时获取的MQClientInstane实例都是同一个
      * */
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();   // 根据客户端配置生成唯一的客户端ID

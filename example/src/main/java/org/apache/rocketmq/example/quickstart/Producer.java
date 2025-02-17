@@ -89,14 +89,14 @@ public class Producer {
                  *      的时候通常要设置回调。
                  */
                 SendResult sendResult = producer.send(msg, 20 * 1000);
-                /*1. 单向发送的例子
+                /*1. 单向发送的例子。只管发送，没有返回值 并且 不设置回调
                  * There are different ways to send message, if you don't care about the send result,you can use this way
                  * {@code
                  * producer.sendOneway(msg);
                  * }
                  */
 
-                /*2. 同步发送的例子
+                /*2. 同步发送的例子。同步发送消息时方法是 有返回值的
                  * if you want to get the send result in a synchronize way, you can use this send method
                  * {@code
                  * SendResult sendResult = producer.send(msg);
@@ -104,7 +104,7 @@ public class Producer {
                  * }
                  */
 
-                /*3. 异步发送的例子，设置回调逻辑
+                /*3. 异步发送的例子，异步发送消息时需要 设置回调逻辑
                  * if you want to get the send result in a asynchronize way, you can use this send method
                  * {@code
                  *

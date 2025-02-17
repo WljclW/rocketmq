@@ -29,7 +29,7 @@ public class TopicPublishInfo {
     private boolean orderTopic = false;     //是否是顺序消息
     private boolean haveTopicRouterInfo = false;
     private List<MessageQueue> messageQueueList = new ArrayList<>(); //该主题对应的所有消息队列
-    private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();  //每选择一次消息队列， 该值会自增 l，如果 Integer.MAX_VALUE, 则重置为0，用于选择消息队列
+    private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();  //每选择一次消息队列， 该值会自增1，如果 Integer.MAX_VALUE, 则重置为0，用于选择消息队列
     private TopicRouteData topicRouteData;  //路由元数据
 
     public interface QueueFilter {
@@ -137,6 +137,7 @@ public class TopicPublishInfo {
                 int index = this.sendWhichQueue.incrementAndGet();
                 int pos = index % this.messageQueueList.size();
                 MessageQueue mq = this.messageQueueList.get(pos);
+                //下面的逻辑会避免选择上一次的broker。原因：这个else语句块表示已经发生失败了，这次属于"消息发送重试"的情况
                 if (!mq.getBrokerName().equals(lastBrokerName)) {
                     return mq;
                 }
@@ -145,6 +146,9 @@ public class TopicPublishInfo {
         }
     }
 
+    /**
+     * 消息第一次发送时(也就是说不是发送失败后的重试情况)默认使用下面的方法选择一个队列
+     * */
     public MessageQueue selectOneMessageQueue() {
         int index = this.sendWhichQueue.incrementAndGet();
         int pos = index % this.messageQueueList.size();

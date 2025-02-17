@@ -23,7 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Message 的基础属性主要包括消息所属主题Topic， 消息Flag(RocketMQ 不做处理）、 扩展属性、消息体。
+ * Message 的基础属性主要包括消息所属主题Topic， 消息Flag(RocketMQ 不做处理，可自定义处理）、 扩展属性、消息体、事务id。
  *
  * Message 扩展属性主要包含下面几个：
  * （1）Tag ：消息 TAG，用于消息过滤。

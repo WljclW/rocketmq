@@ -342,6 +342,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return new HashSet<>(this.topicPublishInfoTable.keySet());
     }
 
+    /**
+     * 【总述】根据topic判断当前生产者
+     * */
     @Override
     public boolean isPublishTopicNeedUpdate(String topic) {
         TopicPublishInfo prev = this.topicPublishInfoTable.get(topic);
@@ -870,7 +873,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);  //获取主题的消息
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {   // 如果主题发布信息为空或状态不正常，则尝试更新
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
-            this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
+            this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic); // 更新topic的路由信息
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
 

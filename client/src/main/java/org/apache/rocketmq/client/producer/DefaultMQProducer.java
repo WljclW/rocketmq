@@ -86,6 +86,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * For non-transactional messages, it does not matter as long as it's unique per process. </p>
      * <p>
      * See <a href="https://rocketmq.apache.org/docs/introduction/02concepts">core concepts</a> for more discussion.
+     * 消息服务器在回查事务状态时，会随机选择该组中任何一个生产者发起的事务回查请求。
      */
     private String producerGroup; //消费者组，注解指出：对于事务消息很重要
 
@@ -129,7 +130,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private int retryTimesWhenSendAsyncFailed = 2;
 
     /**
-     * Indicate whether to retry another broker on sending failure internally.
+     * Indicate whether to retry another broker on sending failure internally...
+     * 消息发送失败时，选择两一个broker进行发送，是不是不等待broker的响应存储ok，直接返回
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 

@@ -18,11 +18,15 @@ package org.apache.rocketmq.common.message;
 
 import java.io.Serializable;
 
+/**
+ * RocketMQ 中用于表示消息队列（Queue）的一个核心类。它封装了消息队列的三个关键属性：主题（Topic）、Broker 名称（Broker Name）
+ *      和队列 ID（Queue ID）
+ * */
 public class MessageQueue implements Comparable<MessageQueue>, Serializable {
     private static final long serialVersionUID = 6191200464116433425L;
-    private String topic;
-    private String brokerName;
-    private int queueId;
+    private String topic;  //该消息队列所属的主题名称
+    private String brokerName; //该消息队列所属的broker名称
+    private int queueId;  //该消息队列在所属broker上的唯一标识。(一个broker可以有多个消息队列，根据此属性进行区分)
 
     public MessageQueue() {
 

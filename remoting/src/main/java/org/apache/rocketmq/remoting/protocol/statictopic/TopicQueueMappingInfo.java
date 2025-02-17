@@ -25,12 +25,13 @@ public class TopicQueueMappingInfo extends RemotingSerializable {
     public static final int LEVEL_0 = 0;
 
     String topic; // redundant field
-    String scope = MixAll.METADATA_SCOPE_GLOBAL;
-    int totalQueues;
-    String bname;  //identify the hosted broker name
-    long epoch; //important to fence the old dirty data
-    boolean dirty; //indicate if the data is dirty
+    String scope = MixAll.METADATA_SCOPE_GLOBAL;// global or local。用于标识该topic的映射关系是否是全局或者本地，区分不同的topic空间
+    int totalQueues;  //总队列数。用于指定topic的分区数量
+    String bname;  //identify the hosted broker name。所属的broker名称，用于识别托管该topic的broker
+    long epoch; //important to fence the old dirty data。用于防止旧的脏数据，每次更新时递增
+    boolean dirty; //indicate if the data is dirty。用于标识该topic是否需要被删除或者更新
     //register to broker to construct the route
+    //逻辑ID和物理ID的映射关系，用于将topic的逻辑队列映射到物理队列
     protected ConcurrentMap<Integer/*logicId*/, Integer/*physicalId*/> currIdMap = new ConcurrentHashMap<>();
 
     public TopicQueueMappingInfo() {

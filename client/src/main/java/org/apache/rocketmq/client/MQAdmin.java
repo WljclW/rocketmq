@@ -27,7 +27,7 @@ import java.util.Map;
 /**
  * Base interface for MQ management
  */
-public interface MQAdmin {
+public interface MQAdmin {  //【admin:管理】
     /**
      * Creates a topic
      *  @param key accessKey
