@@ -712,20 +712,26 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     }
 
+    /**
+     * 消息发送的一个默认实现【rocketmq技术内幕的教材例子】————同步发送方式。
+     *      这个方法提供了一个标准的流程
+     * */
     private SendResult sendDefaultImpl(
         Message msg,
         final CommunicationMode communicationMode,
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //step1：对于消息的检查、生产者状态的检查、开始时间的记录
         this.makeSureStateOK(); //确保生产者处于运行态
         Validators.checkMessage(msg, this.defaultMQProducer); //检查消息符合规范
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
-        //查找topic的路由信息。这样才知道需要发给哪一个broker
+        //step2：查找topic的路由信息。这样才知道需要发给哪一个broker
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
+        //step3：如果路由信息存在，并且路由信息有效，则进行消息发送(设置重试次数、选择队列、记录brokerName、调用sendKernelImpl发消息、更新故障信息、异常处理)。
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             boolean callTimeout = false;
             MessageQueue mq = null;
@@ -733,17 +739,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             SendResult sendResult = null;
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             int times = 0;
-            String[] brokersSent = new String[timesTotal];
+            String[] brokersSent = new String[timesTotal]; //用于存放每一次发送消息选中消息队列的 所属的brokerName
             boolean resetIndex = false;
             for (; times < timesTotal; times++) {
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();
                 if (times > 0) {
-                    resetIndex = true;
+                    resetIndex = true; //在消息重试时，重置一下索引。。直接的体现：TopicPublishInfo的sendWhichQueue字段重新赋值为一个随机正整数
                 }
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName, resetIndex);
                 if (mqSelected != null) {
                     mq = mqSelected;
-                    brokersSent[times] = mq.getBrokerName();
+                    brokersSent[times] = mq.getBrokerName(); //记录一下这一次发送消息队列所对应的brokerName
                     try {
                         beginTimestampPrev = System.currentTimeMillis();
                         if (times > 0) {
@@ -831,6 +837,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             if (sendResult != null) {
                 return sendResult;
             }
+            //下面是对异常的记录、报错信息的打印等
             String info = String.format("Send [%d] times, still failed, cost [%d]ms, Topic: %s, BrokersSent: %s",
                 times,
                 System.currentTimeMillis() - beginTimestampFirst,
@@ -879,7 +886,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
         if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {    // 如果主题发布信息包含路由信息或状态正常，则返回该信息
             return topicPublishInfo;
-        } else {    // 如果信息仍然不完整或状态不正常，再次尝试更新，并标记为持久化更新
+        } else {    // 如果信息仍然不完整或状态不正常，再次尝试更新，并标记为持久化更新。【这次调用一个明显的不同点：调用方法时isDefault参数为true】
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);   // 再次尝试获取并返回主题的发布信息
             return topicPublishInfo;

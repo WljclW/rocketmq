@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.common.help;
 
+//常见问题解答（Frequently Asked Questions, FAQ）的相关 URL 链接
 public class FAQUrl {
 
     public static final String APPLY_TOPIC_URL = "https://rocketmq.apache.org/docs/bestPractice/06FAQ";

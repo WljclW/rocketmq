@@ -96,7 +96,13 @@ public class TopicPublishInfo {
         if (messageQueueList == null || messageQueueList.isEmpty()) {
             return null;
         }
-
+        /**
+         * 根据过滤器筛选队列的逻辑如下：
+         * 根据ThreadLocalIndex拿队列，拿到队列循环遍历过滤器。。。有两种结果
+         *       ————如果能选到队列(即filterResult==true),则返回。
+         *       ————如果选不到队列，则返回null
+         * */
+        //如果存在过滤器，使用下面的if块进行筛选
         if (filter != null && filter.length != 0) {
             for (int i = 0; i < messageQueueList.size(); i++) {
                 int index = Math.abs(sendQueue.incrementAndGet() % messageQueueList.size());
@@ -113,7 +119,7 @@ public class TopicPublishInfo {
 
             return null;
         }
-
+        //如果filter是null，就直接取模返回对应的消息队列
         int index = Math.abs(sendQueue.incrementAndGet() % messageQueueList.size());
         return messageQueueList.get(index);
     }
@@ -147,7 +153,8 @@ public class TopicPublishInfo {
     }
 
     /**
-     * 消息第一次发送时(也就是说不是发送失败后的重试情况)默认使用下面的方法选择一个队列
+     * 根据 MQFaultStrategy#selectOneMessageQueue(TopicPublishInfo, java.lang.String, boolean) 的逻辑可以知道：
+     *      下面的方法是一个兜底的逻辑
      * */
     public MessageQueue selectOneMessageQueue() {
         int index = this.sendWhichQueue.incrementAndGet();

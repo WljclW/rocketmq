@@ -418,16 +418,16 @@ public class MQClientInstance {
         return clientId;
     }
 
-    //功能是更新消息生产者和维护路由缓存
+    //功能是更新和维护路由缓存(包括消息生产者 和 消息消费者所有涉及到的topic)
     public void updateTopicRouteInfoFromNameServer() {
-        Set<String> topicList = new HashSet<>();
+        Set<String> topicList = new HashSet<>();    //声明变量，用于存放所有的需要更新路由信息的topic名称
 
-        // Consumer
+        // Consumer。将消费者所有订阅的topic的信息添加到topicList
         {
             for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
                 MQConsumerInner impl = entry.getValue();
                 if (impl != null) {
-                    Set<SubscriptionData> subList = impl.subscriptions();
+                    Set<SubscriptionData> subList = impl.subscriptions();  //获取消费者的所有订阅的topic
                     if (subList != null) {
                         for (SubscriptionData subData : subList) {
                             topicList.add(subData.getTopic());
@@ -437,12 +437,12 @@ public class MQClientInstance {
             }
         }
 
-        // Producer
+        // Producer。将生产者所有发布的topic的信息添加到topicList
         {
             for (Entry<String, MQProducerInner> entry : this.producerTable.entrySet()) {
                 MQProducerInner impl = entry.getValue();
                 if (impl != null) {
-                    Set<String> lst = impl.getPublishTopicList();
+                    Set<String> lst = impl.getPublishTopicList();  //获取生产者的所有发布的topic
                     topicList.addAll(lst);
                 }
             }
@@ -612,7 +612,7 @@ public class MQClientInstance {
         }
     }
 
-    public boolean updateTopicRouteInfoFromNameServer(final String topic) {
+    public boolean updateTopicRouteInfoFromNameServer(final String topic) { //重载方法：根据topic更新topic路由信息
         return updateTopicRouteInfoFromNameServer(topic, false, null);
     }
 
@@ -821,7 +821,7 @@ public class MQClientInstance {
     }
 
     /**
-     * 更新生产者和消费者的路由缓存信息
+     * 更新生产者和消费者的路由缓存信息。。。。。现阶段更新路由信息时，最终调用的都是这个方法，其他的重载方法最终也会指向这个方法
      * */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {

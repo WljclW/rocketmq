@@ -140,7 +140,8 @@ public class MQFaultStrategy {
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName, final boolean resetIndex) {
         BrokerFilter brokerFilter = threadBrokerFilter.get();
         brokerFilter.setLastBrokerName(lastBrokerName);
-        if (this.sendLatencyFaultEnable) {  //判断是否开启认错开关，默认是false
+        //情况1：下面的if是故障检测的逻辑：如果开启的话，会根据所有过滤器(比如：可达不可达、brokerFilter)把根据mod拿到的消息队列筛一遍
+        if (this.sendLatencyFaultEnable) {  //判断是否开启”延迟故障检测“，默认是false
             if (resetIndex) {
                 tpInfo.resetIndex();
             }
@@ -156,7 +157,7 @@ public class MQFaultStrategy {
 
             return tpInfo.selectOneMessageQueue();
         }
-
+        //情况2：如果关闭了”延迟故障检测“，则"只"根据brokerFilter过滤器把根据mod拿到的消息队列筛一遍，并返回。
         MessageQueue mq = tpInfo.selectOneMessageQueue(brokerFilter);
         if (mq != null) {
             return mq;
@@ -164,6 +165,7 @@ public class MQFaultStrategy {
         return tpInfo.selectOneMessageQueue();
     }
 
+    //？？
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation,
                                 final boolean reachable) {
         if (this.sendLatencyFaultEnable) {

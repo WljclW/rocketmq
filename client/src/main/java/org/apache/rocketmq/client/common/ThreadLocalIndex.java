@@ -33,6 +33,7 @@ public class ThreadLocalIndex {
         return index & POSITIVE_MASK;
     }
 
+    //生成一个随机证书并且取其绝对值
     public void reset() {
         int index = Math.abs(random.nextInt(Integer.MAX_VALUE));
         this.threadLocalIndex.set(index);
