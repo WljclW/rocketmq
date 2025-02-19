@@ -946,21 +946,22 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     msg.setInstanceId(this.mQClientFactory.getClientConfig().getNamespace());
                     topicWithNamespace = true;
                 }
-
+                //如果消息需要压缩，会在if语句块中 设置相关的sysFlag标志。。
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
-                if (this.tryToCompressMessage(msg)) {
+                if (this.tryToCompressMessage(msg)) { //【！！】如果消息需要压缩，在这一步，消息体就变了，变成了压缩后的内容
                     sysFlag |= MessageSysFlag.COMPRESSED_FLAG;
                     sysFlag |= compressType.getCompressionFlag();
                     msgBodyCompressed = true;
                 }
-
+                //如果是事务消息，需要设置sysFlag
                 final String tranMsg = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
                 if (Boolean.parseBoolean(tranMsg)) {
                     sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;
                 }
-
+                //如果有ForbiddenHook，则执行这些钩子的checkForbidden方法
                 if (hasCheckForbiddenHook()) {
+                    //首先需要构造后续执行钩子需要用到的一些参数，所有参数会存储到checkForbiddenContext
                     CheckForbiddenContext checkForbiddenContext = new CheckForbiddenContext();
                     checkForbiddenContext.setNameSrvAddr(this.defaultMQProducer.getNamesrvAddr());
                     checkForbiddenContext.setGroup(this.defaultMQProducer.getProducerGroup());
@@ -969,15 +970,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     checkForbiddenContext.setMessage(msg);
                     checkForbiddenContext.setMq(mq);
                     checkForbiddenContext.setUnitMode(this.isUnitMode());
+                    //xxxxxContext构造完成后，执行checkForbidden方法
                     this.executeCheckForbiddenHook(checkForbiddenContext);
                 }
 
                 /**
-                 * 如果注册了消息发送钩子函数， 则执行消息发送之前的增强逻辑。
-                 * 如何注册发送消息钩子函数：通过 DefaultMQProducerlmpl#registerSendMessageHook 注
-                 *  册钩子处理类，并且可以注册多个
+                 * 1. 如果注册了消息发送钩子函数， 则执行消息发送之前的增强逻辑。
+                 * 2. 如何注册发送消息钩子函数：通过 DefaultMQProducerlmpl#registerSendMessageHook 注
+                 *          册钩子处理类，并且可以注册多个
                  * */
                 if (this.hasSendMessageHook()) {
+                    //首先是构造执行钩子函数时，需要使用的一些参数，放入SendMessageContext对象
                     context = new SendMessageContext();
                     context.setProducer(this);
                     context.setProducerGroup(this.defaultMQProducer.getProducerGroup());
@@ -995,7 +998,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     if (msg.getProperty("__STARTDELIVERTIME") != null || msg.getProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL) != null) {
                         context.setMsgType(MessageType.Delay_Msg);
                     }
-                    this.executeSendMessageHookBefore(context); //执行发送消息时的前置钩子函数(即前置逻辑)
+                    //设置完所需要的参数后，执行发送消息时的前置钩子函数(即前置逻辑)，并将上述构造得到的context传进去
+                    this.executeSendMessageHookBefore(context);
                 }
 
                 /**
@@ -1100,7 +1104,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                  * */
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
-                    this.executeSendMessageHookAfter(context);  //消息发送后执行钩子函数的sendMessageAfter方法(后置逻辑)
+                    //消息发送后执行钩子函数的sendMessageAfter方法(后置逻辑)
+                    this.executeSendMessageHookAfter(context);
                 }
 
                 return sendResult;
@@ -1111,11 +1116,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 }
                 throw e;
             } finally {
+                /**
+                 * 在finally块中，会对消息的body还原
+                 * */
                 msg.setBody(prevBody);
                 msg.setTopic(NamespaceUtil.withoutNamespace(msg.getTopic(), this.defaultMQProducer.getNamespace()));
             }
         }
-
+        //发送消息时会拿到"目标消息队列"对应的broker的地址！！如果不存在会向namesrv请求更新，如果请求后还是找不到，则抛出下面异常————broker 不存在
         throw new MQClientException("The broker[" + brokerName + "] not exist", null);
     }
 
@@ -1129,17 +1137,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     private boolean tryToCompressMessage(final Message msg) {
+        //step1：当前的"批量消息"不支持压缩
         if (msg instanceof MessageBatch) {
             //batch does not support compressing right now
             return false;
         }
+        //step2：消息体为空，则不压缩；消息不为空 且 消息的body大小大于配置的阈值，则按照压缩等级压缩
         byte[] body = msg.getBody();
         if (body != null) {
             if (body.length >= this.defaultMQProducer.getCompressMsgBodyOverHowmuch()) {
                 try {
                     byte[] data = compressor.compress(body, compressLevel);
                     if (data != null) {
-                        msg.setBody(data);
+                        msg.setBody(data);  //如果需要压缩的话，这一步会 把消息体替 换成 压缩后的消息体
                         return true;
                     }
                 } catch (IOException e) {

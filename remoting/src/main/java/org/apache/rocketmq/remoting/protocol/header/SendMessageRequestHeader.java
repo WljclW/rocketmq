@@ -28,6 +28,9 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
 import org.apache.rocketmq.remoting.rpc.TopicQueueRequestHeader;
 
+/**
+ * 定义发送消息的请求头部信息
+ * */
 public class SendMessageRequestHeader extends TopicQueueRequestHeader {
     @CFNotNull
     private String producerGroup;
