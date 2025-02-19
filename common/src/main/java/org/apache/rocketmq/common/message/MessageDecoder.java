@@ -600,6 +600,7 @@ public class MessageDecoder {
         return msgExts;
     }
 
+    //将Message的属性转换为字符串
     public static String messageProperties2String(Map<String, String> properties) {
         if (properties == null) {
             return "";
@@ -662,11 +663,13 @@ public class MessageDecoder {
         //only need flag, body, properties
         byte[] body = message.getBody();
         int bodyLen = body.length;
+        //拿到message属性得到的字符串，并转换为字符集为utf8的byte数组
         String properties = messageProperties2String(message.getProperties());
         byte[] propertiesBytes = properties.getBytes(CHARSET_UTF8);
         //note properties length must not more than Short.MAX
         short propertiesLength = (short) propertiesBytes.length;
         int sysFlag = message.getFlag();
+        //计算所需要的空间大小
         int storeSize = 4 // 1 TOTALSIZE
             + 4 // 2 MAGICCOD
             + 4 // 3 BODYCRC
@@ -674,6 +677,11 @@ public class MessageDecoder {
             + 4 + bodyLen // 4 BODY
             + 2 + propertiesLength;
         ByteBuffer byteBuffer = ByteBuffer.allocate(storeSize);
+        /**
+         * 下面依次存放消息的各个部分————
+         *      4：总长度、4：魔数、4：bodycrc、4：flag、4：body长度、body体、2：属性长度、属性
+         *      这个消息的格式与"rocketmq技术内部的图示一致---图3.12"
+         * */
         // 1 TOTALSIZE
         byteBuffer.putInt(storeSize);
 
@@ -729,6 +737,7 @@ public class MessageDecoder {
         return message;
     }
 
+    //对于一个list消息的编码。。实质就是依次编码每一条消息然后存到byte数组
     public static byte[] encodeMessages(List<Message> messages) {
         //TO DO refactor, accumulate in one buffer, avoid copies
         List<byte[]> encodedMessages = new ArrayList<>(messages.size());

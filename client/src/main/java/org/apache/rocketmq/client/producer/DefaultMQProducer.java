@@ -1150,6 +1150,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
         this.retryResponseCodes.add(responseCode);
     }
 
+    /**
+     * 【总述】消息发送端将消息的集合封装成MessageBatch(继承于Message)。
+     * */
     private MessageBatch batch(Collection<Message> msgs) throws MQClientException {
         MessageBatch msgBatch;
         try {
