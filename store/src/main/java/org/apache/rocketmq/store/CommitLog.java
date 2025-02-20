@@ -986,7 +986,9 @@ public class CommitLog implements Swappable {
             }
             msg.setEncodedBuff(putMessageThreadLocal.getEncoder().getEncoderBuffer());
             PutMessageContext putMessageContext = new PutMessageContext(topicQueueKey);
-
+            /**
+             * 消息写入CommitLog之前，先申请锁————这里的锁是putMessageLock
+             * */
             putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
             try {
                 long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
@@ -1004,7 +1006,7 @@ public class CommitLog implements Swappable {
                         setFileReadMode(mappedFile, LibC.MADV_RANDOM);
                     }
                 }
-                if (null == mappedFile) {
+                if (null == mappedFile) { //文件创建失败，抛出异常
                     log.error("create mapped file1 error, topic: " + msg.getTopic() + " clientAddr: " + msg.getBornHostString());
                     beginTimeInLock = 0;
                     return CompletableFuture.completedFuture(new PutMessageResult(PutMessageStatus.CREATE_MAPPED_FILE_FAILED, null));

@@ -114,32 +114,38 @@ import org.apache.rocketmq.store.timer.TimerMessageStore;
 import org.apache.rocketmq.store.util.PerfCounter;
 import org.rocksdb.RocksDBException;
 
+/**
+ * 【总述】存储模块重要的类。包含了很多对存储文件进行操作的API，其他模块对消息实体的操作都是
+ *      通过DefaultMessageStore来进行的
+ * */
 public class DefaultMessageStore implements MessageStore {
     protected static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     protected static final Logger ERROR_LOG = LoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
     public final PerfCounter.Ticks perfs = new PerfCounter.Ticks(LOGGER);
-
+    //消息存储配置属性
     private final MessageStoreConfig messageStoreConfig;
-    // CommitLog
+    // CommitLog。CommitLog存储文件的实现类
     protected final CommitLog commitLog;
 
     protected final ConsumeQueueStoreInterface consumeQueueStore;
-
+    //ConsunmeQueue文件刷盘线程
     private final FlushConsumeQueueService flushConsumeQueueService;
-
+    //清除CommitLog文件的服务
     protected final CleanCommitLogService cleanCommitLogService;
-
+    //清除ConsumeQueue文件的服务
     private final CleanConsumeQueueService cleanConsumeQueueService;
 
     private final CorrectLogicOffsetService correctLogicOffsetService;
-
+    //index文件实现类
     protected final IndexService indexService;
-
+    //mappedfile分配服务
     private final AllocateMappedFileService allocateMappedFileService;
-
+    /**
+     * CommitLog消息分发。目的：根据CommitLog文件构建ConsumeQueue文件和index文件
+     * */
     private ReputMessageService reputMessageService;
-
+    //存储高可用机制
     private HAService haService;
 
     // CompactionLog
@@ -148,7 +154,7 @@ public class DefaultMessageStore implements MessageStore {
     private CompactionService compactionService;
 
     private final StoreStatsService storeStatsService;
-
+    //消息堆外内存缓存机制
     private final TransientStorePool transientStorePool;
 
     protected final RunningFlags runningFlags = new RunningFlags();
@@ -156,15 +162,19 @@ public class DefaultMessageStore implements MessageStore {
 
     private final ScheduledExecutorService scheduledExecutorService;
     private final BrokerStatsManager brokerStatsManager;
+    /**
+     * 在消息拉取长轮询下的消息到达的监听器
+     * */
     private final MessageArrivingListener messageArrivingListener;
+    //broker配置文件
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
     protected boolean notifyMessageArriveInBatch = false;
-
+    //文件刷盘检查点
     private StoreCheckpoint storeCheckpoint;
     private TimerMessageStore timerMessageStore;
-
+    //CommitLog文件转发请求
     private final LinkedList<CommitLogDispatcher> dispatcherList;
 
     private RandomAccessFile lockFile;

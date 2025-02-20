@@ -274,7 +274,11 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
         int currentPos = WROTE_POSITION_UPDATER.get(this);
 
-        if (currentPos < this.fileSize) {
+        if (currentPos < this.fileSize) { //不满足的化说明文件已经写满了，会抛出后文的UNKNOWN_ERROR异常
+            /**
+             * slice方法是创建一个ByteBuffer的视图，而不是创建一个ByteBuffer的副本。
+             * 本质上是创建一个与原ByteBuffer共享的内存区，且拥有独立的position、limit、capacity
+             * */
             ByteBuffer byteBuffer = appendMessageBuffer().slice();
             byteBuffer.position(currentPos);
             AppendMessageResult result;
