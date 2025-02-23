@@ -96,6 +96,11 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         this.scheduledExecutorService.shutdown();
     }
 
+    /**
+     * 其实主要就是给startTimestamp赋值为当前时间+computeNotAvailableDuration(isolation ? 30000 : currentLatency);
+     *      的结果，给isAvailable()所用。。也就是说只有notAvailableDuration == 0的时候，isAvailable()才会
+     *      返回true。
+     * */
     @Override
     public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration,
                                 final boolean reachable) {
@@ -108,7 +113,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             old = this.faultItemTable.putIfAbsent(name, faultItem);
         }
 
-        if (null != old) {
+        if (null != old) {  //如果存在brokerName这个条目，就需要更新该条目的属性
             old.setCurrentLatency(currentLatency);
             old.updateNotAvailableDuration(notAvailableDuration);
             old.setReachable(reachable);
@@ -186,8 +191,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     }
 
     public class FaultItem implements Comparable<FaultItem> {
-        private final String name;
-        private volatile long currentLatency;
+        private final String name;  //brokerName
+        private volatile long currentLatency;  //
         private volatile long startTimestamp;
         private volatile long checkStamp;
         private volatile boolean reachableFlag;
@@ -196,6 +201,10 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             this.name = name;
         }
 
+        /**
+         * 给startTimestamp赋值为:当前时间+computeNotAvailableDuration(isolation ? 10000 : currentLatency);的结
+         *      果，给isAvailable()所用
+         * */
         public void updateNotAvailableDuration(long notAvailableDuration) {
             if (notAvailableDuration > 0 && System.currentTimeMillis() + notAvailableDuration > this.startTimestamp) {
                 this.startTimestamp = System.currentTimeMillis() + notAvailableDuration;

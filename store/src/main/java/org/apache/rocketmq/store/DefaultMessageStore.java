@@ -258,7 +258,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
         }
-
+        //判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件
         if (!messageStoreConfig.isEnableBuildConsumeQueueConcurrently()) {
             this.reputMessageService = new ReputMessageService();
         } else {
@@ -416,7 +416,7 @@ public class DefaultMessageStore implements MessageStore {
         lockFile.getChannel().force(true);
 
         this.reputMessageService.setReputFromOffset(this.commitLog.getConfirmOffset());
-        this.reputMessageService.start();
+        this.reputMessageService.start();   //启动 消息分发的服务。具体启动几个线程取决于参数：enableBuildConsumeQueueConcurrently
 
         // Checking is not necessary, as long as the dLedger's implementation exactly follows the definition of Recover,
         // which is eliminating the dispatch inconsistency between the commitLog and consumeQueue at the end of recovery.
@@ -1978,6 +1978,14 @@ public class DefaultMessageStore implements MessageStore {
         return runningFlags;
     }
 
+    /**
+     * doDispatch方法会拿到列表中所有的CommitLogDispatcher接口的实现类对象，然后依次执行它们的dispatch方法，
+     *      而CommitLogDispatcher实现类的dispatch方法就可以编码特定的转发逻辑，实现转发什么消息、将这些方法
+     *      转发到哪里等
+     * 当前dispatcherList会至少包括：
+     *      ①CommitLogDispatcherBuildConsumeQueue，实现将消息转发到ConsumeQueue的逻辑
+     *      ②CommitLogDispatcherBuildIndex，实现将消息转发到index文件的逻辑
+     * */
     public void doDispatch(DispatchRequest req) throws RocksDBException {
         for (CommitLogDispatcher dispatcher : this.dispatcherList) {
             dispatcher.dispatch(req);
@@ -2156,6 +2164,9 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 实现将CommitLog转发到ConsumeQueue的逻辑
+     * */
     class CommitLogDispatcherBuildConsumeQueue implements CommitLogDispatcher {
 
         @Override
@@ -2164,6 +2175,7 @@ public class DefaultMessageStore implements MessageStore {
             switch (tranType) {
                 case MessageSysFlag.TRANSACTION_NOT_TYPE:
                 case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
+                    //将消息在CommitLog的位置等信息写入到ConsumeQueue
                     putMessagePositionInfo(request);
                     break;
                 case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
@@ -2173,6 +2185,7 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    //利用此类的
     class CommitLogDispatcherBuildIndex implements CommitLogDispatcher {
 
         @Override
@@ -2785,8 +2798,20 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * @description:提供CommitLog的分发服务，分发到ConsumeQueue、index等文件
+     * @param null:
+     * @return
+     * @author: Zhou
+     * @date: 2025/2/22 23:26
+     *
+     * 关于消息分发服务————
+     * 1.当消息写入到commitLog后，ReputMessage会根据上一次分发消息的偏移量依次从commitLog文件中读取消息信息，写入
+     *      到ConsumeQueue与IndexFile两个文件中，当然了，这里写入的只是消息的发送时间、在commitLog中的位置信息，完整
+     *      的消息只有commitLog文件才存在。
+     */
     class ReputMessageService extends ServiceThread {
-
+        //ReputMessageService从哪个物理偏移量开始把消息转发给ConsumeQueue和index文件，即重放到哪个位置了
         protected volatile long reputFromOffset = 0;
 
         public long getReputFromOffset() {
@@ -2823,14 +2848,26 @@ public class DefaultMessageStore implements MessageStore {
             return this.reputFromOffset < DefaultMessageStore.this.getConfirmOffset();
         }
 
+        /**
+         * 【总述】对CommitLog中的消息执行重放操作
+         * */
         public void doReput() {
             if (this.reputFromOffset < DefaultMessageStore.this.commitLog.getMinOffset()) {
+                //警告的日志表明：在执行doReput方法的时候，有日志没有被发送到ConsumeQueue和index文件 但是 这些消息已经过期了
                 LOGGER.warn("The reputFromOffset={} is smaller than minPyOffset={}, this usually indicate that the dispatch behind too much and the commitlog has expired.",
                     this.reputFromOffset, DefaultMessageStore.this.commitLog.getMinOffset());
+                //需要把"重放偏移量reputFromOffset"重置为CommitLog偏移量的最小值
                 this.reputFromOffset = DefaultMessageStore.this.commitLog.getMinOffset();
             }
             for (boolean doNext = true; this.isCommitLogAvailable() && doNext; ) {
-
+                //从CommitLog获取需要转发的数据...这是从reputFromOffset开始一直到这个MappedFile结束的数据
+                /*
+                根据 reputFromOffset 获取这个 reputFromOffset 属于哪一个 MappedFile
+                然后再根据 reputFromOffset % mappedFileSize 获取 reputFromOffset 的相对偏移量
+                最后返回一个 SelectMappedBufferResult，这个 result 里面包装了从相对偏移量开始的一
+                    段 ByteBuffer!!!
+                所以这个方法其实就是: 根据 reputFromOffset 获取要重放的 ByteBuffer
+                * **/
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
 
                 if (result == null) {
@@ -2838,11 +2875,14 @@ public class DefaultMessageStore implements MessageStore {
                 }
 
                 try {
+                    // 将截取的 ByteBuffer 的起始偏移量设置为 reputFromOffset
                     this.reputFromOffset = result.getStartOffset();
 
                     for (int readSize = 0; readSize < result.getSize() && reputFromOffset < DefaultMessageStore.this.getConfirmOffset() && doNext; ) {
+                        //检验数据
                         DispatchRequest dispatchRequest =
                             DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false, false);
+                        // Dledger 模式下 bufferSize 是 -1，这时候直接取消息大小；否则就获取 buffer 大小
                         int size = dispatchRequest.getBufferSize() == -1 ? dispatchRequest.getMsgSize() : dispatchRequest.getBufferSize();
 
                         if (reputFromOffset + size > DefaultMessageStore.this.getConfirmOffset()) {
@@ -2852,14 +2892,16 @@ public class DefaultMessageStore implements MessageStore {
 
                         if (dispatchRequest.isSuccess()) {
                             if (size > 0) {
+                                //分发数据
                                 DefaultMessageStore.this.doDispatch(dispatchRequest);
-
+                                // 长轮询：
                                 if (!notifyMessageArriveInBatch) {
                                     notifyMessageArriveIfNecessary(dispatchRequest);
                                 }
-
+                                //消息重放后，需要更新“重放偏移量reputFromOffset”
                                 this.reputFromOffset += size;
                                 readSize += size;
+                                // 如果是 slave 节点，记录下一些最新的统计数据
                                 if (!DefaultMessageStore.this.getMessageStoreConfig().isDuplicationEnable() &&
                                     DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole() == BrokerRole.SLAVE) {
                                     DefaultMessageStore.this.storeStatsService
@@ -2869,21 +2911,34 @@ public class DefaultMessageStore implements MessageStore {
                                         .add(dispatchRequest.getMsgSize());
                                 }
                             } else if (size == 0) {
+                                // 读到文件结尾了，获取下一个文件的起始索引
                                 this.reputFromOffset = DefaultMessageStore.this.commitLog.rollNextFile(this.reputFromOffset);
+                                // readSize 设置成获取的 byteBuffer 的大小，这样下次就会退出循环了，其实这里可以直接 break 吧
                                 readSize = result.getSize();
                             }
-                        } else {
-                            if (size > 0) {
+                        } else {  // 消息校验不通过————消息头记录的长度和实际求出来的真实长度不一样
+                            if (size > 0) { //这一步表示：会跳过当前消息的转发
                                 LOGGER.error("[BUG]read total count not equals msg total size. reputFromOffset={}", reputFromOffset);
-                                this.reputFromOffset += size;
-                            } else {
+                                this.reputFromOffset += size;//直接更新“重放偏移量reputFromOffset”，表示跳过当前的消息，继续重放后面的消息
+                            } else {  //size<=0表示：比较严重的情况
                                 doNext = false;
                                 // If user open the dledger pattern or the broker is master node,
                                 // it will not ignore the exception and fix the reputFromOffset variable
+                                /*
+                                dledger 模式是 RocketMQ 的一种高可用性模式，通过 Raft 协议保证数据的一致性和可靠性。如果
+                                    启用了 dledger 模式，系统会更加严格地处理错误，不会忽略异常
+                                如果当前 broker 节点是主节点，也会严格处理错误，因为主节点负责写入数据，任何错误都需要被记
+                                    录和处理
+                                * **/
                                 if (DefaultMessageStore.this.getMessageStoreConfig().isEnableDLegerCommitLog() ||
                                     DefaultMessageStore.this.brokerConfig.getBrokerId() == MixAll.MASTER_ID) {
                                     LOGGER.error("[BUG]dispatch message to consume queue error, COMMITLOG OFFSET: {}",
                                         this.reputFromOffset);
+                                    /*
+                                    readSize 就是已经重放过的消息字节数
+                                    result.getSize() 是总共需要重放的消息字节数
+                                    这里意思就是让 reputFromOffset 加上剩下没有重放的字节，意思就是当前的 MappedFile 都跳过重放
+                                    **/
                                     this.reputFromOffset += result.getSize() - readSize;
                                 }
                             }
@@ -2893,6 +2948,13 @@ public class DefaultMessageStore implements MessageStore {
                     ERROR_LOG.info("dispatch message to cq exception. reputFromOffset: {}", this.reputFromOffset, e);
                     return;
                 } finally {
+                    /**
+                     * 在获取 result 的时候，也就是 DefaultMessageStore.this.commitLog.getData(reputFromOffset) 方
+                     * 法，在这个方法的底层 MappedFile#selectMappedBuffer 方法中会通过 this.hold() 持有当前
+                     * MappedFile 文件资源，所以要在 finally 里面释放资源。所谓的释放资源，就是讲文件被持有数 -1，同
+                     * 时判断要不要释放这个 MappedFile 背后的堆外内存
+                     * */
+                    // 重放完后释放 reputFromOffset 对应的 MappedFile 资源(并不是删除，而是去除引用关系)
                     result.release();
                 }
 
@@ -2928,12 +2990,15 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        /**
+         * 此服务线程继承于ServiceThread，rocketmq的大部分服务线程都是使用这种实现。在线程start之后，会自动执行下面的run方法。
+         * */
         @Override
         public void run() {
             DefaultMessageStore.LOGGER.info(this.getServiceName() + " service started");
 
             while (!this.isStopped()) {
-                try {
+                try {  //先休息1ms，然后执行doReput(将消息转发到ConsumeQueue和index文件)
                     TimeUnit.MILLISECONDS.sleep(1);
                     this.doReput();
                 } catch (Exception e) {

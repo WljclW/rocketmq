@@ -24,6 +24,9 @@ import org.apache.rocketmq.common.message.MessageExtBrokerInner;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.rocksdb.RocksDBException;
 
+/**
+ * 【总述】规范往ConsumeQueue中转存消息的操作
+ * */
 public interface ConsumeQueueStoreInterface {
 
     /**

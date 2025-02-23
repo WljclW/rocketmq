@@ -26,7 +26,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 /**
  * 这个类是底层创建服务线程的抽象类
  *      1. 基本上所需要的功能都已经实现了
- *      2. 唯一的抽象方法是getServiceName()方法，这个方法会返回一个字符串，这个字符串代表当前线程的名字(暗示该线程是干什么活的)
+ *      2. 该抽象类只有两个抽象方法
+ *          第一个：getServiceName()方法，这个方法会返回一个字符串，这个字符串代表当前线程的名字(暗示该线
+ *                  程是干什么活的)
+ *          第二个：Runable接口中的run方法
  * */
 public abstract class ServiceThread implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
@@ -36,7 +39,7 @@ public abstract class ServiceThread implements Runnable {
     protected Thread thread;
     protected final CountDownLatch2 waitPoint = new CountDownLatch2(1);
     protected volatile AtomicBoolean hasNotified = new AtomicBoolean(false);
-    protected volatile boolean stopped = false;
+    protected volatile boolean stopped = false; //volatile变量，线程是否终止的标志
     protected boolean isDaemon = false;
 
     //Make it able to restart the thread
@@ -51,12 +54,22 @@ public abstract class ServiceThread implements Runnable {
      * */
     public abstract String getServiceName();
 
+    /**
+     * start方法的作用：
+     *      原子类设置线程启动标志，设置volatile线程终止标志，创建线程　并　设置为后台线程
+     *      最后启动线程
+     * Thread(Runnable，String)构造器：
+     *      第一个参数：the object whose run method is invoked when this thread is started，意思是
+     *          线程在启动的时候，第一个参数对象的run方法将会被执行，如果是null，则当前thread的run方法
+     *          会被执行
+     *      第二个参数：指定线程的名称
+     * */
     public void start() {
         log.info("Try to start service thread:{} started:{} lastThread:{}", getServiceName(), started.get(), thread);
-        if (!started.compareAndSet(false, true)) {
+        if (!started.compareAndSet(false, true)) { //利用原子类实现
             return;
         }
-        stopped = false;
+        stopped = false; //volatile修饰的变量，线程是否终止的标志
         this.thread = new Thread(this, getServiceName());
         this.thread.setDaemon(isDaemon);
         this.thread.start();

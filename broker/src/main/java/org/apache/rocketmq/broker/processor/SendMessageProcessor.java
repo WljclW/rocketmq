@@ -91,6 +91,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             case RequestCode.CONSUMER_SEND_MSG_BACK:
                 return this.consumerSendMsgBack(ctx, request);
             default:
+                // 我们Producer发送过来的消息都在request里，给header解析到SendMessageRequestHeader对象里去。
                 SendMessageRequestHeader requestHeader = parseRequestHeader(request);
                 if (requestHeader == null) {
                     return null;
@@ -112,10 +113,10 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 RemotingCommand response;
                 clearReservedProperties(requestHeader);
 
-                if (requestHeader.isBatch()) {
+                if (requestHeader.isBatch()) { //批处理消息用
                     response = this.sendBatchMessage(ctx, request, sendMessageContext, requestHeader, mappingContext,
                         (ctx1, response1) -> executeSendMessageHookAfter(response1, ctx1));
-                } else {
+                } else { //非批处理消息用
                     response = this.sendMessage(ctx, request, sendMessageContext, requestHeader, mappingContext,
                         (ctx12, response12) -> executeSendMessageHookAfter(response12, ctx12));
                 }

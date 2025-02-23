@@ -21,6 +21,7 @@ import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 
 /**
+ * 【设计模式】策略模式
  * 消息选择器，rocketmq内部提供了三种实现：
  *      1.SelectMessageQueueByHash：如果要保证相同key消息的严格顺序，需要使用这种选择器。。因为这种选择器下
  *            相同的args会发送到相同的消息队列。

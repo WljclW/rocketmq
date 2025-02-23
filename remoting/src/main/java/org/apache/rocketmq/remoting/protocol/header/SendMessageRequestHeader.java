@@ -174,11 +174,13 @@ public class SendMessageRequestHeader extends TopicQueueRequestHeader {
         SendMessageRequestHeaderV2 requestHeaderV2 = null;
         SendMessageRequestHeader requestHeader = null;
         switch (request.getCode()) {
+            //批量消息 以及 新版发送消息，解析为SendMessageRequestHeaderV2
             case RequestCode.SEND_BATCH_MESSAGE:
             case RequestCode.SEND_MESSAGE_V2:
                 requestHeaderV2 =
                     (SendMessageRequestHeaderV2) request
                         .decodeCommandCustomHeader(SendMessageRequestHeaderV2.class);
+            // 如果是旧版的发送消息，解析为SendMessageRequestHeader
             case RequestCode.SEND_MESSAGE:
                 if (null == requestHeaderV2) {
                     requestHeader =

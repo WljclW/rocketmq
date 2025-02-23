@@ -59,10 +59,10 @@ public class MessageExtEncoder {
 
     public static int calMsgLength(MessageVersion messageVersion,
         int sysFlag, int bodyLength, int topicLength, int propertiesLength) {
-
+        // 如果是 IPV6 就是 20，否则是 8，这是因为 bornhost 是包括 IP + port 的，所以会多上 4 字节
         int bornhostLength = (sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0 ? 8 : 20;
         int storehostAddressLength = (sysFlag & MessageSysFlag.STOREHOSTADDRESS_V6_FLAG) == 0 ? 8 : 20;
-
+        //计算消息的总长度
         return 4 //TOTALSIZE
             + 4 //MAGICCODE
             + 4 //BODYCRC

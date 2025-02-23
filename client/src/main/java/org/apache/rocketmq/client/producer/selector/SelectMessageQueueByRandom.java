@@ -28,7 +28,7 @@ public class SelectMessageQueueByRandom implements MessageQueueSelector {
 
     @Override
     public MessageQueue select(List<MessageQueue> mqs, Message msg, Object arg) {
-        int value = random.nextInt(mqs.size());
+        int value = random.nextInt(mqs.size()); //随机生成一个0~队列总数-1的整数，表示选取对应的消息队列
         return mqs.get(value);
     }
 }

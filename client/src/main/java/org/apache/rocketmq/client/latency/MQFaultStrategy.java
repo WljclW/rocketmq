@@ -29,6 +29,14 @@ public class MQFaultStrategy {
     private LatencyFaultTolerance<String> latencyFaultTolerance;
     private volatile boolean sendLatencyFaultEnable;
     private volatile boolean startDetectorEnable;
+    /**
+     * RocketMQ为每个Broker预测了个可用时间(当前时间+notAvailableDuration)，当当前时间大于该时间，才
+     *      代表Broker可用，而notAvailableDuration有6个级别和latencyMax的区间一一对应，根据传入
+     *      的currentLatency去预测该Broker在什么时候可用。
+     * 比如：currentLatency大于等于50小于100，则notAvailableDuration为0；
+     *      currentLatency大于等于100小于550，则notAvailableDuration为0；
+     *      currentLatency大于等于550小于1000，则notAvailableDuration为300000
+     * */
     private long[] latencyMax = {50L, 100L, 550L, 1800L, 3000L, 5000L, 15000L};
     private long[] notAvailableDuration = {0L, 0L, 2000L, 5000L, 6000L, 10000L, 30000L};
 
@@ -169,11 +177,19 @@ public class MQFaultStrategy {
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation,
                                 final boolean reachable) {
         if (this.sendLatencyFaultEnable) {
+            /**
+             * 首次isolation传入的是false，currentLatency是发送消息所耗费的时间，如下
+             * this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+             * */
             long duration = computeNotAvailableDuration(isolation ? 10000 : currentLatency);
             this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration, reachable);
         }
     }
 
+    /**
+     * 根据延迟时间对比MQFaultStrategy中的延迟级别数组latencyMax，不可用时长数组notAvailableDuration。来
+     *      将该broker加进faultItemTable中。
+     */
     private long computeNotAvailableDuration(final long currentLatency) {
         for (int i = latencyMax.length - 1; i >= 0; i--) {
             if (currentLatency >= latencyMax[i]) {

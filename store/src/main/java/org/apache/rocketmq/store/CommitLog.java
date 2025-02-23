@@ -235,7 +235,9 @@ public class CommitLog implements Swappable {
         return this.getData(offset, offset == 0);
     }
 
+    //根据偏移量，从MappedFile中获取数据
     public SelectMappedBufferResult getData(final long offset, final boolean returnFirstOnNotFound) {
+        //获取mappedFile的文件大小————默认是1MB，可以在this.defaultMessageStore.getMessageStoreConfig()文件中配置
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog();
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, returnFirstOnNotFound);
         if (mappedFile != null) {
@@ -424,18 +426,18 @@ public class CommitLog implements Swappable {
     public DispatchRequest checkMessageAndReturnSize(java.nio.ByteBuffer byteBuffer, final boolean checkCRC,
         final boolean checkDupInfo, final boolean readBody) {
         try {
-            // 1 TOTAL SIZE
+            // 1 TOTAL SIZE。。获取消息的总长度
             int totalSize = byteBuffer.getInt();
 
             // 2 MAGIC CODE
             int magicCode = byteBuffer.getInt();
             switch (magicCode) {
-                case MessageDecoder.MESSAGE_MAGIC_CODE:
-                case MessageDecoder.MESSAGE_MAGIC_CODE_V2:
+                case MessageDecoder.MESSAGE_MAGIC_CODE: //正常消息
+                case MessageDecoder.MESSAGE_MAGIC_CODE_V2: //正常消息
                     break;
-                case BLANK_MAGIC_CODE:
+                case BLANK_MAGIC_CODE: //空消息
                     return new DispatchRequest(0, true /* success */);
-                default:
+                default:  //到这里就是错误情况了
                     log.warn("found a illegal magic code 0x" + Integer.toHexString(magicCode));
                     return new DispatchRequest(-1, false /* success */);
             }
@@ -443,30 +445,32 @@ public class CommitLog implements Swappable {
             MessageVersion messageVersion = MessageVersion.valueOfMagicCode(magicCode);
 
             byte[] bytesContent = new byte[totalSize];
-
+            //①消息体CRC校验码，用于校验数据的传输是否有错
             int bodyCRC = byteBuffer.getInt();
-
+            //消息队列 ID
             int queueId = byteBuffer.getInt();
-
+            //消息 flag
             int flag = byteBuffer.getInt();
-
+            //消息在ConsumeQueue的偏移量（实际的偏移量要*20，20是条目的固定长度）
             long queueOffset = byteBuffer.getLong();
-
+            //消息在CommitLog的偏移量
             long physicOffset = byteBuffer.getLong();
-
+            //消息状态，如压缩、事务的各个阶段等
             int sysFlag = byteBuffer.getInt();
-
+            //消息生成时间
             long bornTimeStamp = byteBuffer.getLong();
-
+            //拿到消息Producer的端地址（IP+端口）
             ByteBuffer byteBuffer1;
             if ((sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0) {
+                //IPV4 读取4字节
                 byteBuffer1 = byteBuffer.get(bytesContent, 0, 4 + 4);
             } else {
+                //IPV6 读取16字节
                 byteBuffer1 = byteBuffer.get(bytesContent, 0, 16 + 4);
             }
-
+            //消息在broker存储的时间戳
             long storeTimestamp = byteBuffer.getLong();
-
+            //消息在broker存储的地址 和 端口号。IPV4和IPV6分别是4和16字节
             ByteBuffer byteBuffer2;
             if ((sysFlag & MessageSysFlag.STOREHOSTADDRESS_V6_FLAG) == 0) {
                 byteBuffer2 = byteBuffer.get(bytesContent, 0, 4 + 4);
@@ -477,10 +481,10 @@ public class CommitLog implements Swappable {
             int reconsumeTimes = byteBuffer.getInt();
 
             long preparedTransactionOffset = byteBuffer.getLong();
-
+            //消息的消息体长度
             int bodyLen = byteBuffer.getInt();
             if (bodyLen > 0) {
-                if (readBody) {
+                if (readBody) { //读取消息体到bytesContent中
                     byteBuffer.get(bytesContent, 0, bodyLen);
 
                     if (checkCRC) {
@@ -490,7 +494,7 @@ public class CommitLog implements Swappable {
                          */
                         if (!this.defaultMessageStore.getMessageStoreConfig().isForceVerifyPropCRC()) {
                             int crc = UtilAll.crc32(bytesContent, 0, bodyLen);
-                            if (crc != bodyCRC) {
+                            if (crc != bodyCRC) { //CRC校验不通过
                                 log.warn("CRC check failed. bodyCRC={}, currentCRC={}", crc, bodyCRC);
                                 return new DispatchRequest(-1, false/* success */);
                             }
@@ -500,11 +504,16 @@ public class CommitLog implements Swappable {
                     byteBuffer.position(byteBuffer.position() + bodyLen);
                 }
             }
-
+            //获取topic的长度，并通过"new String"构建topic串
             int topicLen = messageVersion.getTopicLength(byteBuffer);
-            byteBuffer.get(bytesContent, 0, topicLen);
+            byteBuffer.get(bytesContent, 0, topicLen);  //拿到topic的内容
             String topic = new String(bytesContent, 0, topicLen, MessageDecoder.CHARSET_UTF8);
 
+            /**
+             * 下面这一段代码都是在处理属性，比如属性里面的 tagsCode，普通消息的 tagsCode 就是消息
+             *      的 hashCode，如果是延时消息就是延时消息的发送时间，所以这里就是处理这部分内容，
+             *      至于处理来干嘛，是作为返回结果的一部分的。
+             * */
             long tagsCode = 0;
             String keys = "";
             String uniqKey = null;
@@ -588,6 +597,7 @@ public class CommitLog implements Swappable {
                 }
             }
 
+            //根据读取的消息来还原消息的长度
             int readLength = MessageExtEncoder.calMsgLength(messageVersion, sysFlag, bodyLen, topicLen, propertiesLength);
             if (totalSize != readLength) {
                 doNothingForDeadCode(reconsumeTimes);
@@ -600,7 +610,7 @@ public class CommitLog implements Swappable {
                     totalSize, readLength, bodyLen, topicLen, propertiesLength);
                 return new DispatchRequest(totalSize, false/* success */);
             }
-
+            //到了这里，说明消息读取成功，并通过校验。需要构建DispatchRequest返回
             DispatchRequest dispatchRequest = new DispatchRequest(
                 topic,
                 queueId,
@@ -1360,9 +1370,20 @@ public class CommitLog implements Swappable {
         return null;
     }
 
+    /**
+     * 获取当前的offset所在的MappedFile的下一个MappedFile的偏移量
+     * */
     public long rollNextFile(final long offset) {
+        // 拿到MappedFile 文件大小
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog();
         return offset + mappedFileSize - offset % mappedFileSize;
+        //return的逻辑：
+        // 假设现在 MappedFile 文件大小是 1024，那么 MappedFile1 的范围是 [0, 1024)，MappedFile2 的范围是 [1024, 2048)
+        // 现在 offset 是 500，位于
+        // 1.offset + mappedFileSize = 1524
+        // 2.offset % mappedFileSize = 500
+        // 3.offset + mappedFileSize - offset % mappedFileSize = 1024
+        // 1024 就是下一个 MappedFile 的起始偏移量
     }
 
     public void destroy() {

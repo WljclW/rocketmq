@@ -369,10 +369,10 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
     @Override
     public ConsumeQueueInterface findOrCreateConsumeQueue(String topic, int queueId) {
         ConcurrentMap<Integer, ConsumeQueueInterface> map = consumeQueueTable.get(topic);
-        if (null == map) {
+        if (null == map) { //如果没有，则会创建一个新的元素放进去
             ConcurrentMap<Integer, ConsumeQueueInterface> newMap = new ConcurrentHashMap<>(128);
             ConcurrentMap<Integer, ConsumeQueueInterface> oldMap = consumeQueueTable.putIfAbsent(topic, newMap);
-            if (oldMap != null) {
+            if (oldMap != null) { //有可能在我们创建好的时候，其他线程已经创建了，那么就返回已经被创建
                 map = oldMap;
             } else {
                 map = newMap;

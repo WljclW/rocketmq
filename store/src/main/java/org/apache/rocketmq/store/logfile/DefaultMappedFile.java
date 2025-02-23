@@ -511,6 +511,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     @Override
     public SelectMappedBufferResult selectMappedBuffer(int pos) {
+        // 获取这个MappedFile 里面的一个read position，其实就是这个MappedFile 的一个可读位置
         int readPosition = getReadPosition();
         if (pos < readPosition && pos >= 0) {
             if (this.hold()) {

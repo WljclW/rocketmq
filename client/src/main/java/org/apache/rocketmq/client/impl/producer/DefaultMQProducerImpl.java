@@ -763,7 +763,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         }
 
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
-                        endTimestamp = System.currentTimeMillis();
+                        endTimestamp = System.currentTimeMillis();  //这里的时间记录的是发送成功已经拿到返回结果的时间
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false, true);
                         switch (communicationMode) {
                             case ASYNC:

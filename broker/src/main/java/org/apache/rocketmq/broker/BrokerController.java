@@ -1533,7 +1533,10 @@ public class BrokerController {
     }
 
     protected void startBasicService() throws Exception {
-
+        /**
+         * 开启messageStore服务：作用是将消息写入到CommitLog文件
+         * rocketmq有一个默认的实现————DefaultMessageStore
+         * */
         if (this.messageStore != null) {
             this.messageStore.start();
         }

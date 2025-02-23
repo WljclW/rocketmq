@@ -20,7 +20,12 @@ package org.apache.rocketmq.store;
 import org.rocksdb.RocksDBException;
 
 /**
- * Dispatcher of commit log.
+ * Dispatcher of commit log.....
+ *      1.即commit log 的分发器，会将CommitLog分发给ConsumeQueue(按照消息主题进行分类)，index(按照消息的
+ *          tag进行分类)
+ *      2.可以基于这个接口实现我们自定义的类，并在dispatch方法中实现自己的转发逻辑
+ *      3.转发时不需要转发消息的具体内容，只需要转发消息的offset等信息。。具体的消息内容只需要在CommitLog中
+ *          存储一份即可
  */
 public interface CommitLogDispatcher {
 
