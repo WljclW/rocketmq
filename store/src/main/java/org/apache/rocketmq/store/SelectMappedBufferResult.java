@@ -19,6 +19,11 @@ package org.apache.rocketmq.store;
 import java.nio.ByteBuffer;
 import org.apache.rocketmq.store.logfile.MappedFile;
 
+/**
+ * 【总述】存储和管理 内存映射文件缓冲区 的结果
+ * 类的作用：
+ *      用于封装从内存映射文件中读取的数据缓冲区。。。。包含了对内存映射文件缓冲区的操作方法
+ * */
 public class SelectMappedBufferResult {
 
     private final long startOffset;

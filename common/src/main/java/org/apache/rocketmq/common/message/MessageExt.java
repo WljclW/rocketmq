@@ -24,6 +24,9 @@ import java.nio.ByteBuffer;
 import org.apache.rocketmq.common.TopicFilterType;
 import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 
+/**
+ * Message类用于消息的发送；MessageExt类提供了更多的元数据信息，用于消息的接受和处理
+ * */
 public class MessageExt extends Message {
     private static final long serialVersionUID = 5720810158625748049L;
 

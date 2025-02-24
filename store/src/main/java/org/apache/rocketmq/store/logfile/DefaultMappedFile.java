@@ -488,7 +488,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
     @Override
     public SelectMappedBufferResult selectMappedBuffer(int pos, int size) {
         int readPosition = getReadPosition();
-        if ((pos + size) <= readPosition) {
+        if ((pos + size) <= readPosition) { //判断从当前位置读取size会不会超过有效位置，如果没有的话就会去取消息
             if (this.hold()) {
                 this.mappedByteBufferAccessCountSinceLastSwap++;
 
@@ -501,7 +501,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
                 log.warn("matched, but hold failed, request pos: " + pos + ", fileFromOffset: "
                     + this.fileFromOffset);
             }
-        } else {
+        } else { //如果超过了有效位置，则返回null
             log.warn("selectMappedBuffer request pos invalid, request pos: " + pos + ", size: " + size
                 + ", fileFromOffset: " + this.fileFromOffset);
         }
@@ -592,7 +592,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
     }
 
     /**
-     * @return The max position which have valid data
+     * @return The max position which have valid data。。返回 有效消息 的最大位置
      */
     @Override
     public int getReadPosition() {

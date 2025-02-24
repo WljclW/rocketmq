@@ -48,7 +48,8 @@ import io.opentelemetry.sdk.metrics.ViewBuilder;
 
 /**
  * This class defines contracting interfaces to implement, allowing third-party vendor to use customized message store.
- * 这个类列出了(消息存储时)需要实现的接口，允许第三方机构或个人自定义 消息存储的实现
+ * 这个类列出了(消息存储时)需要实现的接口，允许第三方机构或个人自定义 消息存储的实现....同时DefaultMessageStore提供了一个默认的实现，如果
+ *      自定义时可以考虑参考DefaultMessageStore
  */
 public interface MessageStore {
 
@@ -116,6 +117,7 @@ public interface MessageStore {
     /**
      * Query at most <code>maxMsgNums</code> messages belonging to <code>topic</code> at <code>queueId</code> starting
      * from given <code>offset</code>. Resulting messages will further be screened using provided message filter.
+     * 从参数给定的offset开始，从topic的queueId队列中获取最多maxMsgNums条消息，并将拿到的消息 使用messageFilter进行筛选
      *
      * @param group         Consumer group that launches this query.
      * @param topic         Topic to query.
@@ -209,6 +211,7 @@ public interface MessageStore {
 
     /**
      * Get the offset of the message in the commit log, which is also known as physical offset.
+     * 拿到消息在CommitLog中的偏移量，这也被称为 “物理偏移量”
      *
      * @param topic              Topic of the message to lookup.
      * @param queueId            Queue ID.
@@ -239,7 +242,7 @@ public interface MessageStore {
     long getOffsetInQueueByTime(final String topic, final int queueId, final long timestamp, final BoundaryType boundaryType);
 
     /**
-     * Look up the message by given commit log offset.
+     * Look up the message by given commit log offset...根据指定的物理偏移量查询消息
      *
      * @param commitLogOffset physical offset.
      * @return Message whose physical offset is as specified.
@@ -295,7 +298,7 @@ public interface MessageStore {
     HARuntimeInfo getHARuntimeInfo();
 
     /**
-     * Get the maximum commit log offset.
+     * Get the maximum commit log offset.。。获取CommitLog的最大偏移量
      *
      * @return maximum commit log offset.
      */
@@ -310,6 +313,7 @@ public interface MessageStore {
 
     /**
      * Get the store time of the earliest message in the given queue.
+     * 查询 给定的消息队列 中最早的消息的存储时间
      *
      * @param topic   Topic of the messages to query.
      * @param queueId Queue ID to find.
@@ -356,6 +360,7 @@ public interface MessageStore {
 
     /**
      * Get the total number of the messages in the specified queue.
+     * 获取 给定消息队列中 的消息总数
      *
      * @param topic   Topic
      * @param queueId Queue ID.
@@ -548,6 +553,7 @@ public interface MessageStore {
 
     /**
      * Check if the operating system page cache is busy or not.
+     * 判断 OS的page cache是否繁忙
      *
      * @return true if the OS page cache is busy; false otherwise.
      */
@@ -562,6 +568,7 @@ public interface MessageStore {
 
     /**
      * Check if the transient store pool is deficient.
+     * 检查 transientStorePool是否不足
      *
      * @return true if the transient store pool is running out; false otherwise.
      */
@@ -607,6 +614,7 @@ public interface MessageStore {
 
     /**
      * Will be triggered when a new message is appended to commit log.
+     * 当一个信息的消息提交到CommitLog时触发，在DefaultMessageStore中并没有具体的逻辑，因此这个方法可能是 扩展的逻辑
      *
      * @param msg           the msg that is appended to commit log
      * @param result        append message result
@@ -744,6 +752,7 @@ public interface MessageStore {
     /**
      * Assign a message to queue offset. If there is a race condition, you need to lock/unlock this method
      * yourself.
+     * 将消息分配给 指定消息队列的指定偏移量，如果存在竞争，需要你自己给方法加锁/解锁
      *
      * @param msg        message
      * @throws RocksDBException

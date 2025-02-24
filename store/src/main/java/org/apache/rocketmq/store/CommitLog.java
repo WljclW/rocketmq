@@ -1357,6 +1357,7 @@ public class CommitLog implements Swappable {
     }
 
     public SelectMappedBufferResult getMessage(final long offset, final int size) {
+        //从配置文件中读取 设定的(一个)MappedFile文件的大小。。默认值是1GB
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog();
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, offset == 0);
         if (mappedFile != null) {

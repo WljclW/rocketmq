@@ -1072,14 +1072,15 @@ public class DefaultMessageStore implements MessageStore {
         return null;
     }
 
+    //会根据给定的偏移量返回一条消息，只不过这个消息是经过包装的
     @Override
     public SelectMappedBufferResult selectOneMessageByOffset(long commitLogOffset) {
         SelectMappedBufferResult sbr = this.commitLog.getMessage(commitLogOffset, 4);
         if (null != sbr) {
             try {
                 // 1 TOTALSIZE
-                int size = sbr.getByteBuffer().getInt();
-                return this.commitLog.getMessage(commitLogOffset, size);
+                int size = sbr.getByteBuffer().getInt();  //将4字节的size取出来，并且此时的偏移指针会向后移动4字节
+                return this.commitLog.getMessage(commitLogOffset, size); //从CommitLog接着读取size大小的内容即为消息
             } finally {
                 sbr.release();
             }
