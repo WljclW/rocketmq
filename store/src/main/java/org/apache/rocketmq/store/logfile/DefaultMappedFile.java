@@ -70,6 +70,9 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     protected static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
 
+    /**
+     * AtomicIntegerFieldUpdater:用于以原子方式更新“泛型对象”的int字段，在DefaultMappedFile的静态代码块中完成了字段的指定
+     * */
     protected static final AtomicIntegerFieldUpdater<DefaultMappedFile> WROTE_POSITION_UPDATER;
     protected static final AtomicIntegerFieldUpdater<DefaultMappedFile> COMMITTED_POSITION_UPDATER;
     protected static final AtomicIntegerFieldUpdater<DefaultMappedFile> FLUSHED_POSITION_UPDATER;
@@ -109,6 +112,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
     private long stopTimestamp = -1;
 
     static {
+        //指定上面原子更新的字段，分别是那个字段
         WROTE_POSITION_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DefaultMappedFile.class, "wrotePosition");
         COMMITTED_POSITION_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DefaultMappedFile.class, "committedPosition");
         FLUSHED_POSITION_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DefaultMappedFile.class, "flushedPosition");
@@ -164,10 +168,12 @@ public class DefaultMappedFile extends AbstractMappedFile {
         UtilAll.ensureDirOK(this.file.getParent());
 
         try {
+            //通过RandomAccessFile创建读写文件的通道
             this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
+            //创建内存映射文件
             this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
-            TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);
-            TOTAL_MAPPED_FILES.incrementAndGet();
+            TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);    //记录总的内存映射文件所占空间
+            TOTAL_MAPPED_FILES.incrementAndGet();   //记录文件数量
             ok = true;
         } catch (FileNotFoundException e) {
             log.error("Failed to create file " + this.fileName, e);
@@ -422,17 +428,21 @@ public class DefaultMappedFile extends AbstractMappedFile {
         return COMMITTED_POSITION_UPDATER.get(this);
     }
 
+    /**
+     * 【总述】将数据提交到文件通道，负责将写缓冲区中尚未提交的数据写入文件通道
+     * */
     protected void commit0() {
-        int writePos = WROTE_POSITION_UPDATER.get(this);
-        int lastCommittedPosition = COMMITTED_POSITION_UPDATER.get(this);
+        int writePos = WROTE_POSITION_UPDATER.get(this); //获取当前写入位置
+        int lastCommittedPosition = COMMITTED_POSITION_UPDATER.get(this); //获取上次提交的位置
 
         if (writePos - lastCommittedPosition > 0) {
             try {
+                //slice方法用于创建一个 和 当前ByteBuffer共享一片内存空间的ByteBuffer。因此修改会互相影响
                 ByteBuffer byteBuffer = writeBuffer.slice();
                 byteBuffer.position(lastCommittedPosition);
                 byteBuffer.limit(writePos);
-                this.fileChannel.position(lastCommittedPosition);
-                this.fileChannel.write(byteBuffer);
+                this.fileChannel.position(lastCommittedPosition); //设置文件通道的当前位置为上次提交的位置
+                this.fileChannel.write(byteBuffer); //将数据写入文件通道
                 COMMITTED_POSITION_UPDATER.set(this, writePos);
             } catch (Throwable e) {
                 log.error("Error occurred when commit data to FileChannel.", e);

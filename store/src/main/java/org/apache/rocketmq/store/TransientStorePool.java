@@ -27,14 +27,19 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.util.LibC;
 import sun.nio.ch.DirectBuffer;
 
+/**
+ * 作用是管理一组直接字节缓冲区（ByteBuffer），这些缓冲区用于临时存储数据，通常是为了提高读写性能。
+ * 【池化机制】
+ * */
 public class TransientStorePool {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
-    private final int poolSize;
-    private final int fileSize;
-    private final Deque<ByteBuffer> availableBuffers;
+    private final int poolSize; //实例化池子的时候，设置的缓冲区的数量
+    private final int fileSize; //实例化池子的时候，设置的缓冲区的大小。。rocketmq中的默认是1GB
+    private final Deque<ByteBuffer> availableBuffers;  //池子中可用的ByteBuffer(缓冲区)。。刚开始创建后会把所有的池子添加到这里，每次用的时候拿出一个
     private volatile boolean isRealCommit = true;
 
+    //poolSize标识初始时 池子 的大小，fileSize标识每一块ByteBuffer的大小(就是每个CommitLog文件的大小，默认是1GB)
     public TransientStorePool(final int poolSize, final int fileSize) {
         this.poolSize = poolSize;
         this.fileSize = fileSize;
@@ -45,14 +50,14 @@ public class TransientStorePool {
      * It's a heavy init method.
      */
     public void init() {
-        for (int i = 0; i < poolSize; i++) {
+        for (int i = 0; i < poolSize; i++) {   //循环创建poolSize个ByteBuffer
             ByteBuffer byteBuffer = ByteBuffer.allocateDirect(fileSize);
-
+            //拿到创建的ByteBuffer(缓冲区)，并用pointer指针进行记录，最后用mlock锁定到内存
             final long address = ((DirectBuffer) byteBuffer).address();
             Pointer pointer = new Pointer(address);
-            LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize));
+            LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize)); //将缓冲区锁定到内存中，保证内存不会被交换到磁盘中
 
-            availableBuffers.offer(byteBuffer);
+            availableBuffers.offer(byteBuffer); //将创建的ByteBuffer(缓冲区)加入到availableBuffers中
         }
     }
 
@@ -70,9 +75,11 @@ public class TransientStorePool {
         this.availableBuffers.offerFirst(byteBuffer);
     }
 
+    //从池子里面拿出来一块ByteBuffer(缓冲区)，剩余的不超过40%时会打印警告日志
     public ByteBuffer borrowBuffer() {
+        //从availableBuffers中取出一个ByteBuffer(缓冲区)，默认这一个就是1GB
         ByteBuffer buffer = availableBuffers.pollFirst();
-        if (availableBuffers.size() < poolSize * 0.4) {
+        if (availableBuffers.size() < poolSize * 0.4) { //如果availableBuffers中还剩40%的缓冲区，就打印warn日志
             log.warn("TransientStorePool only remain {} sheets.", availableBuffers.size());
         }
         return buffer;

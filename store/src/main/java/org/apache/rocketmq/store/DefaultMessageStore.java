@@ -264,7 +264,7 @@ public class DefaultMessageStore implements MessageStore {
         } else {
             this.reputMessageService = new ConcurrentReputMessageService();
         }
-
+        //会创建这个"堆外内存池"
         this.transientStorePool = new TransientStorePool(messageStoreConfig.getTransientStorePoolSize(), messageStoreConfig.getMappedFileSizeCommitLog());
 
         this.scheduledExecutorService =
