@@ -41,15 +41,16 @@ public class MappedFileQueue implements Swappable {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private static final Logger LOG_ERROR = LoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
-    protected final String storePath;
+    protected final String storePath; // 存储路径
 
-    protected final int mappedFileSize;
-
+    protected final int mappedFileSize; //mappesFile文件的大小
+    //mappedFile的集合
     protected final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<>();
-
+    //创建mappedFile的服务
     protected final AllocateMappedFileService allocateMappedFileService;
-
+    //当前刷盘指针，表示该指针之前的所有数据全部持久化到磁盘了
     protected long flushedWhere = 0;
+    //内存中ByteBuffer当前的写指针，该值大于等于flushWhere的值
     protected long committedWhere = 0;
 
     protected volatile long storeTimestamp = 0;
@@ -163,6 +164,7 @@ public class MappedFileQueue implements Swappable {
         return null;
     }
 
+    //从mappedFile的列表中找到 第一个满足条件(该mappedFile的最后一次的修改时间大于等于指定的时间戳)的mappedFile
     public MappedFile getMappedFileByTime(final long timestamp) {
         Object[] mfs = this.copyMappedFiles(0);
 
@@ -179,6 +181,7 @@ public class MappedFileQueue implements Swappable {
         return (MappedFile) mfs[mfs.length - 1];
     }
 
+    //方法要求：①检查mappedFile列表中mappedFile的数量不小于参数reservedMappedFiles个；②返回mappedFile列表中mappedFile的数组(会copy一份)。
     protected Object[] copyMappedFiles(final int reservedMappedFiles) {
         Object[] mfs;
 
@@ -376,6 +379,7 @@ public class MappedFileQueue implements Swappable {
         return getLastMappedFile(startOffset, true);
     }
 
+    //与getFirstMappedFile的逻辑是类似的。。先判断再去拿取最后一个，try-catch异常
     public MappedFile getLastMappedFile() {
         MappedFile mappedFileLast = null;
         while (!this.mappedFiles.isEmpty()) {
@@ -428,6 +432,7 @@ public class MappedFileQueue implements Swappable {
         return true;
     }
 
+    //就是拿到mappedFiles中第一个文件的偏移量(即第一个文件的文件名)
     public long getMinOffset() {
 
         if (!this.mappedFiles.isEmpty()) {
@@ -663,6 +668,7 @@ public class MappedFileQueue implements Swappable {
 
     /**
      * Finds a mapped file by offset...根据参数给定的偏移量找到对应的mappedFile
+     * 【思路】先拿到集合中的第一个mappedFile，再拿到最后一个mappedFile，计算出形参offset位置所在mappedFile在集合中的索引
      *
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.
@@ -673,6 +679,7 @@ public class MappedFileQueue implements Swappable {
             MappedFile firstMappedFile = this.getFirstMappedFile();
             MappedFile lastMappedFile = this.getLastMappedFile();
             if (firstMappedFile != null && lastMappedFile != null) {
+                //如果参数给定的offset"在第一个mappedFile的偏移量之前"或者"在最后一个mappedFile的偏移量之后"，会打印警告日志。。但是返回什么还需要看参数returnFirstOnNotFound的值。
                 if (offset < firstMappedFile.getFileFromOffset() || offset >= lastMappedFile.getFileFromOffset() + this.mappedFileSize) {
                     LOG_ERROR.warn("Offset not matched. Request offset: {}, firstOffset: {}, lastOffset: {}, mappedFileSize: {}, mappedFiles count: {}",
                         offset,
@@ -680,19 +687,22 @@ public class MappedFileQueue implements Swappable {
                         lastMappedFile.getFileFromOffset() + this.mappedFileSize,
                         this.mappedFileSize,
                         this.mappedFiles.size());
-                } else {
+                } else {   //参数给定的offset在当前的mappedFiles集合中
+                    //这个index其实就是offset在当前mappedFiles集合中的索引
                     int index = (int) ((offset / this.mappedFileSize) - (firstMappedFile.getFileFromOffset() / this.mappedFileSize));
                     MappedFile targetFile = null;
                     try {
                         targetFile = this.mappedFiles.get(index);
                     } catch (Exception ignored) {
                     }
-
+                    //确认targetFile是否是参数给定的offset所在的mappedFile
                     if (targetFile != null && offset >= targetFile.getFileFromOffset()
                         && offset < targetFile.getFileFromOffset() + this.mappedFileSize) {
                         return targetFile;
                     }
-
+                    /**
+                     * 兜底的方案：遍历集合中的mappedFile，找到对应的mappedFile。
+                     * */
                     for (MappedFile tmpMappedFile : this.mappedFiles) {
                         if (offset >= tmpMappedFile.getFileFromOffset()
                             && offset < tmpMappedFile.getFileFromOffset() + this.mappedFileSize) {
@@ -716,6 +726,7 @@ public class MappedFileQueue implements Swappable {
         MappedFile mappedFileFirst = null;
 
         if (!this.mappedFiles.isEmpty()) {
+            //由于这里可能并发问题，因此可能在判断不是空之后，别的线程删除了mappedFile——————try-cathch的原因
             try {
                 mappedFileFirst = this.mappedFiles.get(0);
             } catch (IndexOutOfBoundsException e) {

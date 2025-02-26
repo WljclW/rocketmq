@@ -59,7 +59,7 @@ import sun.misc.Unsafe;
 import sun.nio.ch.DirectBuffer;
 
 public class DefaultMappedFile extends AbstractMappedFile {
-    public static final int OS_PAGE_SIZE = 1024 * 4;
+    public static final int OS_PAGE_SIZE = 1024 * 4; //操作系统每一页的大小，默认是4KB
     public static final Unsafe UNSAFE = getUnsafe();
     private static final Method IS_LOADED_METHOD;
     public static final int UNSAFE_PAGE_SIZE = UNSAFE == null ? OS_PAGE_SIZE : UNSAFE.pageSize();
@@ -77,6 +77,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
     protected static final AtomicIntegerFieldUpdater<DefaultMappedFile> COMMITTED_POSITION_UPDATER;
     protected static final AtomicIntegerFieldUpdater<DefaultMappedFile> FLUSHED_POSITION_UPDATER;
 
+    //上面的三个原子更新的字段，就是操作下面的三个volatile字段
     protected volatile int wrotePosition;
     protected volatile int committedPosition;
     protected volatile int flushedPosition;
@@ -84,15 +85,23 @@ public class DefaultMappedFile extends AbstractMappedFile {
     protected FileChannel fileChannel;
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
+     * 堆外内存，如果启动堆外内存机制"transientStorePollEnable=true"，此字段不是空，消息会先被写入到这里，然后才会被写
+     *      入到MappedFile创建的FileChannel中
+     * 此字段的初始化是在init方法(构造器中会调用init)中，初始化时就是从transientStorePool中拿出一块ByteBuffer赋给writeBuffer字段
      */
     protected ByteBuffer writeBuffer = null;
+    //堆外内存池，其中的内存会被锁定在内存,使用方法"LibC.INSTANCE.mlock"
     protected TransientStorePool transientStorePool = null;
-    protected String fileName;
-    protected long fileFromOffset;
+    protected String fileName; //文件名，其实 内容上 就等价于 fileFromOffset
+    protected long fileFromOffset;  //在init方法(在构造器中会被调用)中会初始化，该值就是文件名
     protected File file;
+    /**
+     * 物理文件对应的内存映射ByteBuffer。。NIO中的类
+     * MappedByteBuffer是NIO中的类，表示内存映射文件的缓冲区，允许将文件全部或者一部分映射到内存中，通过操作内存来读写文件内容
+     * */
     protected MappedByteBuffer mappedByteBuffer;
-    protected volatile long storeTimestamp = 0;
-    protected boolean firstCreateInQueue = false;
+    protected volatile long storeTimestamp = 0; //最后一次写入内容的时间
+    protected boolean firstCreateInQueue = false; //是否是队列中首次创建的文件？？
     private long lastFlushTime = -1L;
 
     protected MappedByteBuffer mappedByteBufferWaitToClean = null;
@@ -116,7 +125,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
         WROTE_POSITION_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DefaultMappedFile.class, "wrotePosition");
         COMMITTED_POSITION_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DefaultMappedFile.class, "committedPosition");
         FLUSHED_POSITION_UPDATER = AtomicIntegerFieldUpdater.newUpdater(DefaultMappedFile.class, "flushedPosition");
-
+        //isLoaded0(下面的代码就涉及)是一个本地方法，用于检查给定地址范围内的内存是否已加载。它接收三个参数：内存地址、长度和页数，并返回一个布尔值表示是否加载成功。
         Method isLoaded0method = null;
         // On the windows platform and openjdk 11 method isLoaded0 always returns false.
         // see https://github.com/AdoptOpenJDK/openjdk-jdk11/blob/19fb8f93c59dfd791f62d41f332db9e306bc1422/src/java.base/windows/native/libnio/MappedByteBuffer.c#L34
@@ -379,10 +388,21 @@ public class DefaultMappedFile extends AbstractMappedFile {
                 try {
                     this.mappedByteBufferAccessCountSinceLastSwap++;
 
+                    /**
+                     * 下面if-else的逻辑不是很懂？？？？
+                     * 涉及到两种写入方式：
+                     *      直接写入内存映射文件 ：数据直接写入 MappedByteBuffer，然后通过 mappedByteBuffer.force() 刷盘。
+                     *      通过缓冲区写入 ：数据先写入 writeBuffer 或其他临时缓冲区，然后再提交到 fileChannel，最后通
+                     *          过 fileChannel.force(false) 刷盘。
+                     * */
                     //We only append data to fileChannel or mappedByteBuffer, never both.
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
                         this.fileChannel.force(false);
                     } else {
+                        /**
+                         * force()方法可以确保自从上次调用force以后，所有对此ByteBuffer的更新都持久化到本地磁盘(如果链接的存储设备不
+                         * 在本地，就不保证)
+                         * */
                         this.mappedByteBuffer.force();
                     }
                     this.lastFlushTime = System.currentTimeMillis();
@@ -397,12 +417,12 @@ public class DefaultMappedFile extends AbstractMappedFile {
                 FLUSHED_POSITION_UPDATER.set(this, getReadPosition());
             }
         }
-        return this.getFlushedPosition();
+        return this.getFlushedPosition(); //返回当前已经刷盘的位置
     }
 
     @Override
     public int commit(final int commitLeastPages) {
-        if (writeBuffer == null) {
+        if (writeBuffer == null) {  //没有必要执行提交
             //no need to commit data to file channel, so just regard wrotePosition as committedPosition.
             return WROTE_POSITION_UPDATER.get(this);
         }
@@ -410,7 +430,8 @@ public class DefaultMappedFile extends AbstractMappedFile {
         //no need to commit data to file channel, so just set committedPosition to wrotePosition.
         if (transientStorePool != null && !transientStorePool.isRealCommit()) {
             COMMITTED_POSITION_UPDATER.set(this, WROTE_POSITION_UPDATER.get(this));
-        } else if (this.isAbleToCommit(commitLeastPages)) {
+        } else if (this.isAbleToCommit(commitLeastPages)) { //判断一下是不是需要执行commit
+            //下面是真正执行提交
             if (this.hold()) {
                 commit0();
                 this.release();
@@ -419,7 +440,10 @@ public class DefaultMappedFile extends AbstractMappedFile {
             }
         }
 
-        // All dirty data has been committed to FileChannel.
+        /**
+         * 下面的逻辑不是很懂？？？？if条件的判断含义是什么
+         * */
+        // All dirty data has been committed to FileChannel.(到了这里所有的脏数据就已经写到channel了)
         if (writeBuffer != null && this.transientStorePool != null && this.fileSize == COMMITTED_POSITION_UPDATER.get(this)) {
             this.transientStorePool.returnBuffer(writeBuffer);
             this.writeBuffer = null;
@@ -430,6 +454,9 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     /**
      * 【总述】将数据提交到文件通道，负责将写缓冲区中尚未提交的数据写入文件通道
+     * 【slice()】用于创建一个和原始ByteBuffer共享一片内存空间的ByteBuffer1，因此修改会互相影响；
+     *           但是维护一套独立的position和limit指针(也就是说内容是相同的位置，但是由于通过ByteBuffer1向channel中写数据，因此
+     *              它必须有独立的指针来标识写入位置、limit等)
      * */
     protected void commit0() {
         int writePos = WROTE_POSITION_UPDATER.get(this); //获取当前写入位置
@@ -439,10 +466,10 @@ public class DefaultMappedFile extends AbstractMappedFile {
             try {
                 //slice方法用于创建一个 和 当前ByteBuffer共享一片内存空间的ByteBuffer。因此修改会互相影响
                 ByteBuffer byteBuffer = writeBuffer.slice();
-                byteBuffer.position(lastCommittedPosition);
-                byteBuffer.limit(writePos);
+                byteBuffer.position(lastCommittedPosition); //将新的byteBufer的position设置为上次提交的位置(lastCommitPosition)
+                byteBuffer.limit(writePos); //将新的byteBufer的limit设置为当前写入位置(writePos)，也就是最大的可以拿数据的位置
                 this.fileChannel.position(lastCommittedPosition); //设置文件通道的当前位置为上次提交的位置
-                this.fileChannel.write(byteBuffer); //将数据写入文件通道
+                this.fileChannel.write(byteBuffer); //将ByteBuffer中的数据写入文件通道
                 COMMITTED_POSITION_UPDATER.set(this, writePos);
             } catch (Throwable e) {
                 log.error("Error occurred when commit data to FileChannel.", e);
@@ -450,6 +477,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
         }
     }
 
+    //判断一下是不是需要flush了，要求能flush的页面不少于型参数值。。。方法逻辑类似于isAbleToCommit()
     private boolean isAbleToFlush(final int flushLeastPages) {
         int flush = FLUSHED_POSITION_UPDATER.get(this);
         int write = getReadPosition();
@@ -461,23 +489,25 @@ public class DefaultMappedFile extends AbstractMappedFile {
         if (flushLeastPages > 0) {
             return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
         }
-
-        return write > flush;
+        //如果mappedfile没有满 并且 flushLeastPages <= 0，就会返回是不是有新数据
+        return write > flush; //write>flush其实就是有新的没有落盘的数据
     }
 
+    //判断是否可以提交文件
     protected boolean isAbleToCommit(final int commitLeastPages) {
+        //获取当前的 写入位置 和 提交位置
         int commit = COMMITTED_POSITION_UPDATER.get(this);
         int write = WROTE_POSITION_UPDATER.get(this);
 
-        if (this.isFull()) {
+        if (this.isFull()) { //isFull()判断是否文件已写满
             return true;
         }
-
+        //判断一下脏数据的位置是不是至少有commitLeastPages页
         if (commitLeastPages > 0) {
             return ((write / OS_PAGE_SIZE) - (commit / OS_PAGE_SIZE)) >= commitLeastPages;
         }
-
-        return write > commit;
+        //文件没有被写满 并且 commitLeastPages <= 0，就会返回 下面的值
+        return write > commit; //实质就是表示 ByteBuffer是不是有脏数据
     }
 
     @Override
@@ -603,6 +633,20 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     /**
      * @return The max position which have valid data。。返回 有效消息 的最大位置
+     * 1. transientStorePool == null
+     *      transientStorePool 是一个临时存储池，用于在内存中缓存消息，然后再批量写入到磁盘文件中。如果 transientStorePool 为 null，表
+     *      示没有使用临时存储池，所有写入操作直接写入到映射文件（mappedByteBuffer）中。
+     * 2. !transientStorePool.isRealCommit()
+     *      isRealCommit() 方法返回一个布尔值，表示是否需要真正地将数据提交到文件通道（fileChannel）。如果 isRealCommit() 返回 false，
+     *      则表示不需要真正提交数据到文件通道，而是可以继续使用内存中的缓冲区。
+     * 综合解释
+     *      条件作用：当 transientStorePool == null || !transientStorePool.isRealCommit() 成立时，意味着：
+     *          没有使用临时存储池 (transientStorePool == null)，或者使用了临时存储池但不需要真正提交数据到文件通
+     *          道 (!transientStorePool.isRealCommit())在这种情况下，WROTE_POSITION_UPDATER.get(this)方法会返回当前的写入位
+     *          置（wrotePosition），即认为所有写入的数据都是有效的，可以直接读取。
+     *      反之：如果 transientStorePool != null && transientStorePool.isRealCommit()，则表示使用了临时存储池并
+     *          且需要真正提交数据到文件通道。此时，COMMITTED_POSITION_UPDATER.get(this) 方法会返回已提交的位置（committedPosition），以确保
+     *          只读取已经持久化到磁盘的数据。
      */
     @Override
     public int getReadPosition() {

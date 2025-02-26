@@ -69,6 +69,7 @@ public class TransientStorePool {
         }
     }
 
+    //初始化ByteBuffer的一些属性，然后将ByteBuffer加入到availableBuffers中(后续可以拿到然后填充数据)
     public void returnBuffer(ByteBuffer byteBuffer) {
         byteBuffer.position(0);
         byteBuffer.limit(fileSize);
@@ -89,6 +90,7 @@ public class TransientStorePool {
         return availableBuffers.size();
     }
 
+    //判断数据是不是已经提交到了MappedFile中
     public boolean isRealCommit() {
         return isRealCommit;
     }
