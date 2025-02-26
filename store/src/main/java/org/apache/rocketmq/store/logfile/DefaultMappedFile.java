@@ -570,18 +570,18 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     @Override
     public boolean cleanup(final long currentRef) {
-        if (this.isAvailable()) {
+        if (this.isAvailable()) {  //为true时表示当前的mappedfile可用，不能清理
             log.error("this file[REF:" + currentRef + "] " + this.fileName
                 + " have not shutdown, stop unmapping.");
             return false;
         }
 
-        if (this.isCleanupOver()) {
+        if (this.isCleanupOver()) { //检查文件是否已经清理过
             log.error("this file[REF:" + currentRef + "] " + this.fileName
                 + " have cleanup, do not do it again.");
             return true;
         }
-
+        //清理掉mappedByteBuffer，并更新一些相关属性
         UtilAll.cleanBuffer(this.mappedByteBuffer);
         UtilAll.cleanBuffer(this.mappedByteBufferWaitToClean);
         this.mappedByteBufferWaitToClean = null;
@@ -598,11 +598,11 @@ public class DefaultMappedFile extends AbstractMappedFile {
         if (this.isCleanupOver()) {
             try {
                 long lastModified = getLastModifiedTimestamp();
-                this.fileChannel.close();
+                this.fileChannel.close();   //关闭文件通道
                 log.info("close file channel " + this.fileName + " OK");
 
                 long beginTime = System.currentTimeMillis();
-                boolean result = this.file.delete();
+                boolean result = this.file.delete(); //删除物理文件
                 log.info("delete file[REF:" + this.getRefCount() + "] " + this.fileName
                     + (result ? " OK, " : " Failed, ") + "W:" + this.getWrotePosition() + " M:"
                     + this.getFlushedPosition() + ", "

@@ -34,9 +34,10 @@ import sun.nio.ch.DirectBuffer;
 public class TransientStorePool {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
-    private final int poolSize; //实例化池子的时候，设置的缓冲区的数量
-    private final int fileSize; //实例化池子的时候，设置的缓冲区的大小。。rocketmq中的默认是1GB
-    private final Deque<ByteBuffer> availableBuffers;  //池子中可用的ByteBuffer(缓冲区)。。刚开始创建后会把所有的池子添加到这里，每次用的时候拿出一个
+    private final int poolSize; //池子中缓冲区的数量(可在broker配置文件中通过transient StorePoolSize进行设置，默认为5)
+    //fileSize默认是mapedFileSizeCommitLog的大小，表明TransientStorePool为CommitLog文件服务
+    private final int fileSize; //实例化池子的时候，池子内每个缓冲区(ByteBuffer)的大小。。rocketmq中的默认是1GB
+    private final Deque<ByteBuffer> availableBuffers;  //池子中可用的ByteBuffer(缓冲区)。。刚开始创建后会把所有的缓冲区添加到这里，每次用的时候拿出一个
     private volatile boolean isRealCommit = true;
 
     //poolSize标识初始时 池子 的大小，fileSize标识每一块ByteBuffer的大小(就是每个CommitLog文件的大小，默认是1GB)
@@ -48,6 +49,8 @@ public class TransientStorePool {
 
     /**
      * It's a heavy init method.
+     * 循环创建poolSize个ByteBuffer；将创建的ByteBuffer锁定到内存中；最后把创建的ByteBuffer(缓冲区)加入
+     *      到availableBuffers中
      */
     public void init() {
         for (int i = 0; i < poolSize; i++) {   //循环创建poolSize个ByteBuffer
@@ -55,7 +58,8 @@ public class TransientStorePool {
             //拿到创建的ByteBuffer(缓冲区)，并用pointer指针进行记录，最后用mlock锁定到内存
             final long address = ((DirectBuffer) byteBuffer).address();
             Pointer pointer = new Pointer(address);
-            LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize)); //将缓冲区锁定到内存中，保证内存不会被交换到磁盘中
+            //将缓冲区锁定到内存中，保证内存不会被置换到交换区
+            LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize));
 
             availableBuffers.offer(byteBuffer); //将创建的ByteBuffer(缓冲区)加入到availableBuffers中
         }

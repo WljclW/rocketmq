@@ -41,6 +41,10 @@ import org.apache.rocketmq.store.queue.MultiDispatchUtils;
 import org.apache.rocketmq.store.queue.QueueOffsetOperator;
 import org.apache.rocketmq.store.queue.ReferredIterator;
 
+/**
+ * 【】单个ConsumeQueue文件可以看作是ConsumeQueue条目构成的数组，其下标记为当前条目的逻辑偏移量。
+ * 构建的逻辑：消息到达CommitLog时，会由转发线程将消息转发到ConsumeQueue和index文件。
+ * */
 public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
@@ -850,10 +854,13 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         }
     }
 
+    //根据指定的索引(startIndex)去获取对应的ConsumeQueue条目，索引非实际的逻辑偏移
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
         long offset = startIndex * CQ_STORE_UNIT_SIZE;
+        //计算出来的offset只有不小于minLogicOffset时才认为是有效的；如果无效直接返回null
         if (offset >= this.getMinLogicOffset()) {
+            //offset有效时，先查找出mappedFile，然后从那个mappedFile中的指定位置(offset%mappedFileSize)拿数据
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
             if (mappedFile != null) {
                 return mappedFile.selectMappedBuffer((int) (offset % mappedFileSize));

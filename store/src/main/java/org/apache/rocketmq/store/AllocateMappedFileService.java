@@ -35,6 +35,7 @@ import org.apache.rocketmq.store.logfile.MappedFile;
 
 /**
  * Create MappedFile in advance
+ * 【】具体干的事见run方法，就是执行mmapOperation操作
  */
 public class AllocateMappedFileService extends ServiceThread {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -154,7 +155,9 @@ public class AllocateMappedFileService extends ServiceThread {
         boolean isSuccess = false;
         AllocateRequest req = null;
         try {
+            //从优先级队列获取请求
             req = this.requestQueue.take();
+            //从requestTable获取文件创建请求对象
             AllocateRequest expectedRequest = this.requestTable.get(req.getFilePath());
             if (null == expectedRequest) {
                 log.warn("this mmap request expired, maybe cause timeout " + req.getFilePath() + " "
@@ -171,15 +174,18 @@ public class AllocateMappedFileService extends ServiceThread {
                 long beginTime = System.currentTimeMillis();
 
                 MappedFile mappedFile;
+                //开启堆外内存&&(主从切换开启 || 是主即id=0)
                 if (messageStore.isTransientStorePoolEnable()) {
                     try {
                         mappedFile = ServiceLoader.load(MappedFile.class).iterator().next();
                         mappedFile.init(req.getFilePath(), req.getFileSize(), messageStore.getTransientStorePool());
                     } catch (RuntimeException e) {
                         log.warn("Use default implementation.");
+                        //这种方式其实实惠利用到“ByteBuffer池子”的
                         mappedFile = new DefaultMappedFile(req.getFilePath(), req.getFileSize(), messageStore.getTransientStorePool());
                     }
                 } else {
+                    //这种方式就是普通的构建方式
                     mappedFile = new DefaultMappedFile(req.getFilePath(), req.getFileSize());
                 }
 

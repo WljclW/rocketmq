@@ -30,6 +30,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
  *          第一个：getServiceName()方法，这个方法会返回一个字符串，这个字符串代表当前线程的名字(暗示该线
  *                  程是干什么活的)
  *          第二个：Runable接口中的run方法
+ *      3. 继承于这个类实现的服务线程，在启动的时候，会自动执行 服务线程定义的run方法
  * */
 public abstract class ServiceThread implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);

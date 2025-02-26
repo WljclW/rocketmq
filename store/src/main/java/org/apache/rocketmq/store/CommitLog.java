@@ -1343,12 +1343,13 @@ public class CommitLog implements Swappable {
         return -1;
     }
 
+    //获取最小的偏移量
     public long getMinOffset() {
         MappedFile mappedFile = this.mappedFileQueue.getFirstMappedFile();
         if (mappedFile != null) {
-            if (mappedFile.isAvailable()) {
+            if (mappedFile.isAvailable()) {   //如果可用则返回
                 return mappedFile.getFileFromOffset();
-            } else {
+            } else { //否则返回下一个MappedFile的起始偏移量
                 return this.rollNextFile(mappedFile.getFileFromOffset());
             }
         }
@@ -1356,14 +1357,17 @@ public class CommitLog implements Swappable {
         return -1;
     }
 
+    //根据偏移量 和 消息长度 查找指定的消息
     public SelectMappedBufferResult getMessage(final long offset, final int size) {
         //从配置文件中读取 设定的(一个)MappedFile文件的大小。。默认值是1GB
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMappedFileSizeCommitLog();
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, offset == 0);
         if (mappedFile != null) {
-            int pos = (int) (offset % mappedFileSize);
+            int pos = (int) (offset % mappedFileSize); //得到offset在目标MappedFile中的位置
+            //从MappedFile中的位置pos获取size长度的ByteBuffer
             SelectMappedBufferResult selectMappedBufferResult = mappedFile.selectMappedBuffer(pos, size);
             if (null != selectMappedBufferResult) {
+                //coldDataCheckService.isDataInPageCache(offset)判断指定的偏移量是否在页缓存(page cache)中
                 selectMappedBufferResult.setInCache(coldDataCheckService.isDataInPageCache(offset));
                 return selectMappedBufferResult;
             }

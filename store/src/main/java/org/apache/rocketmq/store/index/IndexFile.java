@@ -27,9 +27,15 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
 
+/**
+ * 【】默认一个Index文件包含2000万个条目
+ * rocketmq除了按照主题订阅消息，还引入了哈希索引机制
+ * RocketMQ引入哈希索引机制为消息建立索引，HashMap的设计包含两个基本点：哈希槽
+ *      与哈希冲突的链表结构
+ * */
 public class IndexFile {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-    private static int hashSlotSize = 4;
+    private static int hashSlotSize = 4; //每一个哈希槽占4字节
     /**
      * Each index's store unit. Format:
      * <pre>
@@ -45,7 +51,7 @@ public class IndexFile {
      */
     private static int indexSize = 20;
     private static int invalidIndex = 0;
-    private final int hashSlotNum;
+    private final int hashSlotNum; //哈希槽的数量
     private final int indexNum;
     private final int fileTotalSize;
     private final MappedFile mappedFile;
@@ -110,21 +116,28 @@ public class IndexFile {
         return this.mappedFile.destroy(intervalForcibly);
     }
 
+    /**
+     * key：消息索引；phyOffset：消息物理偏移量；storeTimestamp：消息存储时间戳
+     * 这个方法有一个严密的逻辑：如果哈希槽中存储的值为0或大于当前Index文件最大条目数或小于-1，表示该哈希
+     * 槽当前并没有与之对应的Index条目。
+     * */
+    //将 消息索引键 与 消息偏移量 的映射关系写入index文件的实现
     public boolean putKey(final String key, final long phyOffset, final long storeTimestamp) {
         if (this.indexHeader.getIndexCount() < this.indexNum) {
-            int keyHash = indexKeyHashMethod(key);
-            int slotPos = keyHash % this.hashSlotNum;
+            int keyHash = indexKeyHashMethod(key); //计算key的哈希码
+            int slotPos = keyHash % this.hashSlotNum; //计算key对应的哈希槽的下标
+            //计算key对应的哈希槽的物理地址(40字节的头部+下标*4字节index文件每个条目的长度)
             int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
 
             try {
-
-                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);
+                //这里会去拿参数key对应的哈希槽(每一个都是4字节)现在的值
+                int slotValue = this.mappedByteBuffer.getInt(absSlotPos); //拿出存当前消息前，key对应哈希槽的值————这个值就是在最后的索引
                 if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()) {
                     slotValue = invalidIndex;
                 }
 
+                //计算带存储消息 与 第一条消息时间戳 的差值，并换算为秒
                 long timeDiff = storeTimestamp - this.indexHeader.getBeginTimestamp();
-
                 timeDiff = timeDiff / 1000;
 
                 if (this.indexHeader.getBeginTimestamp() <= 0) {
@@ -134,18 +147,22 @@ public class IndexFile {
                 } else if (timeDiff < 0) {
                     timeDiff = 0;
                 }
-
+                /*计算新添加条目的起始物理偏移量absIndexPos————
+                       40字节的头部(固定40字节) +
+                       哈希槽数量*每一个哈希槽所占字节数(固定值4字节) +
+                       当前条目数量*每个条目所占的字节数(固定值20字节)
+                 */
                 int absIndexPos =
                     IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
                         + this.indexHeader.getIndexCount() * indexSize;
-
+                //下面依次将 哈希码、物理偏移量、时间差、
                 this.mappedByteBuffer.putInt(absIndexPos, keyHash);
                 this.mappedByteBuffer.putLong(absIndexPos + 4, phyOffset);
                 this.mappedByteBuffer.putInt(absIndexPos + 4 + 8, (int) timeDiff);
-                this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);
-
+                this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue); //index条目的最后4字节存储该哈希码上一个条目的index下标
+                //哈希槽中存储的是该哈希码对应的最新index条目的下标
                 this.mappedByteBuffer.putInt(absSlotPos, this.indexHeader.getIndexCount());
-
+                //更新index文件头部的信息
                 if (this.indexHeader.getIndexCount() <= 1) {
                     this.indexHeader.setBeginPhyOffset(phyOffset);
                     this.indexHeader.setBeginTimestamp(storeTimestamp);

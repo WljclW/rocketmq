@@ -32,7 +32,10 @@ import org.apache.rocketmq.store.SelectMappedBufferResult;
 import org.apache.rocketmq.store.TransientStorePool;
 import org.apache.rocketmq.store.config.FlushDiskType;
 
-//mappedfile是rocketmq内存映射的体现，同时这是一个接口，因此就规范了这种内存映射的操作
+/**
+ * 【mmap机制】通过将磁盘缓冲映射到用户进程缓冲区，从而避免了一次CPU拷贝，显著提高了io效率
+ * mappedfile是rocketmq内存映射的体现，同时这是一个接口，因此就规范了这种内存映射的操作
+ * */
 public interface MappedFile {
     /**
      * Returns the file name of the {@code MappedFile}.
