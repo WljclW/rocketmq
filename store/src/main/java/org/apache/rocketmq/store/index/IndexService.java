@@ -214,6 +214,9 @@ public class IndexService {
             DispatchRequest msg = req;
             String topic = msg.getTopic();
             String keys = msg.getKeys();
+            /**
+             * 如果该消息的物理偏移量小于Index文件中的物理偏移量，则说明是重复数据，忽略本次索引构建
+             * */
             if (msg.getCommitLogOffset() < endPhyOffset) {
                 return;
             }
@@ -227,7 +230,7 @@ public class IndexService {
                 case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE:
                     return;
             }
-
+            //如果消息的唯一键不为空，则添加到哈希索引中，以便加速根据唯一键检索消息
             if (req.getUniqKey() != null) {
                 indexFile = putKey(indexFile, msg, buildKey(topic, req.getUniqKey()));
                 if (indexFile == null) {

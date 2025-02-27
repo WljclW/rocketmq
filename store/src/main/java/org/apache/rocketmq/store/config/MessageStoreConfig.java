@@ -192,7 +192,7 @@ public class MessageStoreConfig {
     @ImportantField
     private int accessMessageInMemoryMaxRatio = 40;
     @ImportantField
-    private boolean messageIndexEnable = true;
+    private boolean messageIndexEnable = true; //是否启用消息索引功能
     private int maxHashSlotNum = 5000000;
     private int maxIndexNum = 5000000 * 4;
     private int maxMsgsNumBatch = 64;

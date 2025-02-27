@@ -149,6 +149,7 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
 
     @Override
     public void putMessagePositionInfoWrapper(DispatchRequest dispatchRequest) {
+        //根据主题 和 队列ID，获取对应的ConsumeQueue文件
         ConsumeQueueInterface cq = this.findOrCreateConsumeQueue(dispatchRequest.getTopic(), dispatchRequest.getQueueId());
         this.putMessagePositionInfoWrapper(cq, dispatchRequest);
     }

@@ -342,6 +342,11 @@ public class DefaultMessageStore implements MessageStore {
 
     /**
      * @throws IOException
+     * 【涉及到】
+     * 1. 检查上次是否是异常关闭
+     *      判断上一次退出是否正常。其实现机制是Broker在启动时创建${ROCKET_HOME}/store/abort文件，在退出时通过注
+     *      册JVM钩子函数删除abort文件。如果下一次启动时存在abort文件。说明Broker是异常退出的，CommitLog与
+     *      ConsumeQueue数据有可能不一致，需要进行修复
      */
     @Override
     public boolean load() {
@@ -2191,6 +2196,7 @@ public class DefaultMessageStore implements MessageStore {
 
         @Override
         public void dispatch(DispatchRequest request) {
+            //如果启动 消息索引功能，则进入if内部执行转发给index文件的逻辑
             if (DefaultMessageStore.this.messageStoreConfig.isMessageIndexEnable()) {
                 DefaultMessageStore.this.indexService.buildIndex(request);
             }
@@ -2810,6 +2816,7 @@ public class DefaultMessageStore implements MessageStore {
      * 1.当消息写入到commitLog后，ReputMessage会根据上一次分发消息的偏移量依次从commitLog文件中读取消息信息，写入
      *      到ConsumeQueue与IndexFile两个文件中，当然了，这里写入的只是消息的发送时间、在commitLog中的位置信息，完整
      *      的消息只有commitLog文件才存在。
+     * 2.broker服务器在启动的时候会启动reputMessageService服务，并初始化一个关键参数reputFromOffset
      */
     class ReputMessageService extends ServiceThread {
         //ReputMessageService从哪个物理偏移量开始把消息转发给ConsumeQueue和index文件，即重放到哪个位置了
@@ -2867,7 +2874,7 @@ public class DefaultMessageStore implements MessageStore {
                 然后再根据 reputFromOffset % mappedFileSize 获取 reputFromOffset 的相对偏移量
                 最后返回一个 SelectMappedBufferResult，这个 result 里面包装了从相对偏移量开始的一
                     段 ByteBuffer!!!
-                所以这个方法其实就是: 根据 reputFromOffset 获取要重放的 ByteBuffer
+                所以这个方法其实就是: 返回从 reputFromOffset 的全部有效数据(CommitLog文件)
                 * **/
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
 
@@ -2878,7 +2885,7 @@ public class DefaultMessageStore implements MessageStore {
                 try {
                     // 将截取的 ByteBuffer 的起始偏移量设置为 reputFromOffset
                     this.reputFromOffset = result.getStartOffset();
-
+                    /**for循环表示从ByteBuffer循环读取消息，一次读取一条并构建DispatchRequest对象*/
                     for (int readSize = 0; readSize < result.getSize() && reputFromOffset < DefaultMessageStore.this.getConfirmOffset() && doNext; ) {
                         //检验数据
                         DispatchRequest dispatchRequest =
@@ -2890,7 +2897,7 @@ public class DefaultMessageStore implements MessageStore {
                             doNext = false;
                             break;
                         }
-
+                        /**如果成功构建DispatchRequest对象，则进行分发，并记录一些东西*/
                         if (dispatchRequest.isSuccess()) {
                             if (size > 0) {
                                 //分发数据
@@ -3001,7 +3008,7 @@ public class DefaultMessageStore implements MessageStore {
             while (!this.isStopped()) {
                 try {  //先休息1ms，然后执行doReput(将消息转发到ConsumeQueue和index文件)
                     TimeUnit.MILLISECONDS.sleep(1);
-                    this.doReput();
+                    this.doReput(); //消息转发
                 } catch (Exception e) {
                     DefaultMessageStore.LOGGER.warn(this.getServiceName() + " service has exception. ", e);
                 }

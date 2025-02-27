@@ -788,6 +788,7 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         queueOffsetOperator.increaseQueueOffset(topicQueueKey, messageNum);
     }
 
+    //将消息的物理偏移量、长度等远信息存储到ByteBuffer。如果通过校验会追加到ConsumeQueue文件中(⚠不是落盘)
     private boolean putMessagePositionInfo(final long offset, final int size, final long tagsCode,
         final long cqOffset) {
 
@@ -837,6 +838,7 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
                 }
             }
             this.setMaxPhysicOffset(offset + size);
+            //将内容追加到ConsumeQueue的内存映射文件中(只追加，不刷盘)。ConsumeQueue固定是异步刷盘
             return mappedFile.appendMessage(this.byteBufferIndex.array());
         }
         return false;
