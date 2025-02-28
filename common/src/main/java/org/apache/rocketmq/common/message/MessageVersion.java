@@ -18,6 +18,11 @@ package org.apache.rocketmq.common.message;
 
 import java.nio.ByteBuffer;
 
+/**
+ * 【总述】
+ * 【作用】
+ * 1. 在checkMessageAndReturnSize方法中，用利用这个枚举类判断魔数，然后根据魔数判断消息版本
+ * */
 public enum MessageVersion {
 
     MESSAGE_VERSION_V1(MessageDecoder.MESSAGE_MAGIC_CODE) {

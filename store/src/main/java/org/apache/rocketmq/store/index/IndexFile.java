@@ -89,7 +89,7 @@ public class IndexFile {
         return this.fileTotalSize;
     }
 
-    public void load() {
+    public void load() { //加载index文件头信息。其实就是将映射文件的属性值设置给indexHeader
         this.indexHeader.load();
     }
 

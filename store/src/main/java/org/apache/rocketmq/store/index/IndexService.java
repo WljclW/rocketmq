@@ -56,6 +56,7 @@ public class IndexService {
     }
 
     public boolean load(final boolean lastExitOK) {
+        //获取路径下的所有文件名称，并排序
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
         if (files != null) {
@@ -63,9 +64,10 @@ public class IndexService {
             Arrays.sort(files);
             for (File file : files) {
                 try {
+                    //遍历每一个文件尝试构建IndexFile对象
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
                     f.load();
-
+                    //如果上次退出不正常且当前索引文件的 最后一个index条目的时间戳 大于 检查点的时间戳，则销毁该索引文件。
                     if (!lastExitOK) {
                         if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()
                             .getIndexMsgTimestamp()) {
@@ -75,7 +77,7 @@ public class IndexService {
                     }
 
                     LOGGER.info("load index file OK, " + f.getFileName());
-                    this.indexFileList.add(f);
+                    this.indexFileList.add(f); //加载成功的index文件添加进列表
                 } catch (IOException e) {
                     LOGGER.error("load file {} error", file, e);
                     return false;

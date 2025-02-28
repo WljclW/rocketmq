@@ -43,7 +43,7 @@ public class IndexHeader {
     private static int indexCountIndex = 36;
     private final ByteBuffer byteBuffer;
     private final AtomicLong beginTimestamp = new AtomicLong(0);
-    private final AtomicLong endTimestamp = new AtomicLong(0);
+    private final AtomicLong endTimestamp = new AtomicLong(0); //当前索引文件中存储最后一条索引条目的时间戳
     private final AtomicLong beginPhyOffset = new AtomicLong(0);
     private final AtomicLong endPhyOffset = new AtomicLong(0);
     private final AtomicInteger hashSlotCount = new AtomicInteger(0);

@@ -106,7 +106,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     protected MappedByteBuffer mappedByteBufferWaitToClean = null;
     protected long swapMapTime = 0L;
-    protected long mappedByteBufferAccessCountSinceLastSwap = 0L;
+    protected long mappedByteBufferAccessCountSinceLastSwap = 0L; //从上次swap到当前时间，该文件被访问的次数
 
     /**
      * If this mapped file belongs to consume queue, this field stores store-timestamp of first message referenced
@@ -323,7 +323,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
 
     @Override
     public long getFileFromOffset() {
-        return this.fileFromOffset;
+        return this.fileFromOffset; //返回文件偏移量————等同于文件名
     }
 
     @Override
@@ -771,10 +771,15 @@ public class DefaultMappedFile extends AbstractMappedFile {
         return mappedByteBuffer;
     }
 
+    /**
+     * 【总述】获取一个子缓冲区，该子缓冲区的内容将从此缓冲区的内容中派生。
+     * slice方法的解释：
+     *      slice() 方法创建的缓冲区与原始缓冲区共享底层数据，但它有自己的位置（Position）、限制（Limit）和标记（Mark）。
+     * */
     @Override
     public ByteBuffer sliceByteBuffer() {
         this.mappedByteBufferAccessCountSinceLastSwap++;
-        return this.mappedByteBuffer.slice();
+        return this.mappedByteBuffer.slice(); // 返回一个子缓冲区，该子缓冲区的内容将从此缓冲区的内容中派生。
     }
 
     @Override

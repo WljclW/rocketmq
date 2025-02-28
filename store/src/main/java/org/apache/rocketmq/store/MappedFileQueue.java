@@ -198,14 +198,15 @@ public class MappedFileQueue implements Swappable {
 
         for (MappedFile file : this.mappedFiles) {
             long fileTailOffset = file.getFileFromOffset() + this.mappedFileSize;
-            if (fileTailOffset > offset) {
-                if (offset >= file.getFileFromOffset()) {
+            //只保留offset之前的文件————因此如果一个文件末尾的偏移量都不大于offset，则该文件必备保留(说明这个文件一定是在offset之前)
+            if (fileTailOffset > offset) { //需要特别关注一下未见末尾偏移量大于offset的文件
+                if (offset >= file.getFileFromOffset()) { //说明file中是有有效偏移的
                     file.setWrotePosition((int) (offset % this.mappedFileSize));
                     file.setCommittedPosition((int) (offset % this.mappedFileSize));
                     file.setFlushedPosition((int) (offset % this.mappedFileSize));
-                } else {
+                } else/* offset < file.getFileFromOffset() */ { //offset小于文件名(文件名其实就是文件中最小的偏移量)，说明这个文件是有效文件之后创建的需要删除
                     file.destroy(1000);
-                    willRemoveFiles.add(file);
+                    willRemoveFiles.add(file); //将需要删除的文件添加到一个列表willRemoveFiles
                 }
             }
         }
@@ -239,13 +240,17 @@ public class MappedFileQueue implements Swappable {
 
     public boolean load() {
         File dir = new File(this.storePath);
-        File[] ls = dir.listFiles();
+        File[] ls = dir.listFiles(); //列出文件夹下的所有文件
         if (ls != null) {
             return doLoad(Arrays.asList(ls));
         }
         return true;
     }
 
+    /**
+     * 【总述】根据CommitLog文件夹下的文件，对每一个文件创建内存映射文件(mappedFile)，并保存到mappedFiles列表中。
+     * 【返回值】true加载成功；false加载失败
+     * */
     public boolean doLoad(List<File> files) {
         // ascending order
         files.sort(Comparator.comparing(File::getName));
@@ -256,24 +261,26 @@ public class MappedFileQueue implements Swappable {
                 continue;
             }
 
-            if (file.length() == 0 && i == files.size() - 1) {
+            if (file.length() == 0 && i == files.size() - 1) { //最后一个文件没有东西，删除最后一个文件
                 boolean ok = file.delete();
                 log.warn("{} size is 0, auto delete. is_ok: {}", file, ok);
                 continue;
             }
 
-            if (file.length() != this.mappedFileSize) {
+            if (file.length() != this.mappedFileSize) { //如果存在一个文件大小不匹配，就返回false表示加载失败
                 log.warn(file + "\t" + file.length()
                         + " length not matched message store config value, please check it manually");
                 return false;
             }
 
             try {
+                /**创建mappedFile文件(构造器中会调用init方法，init中会进行一些设置并完成内存映射文件创建)*/
                 MappedFile mappedFile = new DefaultMappedFile(file.getPath(), mappedFileSize);
-
+                //设置mappedFile的写指针、刷盘指针和提交指针
                 mappedFile.setWrotePosition(this.mappedFileSize);
                 mappedFile.setFlushedPosition(this.mappedFileSize);
                 mappedFile.setCommittedPosition(this.mappedFileSize);
+                //将创建的MappedFile添加到mappedFiles中————mappedFile理解为一片缓冲区（也就是 内存映射文件）的抽象
                 this.mappedFiles.add(mappedFile);
                 log.info("load " + file.getPath() + " OK");
             } catch (IOException e) {

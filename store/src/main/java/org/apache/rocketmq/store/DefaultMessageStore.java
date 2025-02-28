@@ -353,7 +353,7 @@ public class DefaultMessageStore implements MessageStore {
         boolean result = true;
 
         try {
-            boolean lastExitOK = !this.isTempFileExist();
+            boolean lastExitOK = !this.isTempFileExist(); //判断上一次是否正常退出 并 记录日志
             LOGGER.info("last shutdown {}, store path root dir: {}",
                 lastExitOK ? "normally" : "abnormally", messageStoreConfig.getStorePathRootDir());
 
@@ -368,9 +368,10 @@ public class DefaultMessageStore implements MessageStore {
             }
 
             if (result) {
-                this.storeCheckpoint =
+                this.storeCheckpoint =  //读取配置文件的路径 并 创建StoreCheckpoint对象
                     new StoreCheckpoint(
                         StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
+                //读取 StoreCheckpoint文件中的masterFlushedOffset的值，并设置到CommitLog对象中
                 this.masterFlushedOffset = this.storeCheckpoint.getMasterFlushedOffset();
                 setConfirmOffset(this.storeCheckpoint.getConfirmPhyOffset());
 
@@ -1885,6 +1886,9 @@ public class DefaultMessageStore implements MessageStore {
         return this.brokerConfig.isRecoverConcurrently() && !this.messageStoreConfig.isEnableRocksDBStore();
     }
 
+    /**
+     * 恢复ConsumeQueue、CommitLog、OffsetTable，并记录日志
+     * */
     private void recover(final boolean lastExitOK) throws RocksDBException {
         boolean recoverConcurrently = this.isRecoverConcurrently();
         LOGGER.info("message store recover mode: {}", recoverConcurrently ? "concurrent" : "normal");

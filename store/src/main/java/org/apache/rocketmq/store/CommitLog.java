@@ -159,8 +159,13 @@ public class CommitLog implements Swappable {
     }
 
     public boolean load() {
-        boolean result = this.mappedFileQueue.load();
+        boolean result = this.mappedFileQueue.load(); //加载映射文件队列(其实就是根据CommitLog目录的所有文件创建内存映射文件，并将创建的内存映射文件添加到列表中)
         if (result && !defaultMessageStore.getMessageStoreConfig().isDataReadAheadEnable()) {
+            /**
+             * MADV_RANDOM是 Linux 系统中的一个内存建议标志（Memory Advice），用于告诉操作系统文件将以随机顺序访问。当设置
+             *      为 MADV_RANDOM 时，操作系统会禁用预读功能，避免不必要的磁盘 I/O 操作。
+             * 在随机IO的情况下，禁用"预读功能"会避免很多的磁盘IO读操作，从而提高系统的性能。
+             * */
             scanFileAndSetReadMode(LibC.MADV_RANDOM);
         }
         this.mappedFileQueue.checkSelf();
@@ -324,9 +329,9 @@ public class CommitLog implements Swappable {
         boolean checkDupInfo = this.defaultMessageStore.getMessageStoreConfig().isDuplicationEnable();
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
         if (!mappedFiles.isEmpty()) {
-            // Began to recover from the last third file
+            // Began to recover from the last third file....从倒数第三个文件进行恢复，为什么？？？
             int index = mappedFiles.size() - 3;
-            if (index < 0) {
+            if (index < 0) { //如果mappedfile列表不足3个，则从第一个开始
                 index = 0;
             }
 
@@ -341,22 +346,22 @@ public class CommitLog implements Swappable {
                 DispatchRequest dispatchRequest = this.checkMessageAndReturnSize(byteBuffer, checkCRCOnRecover, checkDupInfo);
                 int size = dispatchRequest.getMsgSize();
                 // Normal data
-                if (dispatchRequest.isSuccess() && size > 0) {
+                if (dispatchRequest.isSuccess() && size > 0) { //说明消息正确
                     lastValidMsgPhyOffset = processOffset + mappedFileOffset;
-                    mappedFileOffset += size;
+                    mappedFileOffset += size; // mappedFileOffset向前移动本条消息的长度
                     this.getMessageStore().onCommitLogDispatch(dispatchRequest, doDispatch, mappedFile, true, false);
                 }
                 // Come the end of the file, switch to the next file Since the
                 // return 0 representatives met last hole,
                 // this can not be included in truncate offset
-                else if (dispatchRequest.isSuccess() && size == 0) {
+                else if (dispatchRequest.isSuccess() && size == 0) { //说明已经到达当前文件的末尾
                     this.getMessageStore().onCommitLogDispatch(dispatchRequest, doDispatch, mappedFile, true, true);
                     index++;
-                    if (index >= mappedFiles.size()) {
+                    if (index >= mappedFiles.size()) { //如果列表中没有下一个mappedFile
                         // Current branch can not happen
                         log.info("recover last 3 physics file over, last mapped file " + mappedFile.getFileName());
                         break;
-                    } else {
+                    } else {  //如果列表中还有下一个mappedFile
                         mappedFile = mappedFiles.get(index);
                         byteBuffer = mappedFile.sliceByteBuffer();
                         processOffset = mappedFile.getFileFromOffset();
@@ -365,7 +370,7 @@ public class CommitLog implements Swappable {
                     }
                 }
                 // Intermediate file read error
-                else if (!dispatchRequest.isSuccess()) {
+                else if (!dispatchRequest.isSuccess()) { //
                     if (size > 0) {
                         log.warn("found a half message at {}, it will be truncated.", processOffset + mappedFileOffset);
                     }
@@ -420,6 +425,14 @@ public class CommitLog implements Swappable {
 
     /**
      * check the message and returns the message size
+     * 【总述】检查消息的合法性 并 返回消息的大小
+     * 【参数解释】
+     *      byteBuffer：表示消息的字节缓冲区
+     *      checkCRC：是否检查消息的CRC(冗余码)
+     *      checkDupInfo：是否检查消息的重复性
+     *      readBody：是否读取消息体
+     * 【返回值】消息的大小
+     * 【其他】
      *
      * @return 0 Come the end of the file // >0 Normal messages // -1 Message checksum failure
      */
@@ -708,7 +721,7 @@ public class CommitLog implements Swappable {
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
         if (!mappedFiles.isEmpty()) {
             // Looking beginning to recover from which file
-            int index = mappedFiles.size() - 1;
+            int index = mappedFiles.size() - 1; //从倒数第一个文件开始恢复
             MappedFile mappedFile = null;
             for (; index >= 0; index--) {
                 mappedFile = mappedFiles.get(index);
