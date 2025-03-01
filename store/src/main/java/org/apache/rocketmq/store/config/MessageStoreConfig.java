@@ -23,6 +23,9 @@ import org.apache.rocketmq.store.ConsumeQueue;
 import org.apache.rocketmq.store.StoreType;
 import org.apache.rocketmq.store.queue.BatchConsumeQueue;
 
+/**
+ * 【总述】定义和管理消息存储相关的各种参数和配置。它的主要作用是为消息存储模块提供灵活的配置选项
+ * */
 public class MessageStoreConfig {
 
     public static final String MULTI_PATH_SPLITTER = System.getProperty("rocketmq.broker.multiPathSplitter", ",");
@@ -156,7 +159,7 @@ public class MessageStoreConfig {
     private int diskMaxUsedSpaceRatio = 75;
     // The number of hours to keep a log file before deleting it (in hours)
     @ImportantField
-    private int fileReservedTime = 72;
+    private int fileReservedTime = 72; //超过72小时自动删除
     @ImportantField
     private int deleteFileBatchMax = 10;
     // Flow control for ConsumeQueue

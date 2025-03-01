@@ -247,13 +247,20 @@ public class UtilAll {
                 STORE_LOG.error("Error when measuring disk space usage, file doesn't exist on this path: {}", path);
                 return -1;
             }
-
+            //通过getTotalSpace()获取路径path所在磁盘分区的总容量
             long totalSpace = file.getTotalSpace();
 
             if (totalSpace > 0) {
-                long usedSpace = totalSpace - file.getFreeSpace();
-                long usableSpace = file.getUsableSpace();
+                /*通过getFreeSpace()获取文件所在磁盘分区的剩余容量(不考虑当前用户的权限————与getUsableSpace()的区别点)*/
+                long usedSpace = totalSpace - file.getFreeSpace(); //usedSpace计算出已经占用的空间
+                long usableSpace = file.getUsableSpace(); //getUsableSpace()获取磁盘分区对 当前用户 可用的空间
+                /**usedSpace是使用的空间，usableSpace是剩下的当前用户可以使用的空间*/
                 long entireSpace = usedSpace + usableSpace;
+                /**
+                 * 为了提高精度，下面计算的时候会将usedSpace乘以100再去计算。。最终计算result的时候需要再
+                 * 除以100还原。。因此下面式子的100用于提高精度
+                 * */
+                //roundNum是不能整除的时候，需要向上取整
                 long roundNum = 0;
                 if (usedSpace * 100 % entireSpace != 0) {
                     roundNum = 1;

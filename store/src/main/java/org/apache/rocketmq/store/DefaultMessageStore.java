@@ -1806,7 +1806,7 @@ public class DefaultMessageStore implements MessageStore {
 
         this.scheduledExecutorService.scheduleAtFixedRate(new AbstractBrokerRunnable(this.getBrokerIdentity()) {
             @Override
-            public void run0() {
+            public void run0() { //每隔10s调度一次cleanFilesPeriodically()，检查是否有过期文件需要删除
                 DefaultMessageStore.this.cleanFilesPeriodically();
             }
         }, 1000 * 60, this.messageStoreConfig.getCleanResourceInterval(), TimeUnit.MILLISECONDS);
@@ -2223,6 +2223,7 @@ public class DefaultMessageStore implements MessageStore {
 
         private int forceCleanFailedTimes = 0;
 
+        /*获取磁盘的警告阈值比例。。用于判断磁盘分区的使用率是否达到了需要触发警告或采取特定清理措施的程度。*/
         double getDiskSpaceWarningLevelRatio() {
             double finalDiskSpaceWarningLevelRatio;
             if ("".equals(diskSpaceWarningLevelRatio)) {
@@ -2241,14 +2242,20 @@ public class DefaultMessageStore implements MessageStore {
             return finalDiskSpaceWarningLevelRatio;
         }
 
+        /**
+         * 【总述】方法用于返回 配置文件中磁盘空间使用百分比的配置值
+         * 通过系统参数Rrocketmq.broker.diskSpaceCleanForcibly-Ratio进行设置，默认0.85。如果磁盘分区使
+         * 用超过该阈值，建议立即执行过期文件删除，但不会拒绝写入新消息
+         * */
         double getDiskSpaceCleanForciblyRatio() {
             double finalDiskSpaceCleanForciblyRatio;
             if ("".equals(diskSpaceCleanForciblyRatio)) {
+                //说明没有配置，则用下一行读取默认值————85
                 finalDiskSpaceCleanForciblyRatio = DefaultMessageStore.this.getMessageStoreConfig().getDiskSpaceCleanForciblyRatio() / 100.0;
             } else {
                 finalDiskSpaceCleanForciblyRatio = Double.parseDouble(diskSpaceCleanForciblyRatio);
             }
-
+            /*下面是一个区间逻辑，表示这个使用比例只能位于区间[0.30,0.85]*/
             if (finalDiskSpaceCleanForciblyRatio > 0.85) {
                 finalDiskSpaceCleanForciblyRatio = 0.85;
             }
@@ -2264,7 +2271,7 @@ public class DefaultMessageStore implements MessageStore {
             DefaultMessageStore.LOGGER.info("executeDeleteFilesManually was invoked");
         }
 
-        public void run() {
+        public void run() { /*删除过期文件，默认72h*/
             try {
                 this.deleteExpiredFiles();
                 this.reDeleteHangedFile();
@@ -2275,13 +2282,18 @@ public class DefaultMessageStore implements MessageStore {
 
         private void deleteExpiredFiles() {
             int deleteCount = 0;
+            //文件保留时间。超过此值，认为是过期文件，可以删除
             long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime();
+            //删除物理文件的间隔时间
             int deletePhysicFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteCommitLogFilesInterval();
+            //
             int destroyMappedFileIntervalForcibly = DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
             int deleteFileBatchMax = DefaultMessageStore.this.getMessageStoreConfig().getDeleteFileBatchMax();
-
+            /*deleteWhen参数指定每天固定时间执行一次删除过期文件操作，默认是凌晨4点*/
             boolean isTimeUp = this.isTimeToDelete();
+            /*检查磁盘空间是否充足，不足的时候isUsageExceedsThreshold字段为true*/
             boolean isUsageExceedsThreshold = this.isSpaceToDelete();
+            /*(预留)手动删除的方式，manualDeleteFileSeveralTimes字段的值大于0即可*/
             boolean isManualDelete = this.manualDeleteFileSeveralTimes > 0;
 
             if (isTimeUp || isUsageExceedsThreshold || isManualDelete) {
@@ -2344,15 +2356,26 @@ public class DefaultMessageStore implements MessageStore {
             return false;
         }
 
+        /**
+         * 【总述】根据磁盘分区的使用率和配置参数，决定是否需要触发清理操作
+         * 【方法逻辑上分为三部分处理】CommitLog的逻辑、ConsumeQueue的逻辑、是否存在复制的逻辑
+         * */
         private boolean isSpaceToDelete() {
-            cleanImmediately = false;
-
+            cleanImmediately = false; //是否需要进行立即清理。标志变量
+            /*下面两行，获取CommitLog的存储路径*/
             String commitLogStorePath = DefaultMessageStore.this.getMessageStoreConfig().getStorePathCommitLog();
             String[] storePaths = commitLogStorePath.trim().split(MixAll.MULTI_PATH_SPLITTER);
+            //
             Set<String> fullStorePath = new HashSet<>();
-            double minPhysicRatio = 100;
-            String minStorePath = null;
+            double minPhysicRatio = 100; //最小的磁盘使用率
+            String minStorePath = null; //最小的磁盘使用率 的相对路径
+            /**
+             * for循环的完整逻辑：遍历每一个物理存储路径，利用getDiskPartitionSpaceUsedPercent()计算磁盘的使用
+             *      率；更新minPhysicRatio 以及 minStorePath这两个变量；如果某个路径的磁盘使用率超过强制清理阈
+             *      值，则则这个路径添加到fullStorePath
+             * */
             for (String storePathPhysic : storePaths) {
+                /*计算出磁盘分区的使用比例physicRatio*/
                 double physicRatio = UtilAll.getDiskPartitionSpaceUsedPercent(storePathPhysic);
                 if (minPhysicRatio > physicRatio) {
                     minPhysicRatio = physicRatio;
@@ -2363,7 +2386,7 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
             DefaultMessageStore.this.commitLog.setFullStorePaths(fullStorePath);
-            if (minPhysicRatio > getDiskSpaceWarningLevelRatio()) {
+            if (minPhysicRatio > getDiskSpaceWarningLevelRatio()) { /*如果 最小磁盘使用率 超过 警告阈值*/
                 boolean diskFull = DefaultMessageStore.this.runningFlags.getAndMakeDiskFull();
                 if (diskFull) {
                     DefaultMessageStore.LOGGER.error("physic disk maybe full soon " + minPhysicRatio +
@@ -2372,7 +2395,7 @@ public class DefaultMessageStore implements MessageStore {
 
                 cleanImmediately = true;
                 return true;
-            } else if (minPhysicRatio > getDiskSpaceCleanForciblyRatio()) {
+            } else if (minPhysicRatio > getDiskSpaceCleanForciblyRatio()) { /*如果minPhysicRatio超过 强制清理阈值*/
                 cleanImmediately = true;
                 return true;
             } else {
@@ -2383,6 +2406,9 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
 
+            /**
+             * 类似于CommitLog磁盘检查，但针对 ConsumeQueue 的存储路径
+             * */
             String storePathLogics = StorePathConfigHelper
                 .getStorePathConsumeQueue(DefaultMessageStore.this.getMessageStoreConfig().getStorePathRootDir());
             double logicsRatio = UtilAll.getDiskPartitionSpaceUsedPercent(storePathLogics);
@@ -2403,11 +2429,11 @@ public class DefaultMessageStore implements MessageStore {
                     DefaultMessageStore.LOGGER.info("logics disk space OK " + logicsRatio + ", so mark disk ok");
                 }
             }
-
+            /**下面是多副本分区的删除逻辑*/
             double ratio = DefaultMessageStore.this.getMessageStoreConfig().getDiskMaxUsedSpaceRatio() / 100.0;
             int replicasPerPartition = DefaultMessageStore.this.getMessageStoreConfig().getReplicasPerDiskPartition();
             // Only one commitLog in node
-            if (replicasPerPartition <= 1) {
+            if (replicasPerPartition <= 1) { /*如果没有启用多副本机制，直接比较 磁盘使用率 和 最大允许使用率*/
                 if (minPhysicRatio < 0 || minPhysicRatio > ratio) {
                     DefaultMessageStore.LOGGER.info("commitLog disk maybe full soon, so reclaim space, " + minPhysicRatio);
                     return true;
@@ -2418,7 +2444,7 @@ public class DefaultMessageStore implements MessageStore {
                     return true;
                 }
                 return false;
-            } else {
+            } else { /*计算ConsumeLog磁盘的使用率（logicalRatio），并与配置的阈值进行比较。*/
                 long majorFileSize = DefaultMessageStore.this.getMajorFileSize();
                 long partitionLogicalSize = UtilAll.getDiskPartitionTotalSpace(minStorePath) / replicasPerPartition;
                 double logicalRatio = 1.0 * majorFileSize / partitionLogicalSize;

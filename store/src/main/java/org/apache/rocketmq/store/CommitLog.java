@@ -1485,20 +1485,29 @@ public class CommitLog implements Swappable {
         public void run() {
             CommitLog.log.info(this.getServiceName() + " service started");
             while (!this.isStopped()) {
+                // 每interval毫秒执行一次，默认是200ms
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitIntervalCommitLog();
-
+                //每次执行时，最小的提交页数，如果不到这个数，本次执行忽略
                 int commitDataLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogLeastPages();
-
+                //两次真实提交的最大间隔，默认200ms
                 int commitDataThoroughInterval =
                     CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogThoroughInterval();
 
                 long begin = System.currentTimeMillis();
+                /*
+                下面的if表示，如果距离上次提交太久了以至于超过commitDataThoroughInterval，就将最小提交页
+                数commitDataLeastPages置为0。。。换句话说，就是很久都没有提交了，有点数据就提交，不用等了
+                */
                 if (begin >= (this.lastCommitTimestamp + commitDataThoroughInterval)) {
                     this.lastCommitTimestamp = begin;
                     commitDataLeastPages = 0;
                 }
 
                 try {
+                    /**
+                     * 将待提交数据提交到物理文件的内存映射内存区，如果返回false，并不代表提交失败，而是表示有
+                     * 数据提交成功了，唤醒刷盘线程执行刷盘操作
+                     * */
                     boolean result = CommitLog.this.mappedFileQueue.commit(commitDataLeastPages);
                     long end = System.currentTimeMillis();
                     if (!result) {
@@ -1533,11 +1542,13 @@ public class CommitLog implements Swappable {
             CommitLog.log.info(this.getServiceName() + " service started");
 
             while (!this.isStopped()) {
+                /*flushCommitLogTimed为true表示使用Thread.sleep方法等待；为false表示使用awiat方法等待*/
                 boolean flushCommitLogTimed = CommitLog.this.defaultMessageStore.getMessageStoreConfig().isFlushCommitLogTimed();
-
+                //FlushRealTimeService线程的运行时间间隔，默认500ms
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushIntervalCommitLog();
+                //只有有flushPhysicQueueLeastPages页需要刷盘时，此次执行任务时才会进行刷盘。默认4
                 int flushPhysicQueueLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushCommitLogLeastPages();
-
+                //两次真实刷盘的最大间隔，默认10s
                 int flushPhysicQueueThoroughInterval =
                     CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushCommitLogThoroughInterval();
 
@@ -1545,6 +1556,11 @@ public class CommitLog implements Swappable {
 
                 // Print flush progress
                 long currentTimeMillis = System.currentTimeMillis();
+                /*
+                这里的逻辑与CommitRealTimeService.run的逻辑是类似的。。距离上一次刷盘时间太久了————即超过
+                了flushPhysicQueueThoroughInterval，就将flushPhysicQueueLeastPages置为0。。。简单点说，
+                很久都没有刷盘了，有点数据就刷盘，不用等了，也别限制至少得刷4页了
+                * */
                 if (currentTimeMillis >= (this.lastFlushTimestamp + flushPhysicQueueThoroughInterval)) {
                     this.lastFlushTimestamp = currentTimeMillis;
                     flushPhysicQueueLeastPages = 0;
@@ -1565,7 +1581,7 @@ public class CommitLog implements Swappable {
                     long begin = System.currentTimeMillis();
                     CommitLog.this.mappedFileQueue.flush(flushPhysicQueueLeastPages);
                     long storeTimestamp = CommitLog.this.mappedFileQueue.getStoreTimestamp();
-                    if (storeTimestamp > 0) {
+                    if (storeTimestamp > 0) { //更新checkpoint文件的CommitLog文件更新时间戳
                         CommitLog.this.defaultMessageStore.getStoreCheckpoint().setPhysicMsgTimestamp(storeTimestamp);
                     }
                     long past = System.currentTimeMillis() - begin;
@@ -1611,7 +1627,7 @@ public class CommitLog implements Swappable {
     }
 
     public static class GroupCommitRequest {
-        private final long nextOffset;
+        private final long nextOffset; //刷盘点偏移量
         // Indicate the GroupCommitRequest result: true or false
         private final CompletableFuture<PutMessageStatus> flushOKFuture = new CompletableFuture<>();
         private volatile int ackNums = 1;
@@ -2203,18 +2219,27 @@ public class CommitLog implements Swappable {
             // Synchronization flush
             if (FlushDiskType.SYNC_FLUSH == CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
                 final GroupCommitService service = (GroupCommitService) this.flushCommitLogService;
-                if (messageExt.isWaitStoreMsgOK()) {
+                if (messageExt.isWaitStoreMsgOK()) { //需要等待存储确认
                     GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes(), CommitLog.this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                     flushDiskWatcher.add(request);
                     service.putRequest(request);
                     return request.future();
-                } else {
+                } else { //不需要等待存储确认
                     service.wakeup();
                     return CompletableFuture.completedFuture(PutMessageStatus.PUT_OK);
                 }
             }
-            // Asynchronous flush
-            else {
+
+            else { // Asynchronous flush
+                /*
+                * 根据isTransientStorePoolEnable()返回值来判断使用那种服务
+                * 该方法的逻辑：
+                *       条件1：开始堆外内存的使用————配置MessageStoreConfig.transientStorePoolEnable
+                *       条件2：允许broker的主备角色切换————配置BrokerConfig.enableControllerMode
+                *            或者
+                *              broker不是从
+                *       条件1 和 条件2 都为true，该方法的返回值才是true
+                * */
                 if (!CommitLog.this.defaultMessageStore.isTransientStorePoolEnable()) {
                     flushCommitLogService.wakeup();
                 } else {
