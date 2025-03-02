@@ -23,7 +23,7 @@ package org.apache.rocketmq.remoting.protocol.heartbeat;
 /**
  * Message model
  */
-public enum MessageModel {
+public enum MessageModel { /*消息消费的模式：集群模式、广播模式。默认是集群模式*/
     /**
      * broadcast
      */

@@ -89,6 +89,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import static org.apache.rocketmq.remoting.rpc.ClientMetadata.topicRouteData2EndpointsForStaticTopic;
 
 /*！！！！！！！！！！！重要
+   【总述】一个JVM中所有消费者、生产者持有同一个MQClientInstance，且MQClientInstance只会启动一次
  *1. @description: 无论是生产者还是消费者，在底层都要和Broker打交道，进行消息收发。在源码层面，底层的功能被抽
         象成同一个类，负责和Broker打交道,就是这个类
      MQClientInstance封装了rocketmq的网络处理请求API。。无论是消息生产者，还是消息消费者，和namesrv以及broker
@@ -570,6 +571,7 @@ public class MQClientInstance {
         return false;
     }
 
+    /**向所有的broker发送心跳包*/
     public boolean sendHeartbeatToAllBrokerWithLock() {
         if (this.lockHeartbeat.tryLock()) {
             try {

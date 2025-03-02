@@ -40,13 +40,15 @@ public interface MQPushConsumer extends MQConsumer {
      */
     @Deprecated
     void registerMessageListener(MessageListener messageListener);
-
+    //注册并发消息事件监听器
     void registerMessageListener(final MessageListenerConcurrently messageListener);
-
+    //注册顺序消息事件监听器
     void registerMessageListener(final MessageListenerOrderly messageListener);
 
     /**
      * Subscribe some topic
+     * 【总述】基于主题订阅消息
+     * 【参数】topic 主题、subExpression 消息过滤表达式(TAG 或者 SQL92表达式)
      *
      * @param subExpression subscription expression.it only support or operation such as "tag1 || tag2 || tag3" <br> if
      * null or * expression,meaning subscribe
@@ -59,6 +61,8 @@ public interface MQPushConsumer extends MQConsumer {
      * is recommended.
      *
      * Subscribe some topic
+     * 【总述(注解：弃用)】订阅消息时，消息过滤使用类模式
+     * 【参数】topic 主题、fullClassName 消息过滤类的全路径名、filterClassSource 消息过滤类源代码
      *
      * @param fullClassName full class name,must extend org.apache.rocketmq.common.filter. MessageFilter
      * @param filterClassSource class source code,used UTF-8 file encoding,must be responsible for your code safety
@@ -88,6 +92,7 @@ public interface MQPushConsumer extends MQConsumer {
 
     /**
      * Unsubscribe consumption some topic
+     * 取消消息订阅
      *
      * @param topic message topic
      */

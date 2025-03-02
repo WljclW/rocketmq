@@ -31,6 +31,8 @@ public interface MQConsumer extends MQAdmin {
     /**
      * If consuming of messages failed, they will be sent back to the brokers for another delivery attempt after
      * interval specified in delay level.
+     * 消息消费失败时，将消息重新发送到Broker服务器
+     * 【参数】msg 消息、delayLevel 延迟等级
      */
     @Deprecated
     void sendMessageBack(final MessageExt msg, final int delayLevel) throws RemotingException,
@@ -45,7 +47,7 @@ public interface MQConsumer extends MQAdmin {
 
     /**
      * Fetch message queues from consumer cache pertaining to the given topic.
-     *
+     * 获取消费者对topic分配了哪些消息队列
      * @param topic message topic
      * @return queue set
      */
