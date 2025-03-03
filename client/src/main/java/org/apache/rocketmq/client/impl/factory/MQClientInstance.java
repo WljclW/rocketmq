@@ -339,7 +339,7 @@ public class MQClientInstance {
 
     public void start() throws MQClientException {
 
-        synchronized (this) {
+        synchronized (this) { /**同步块，避免多线程下，start方法执行多次*/
             //根据服务器的状态执行相应的操作
             switch (this.serviceState) {
                 case CREATE_JUST:

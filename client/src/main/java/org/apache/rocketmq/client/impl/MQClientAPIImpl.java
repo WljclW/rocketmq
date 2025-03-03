@@ -232,7 +232,10 @@ import org.apache.rocketmq.remoting.rpchook.StreamTypeRPCHook;
 import static org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode.SUCCESS;
 
 /**
- *  主要负责和rocketmq的服务端(如namesrv和broker)进行通信
+ *  【总述】主要负责和rocketmq的服务端(如namesrv和broker)进行通信，向rocketmq的使用和开发人员隐藏了底层逻辑的复杂性。
+ *  RocketMQ 客户端中用于与消息队列服务进行通信的核心实现类之一。它负责执行实际的消息发送、消费、管理等操作，并与 RocketMQ 服务端进行
+ *  交互。这个类属于 RocketMQ 客户端中的 内部实现类，并且它通常不直接暴露给用户！！而是通过 MQProducer, MQConsumer, MQAdmin 等更高
+ *  层次的 API 使用。
  *  */
 public class MQClientAPIImpl implements NameServerUpdateCallback {
     private final static Logger log = LoggerFactory.getLogger(MQClientAPIImpl.class);

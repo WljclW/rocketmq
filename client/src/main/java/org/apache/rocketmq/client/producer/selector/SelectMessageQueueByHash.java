@@ -21,6 +21,7 @@ import org.apache.rocketmq.client.producer.MessageQueueSelector;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/*基于hash的消息队列选择器。如果要保证某一个tag的消息严格有序，则需要使用这种选择器*/
 public class SelectMessageQueueByHash implements MessageQueueSelector {
 
     @Override   //是根据args参数来决定hash值的，而不是具体的消息对象msg.

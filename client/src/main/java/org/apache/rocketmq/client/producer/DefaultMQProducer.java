@@ -58,9 +58,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
  * <p>
  * This class aggregates various <code>send</code> methods to deliver messages to broker(s). Each of them has pros and
  * cons; you'd better understand strengths and weakness of them before actually coding. </p>
- * 方法继承了很多的send方法，有不同的优缺点。需要了解并合理使用
+ * 方法继承了很多的send方法 去发送消息，有不同的优缺点。需要了解并合理使用
  * <p> <strong>Thread Safety:</strong> After configuring and starting process, this class can be regarded as thread-safe
  * and used among multiple threads context. </p>
+ * 线程安全：配置和启动过程之后，这个类可以看作是线程安全的，并且可以在多个线程上下文中使用。
  */
 public class DefaultMQProducer extends ClientConfig implements MQProducer {
 

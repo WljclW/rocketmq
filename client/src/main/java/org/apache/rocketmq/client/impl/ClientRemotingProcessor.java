@@ -57,6 +57,10 @@ import org.apache.rocketmq.remoting.protocol.header.ResetOffsetRequestHeader;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * 它是 RocketMQ 客户端与 Broker 之间进行网络通信的核心部分，处理来自客户端的网络请求，并将请求转发到相应的服务
+ * 逻辑中。该类的主要作用是接收、解析、处理客户端的远程调用请求，并返回响应。
+ * */
 public class ClientRemotingProcessor implements NettyRequestProcessor {
     private final Logger logger = LoggerFactory.getLogger(ClientRemotingProcessor.class);
     private final MQClientInstance mqClientFactory;
@@ -65,6 +69,7 @@ public class ClientRemotingProcessor implements NettyRequestProcessor {
         this.mqClientFactory = mqClientFactory;
     }
 
+    /*根据请求码分别调用对应的方法进行处理，其余的方法都是为这个switch中的分发语句来服务的*/
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
         RemotingCommand request) throws RemotingCommandException {

@@ -24,6 +24,9 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 /**
  * 实现消息的 故障转移 和 负载均衡
+ * 【和LatencyFaultToleranceImpl的关系】
+ *      MQFaultStrategy为消息的故障转移和负载均衡提供支持，在这个过程中，会调用到LatencyFaultToleranceImpl的方法来判断
+ *      Broker的延迟信息 和 状态
  * */
 public class MQFaultStrategy {
     private LatencyFaultTolerance<String> latencyFaultTolerance;

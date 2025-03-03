@@ -26,6 +26,9 @@ import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
+/**
+ * 定义了生产者（Producer）的基本功能和行为。它是 RocketMQ 生产者客户端的核心抽象，提供了发送消息、事务管理以及与 Broker 交互的能力。
+ * */
 public interface MQProducer extends MQAdmin {
     void start() throws MQClientException;
 

@@ -26,6 +26,7 @@ import java.util.Map;
 
 /**
  * Base interface for MQ management
+ * 用于管理和操作 RocketMQ 的主题（Topic）、消费者组（Consumer Group）、Broker 等元数据。它是 RocketMQ 客户端 API 中的重要组成部分
  */
 public interface MQAdmin {  //【admin:管理】
     /**
