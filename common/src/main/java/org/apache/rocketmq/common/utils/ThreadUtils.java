@@ -177,6 +177,7 @@ public final class ThreadUtils {
     /**
      * An implementation of the graceful stop sequence recommended by
      * {@link ExecutorService}.
+     * 此方法优雅的实现线程池的关闭操作
      *
      * @param executor executor
      * @param timeout  timeout

@@ -28,6 +28,7 @@ import org.apache.rocketmq.common.utils.ThreadUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**消息拉取服务线程*/
 public class PullMessageService extends ServiceThread {
     private final Logger logger = LoggerFactory.getLogger(PullMessageService.class);
     private final LinkedBlockingQueue<MessageRequest> messageRequestQueue = new LinkedBlockingQueue<>();
@@ -40,6 +41,7 @@ public class PullMessageService extends ServiceThread {
         this.mQClientFactory = mQClientFactory;
     }
 
+    /*将一个PullRequest延迟timeDelay放入到messageRequestQueue*/
     public void executePullRequestLater(final PullRequest pullRequest, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(new Runnable() {
@@ -53,6 +55,7 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    /*将一个PullRequest立即放入到messageRequestQueue*/
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.messageRequestQueue.put(pullRequest);
@@ -128,6 +131,7 @@ public class PullMessageService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
+                /*从messageRequestQueue中获取一个messageRequest,根据mode来选取不同的方法请求消息*/
                 MessageRequest messageRequest = this.messageRequestQueue.take();
                 if (messageRequest.getMessageRequestMode() == MessageRequestMode.POP) {
                     this.popMessage((PopRequest) messageRequest);

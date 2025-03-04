@@ -48,6 +48,7 @@ import org.apache.rocketmq.remoting.protocol.body.ConsumeMessageDirectlyResult;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**实现消息并发消费的核心服务类*/
 public class ConsumeMessageConcurrentlyService implements ConsumeMessageService {
     private static final Logger log = LoggerFactory.getLogger(ConsumeMessageConcurrentlyService.class);
     private final DefaultMQPushConsumerImpl defaultMQPushConsumerImpl; //消费 推模式 实现
@@ -68,7 +69,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         //本类引用 指向 外部的具体实现
         this.defaultMQPushConsumer = this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer();
         this.consumerGroup = this.defaultMQPushConsumer.getConsumerGroup(); //消费者组
-        // 初始化消费请求队列为LinkedBlockingQueue无界队列
+        // 初始化"消费请求队列"为LinkedBlockingQueue无界队列
         this.consumeRequestQueue = new LinkedBlockingQueue<>();
 
         String consumerGroupTag = (consumerGroup.length() > 100 ? consumerGroup.substring(0, 100) : consumerGroup) + "_";
@@ -80,13 +81,14 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             TimeUnit.MILLISECONDS,
             this.consumeRequestQueue,
             new ThreadFactoryImpl("ConsumeMessageThread_" + consumerGroupTag));
-        // 初始化消费定时任务线程池，线程数=1
+        // 初始化"消费定时任务"线程池，线程数=1————注意实现xxxxLater方法(消费时出现异常时调用)
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("ConsumeMessageScheduledThread_" + consumerGroupTag));
         // 初始化清除过期消息线程池，线程数=1
         this.cleanExpireMsgExecutors = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("CleanExpireMsgScheduledThread_" + consumerGroupTag));
     }
 
     public void start() {
+        /*以固定的时间间隔 清理过期消息。。默认是每隔15min执行一次*/
         this.cleanExpireMsgExecutors.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -101,6 +103,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         }, this.defaultMQPushConsumer.getConsumeTimeout(), this.defaultMQPushConsumer.getConsumeTimeout(), TimeUnit.MINUTES);
     }
 
+    /**关闭xxxxLater消费的线程、清理过期消息的线程、消费消息的线程池*/
     public void shutdown(long awaitTerminateMillis) {
         this.scheduledExecutorService.shutdown();
         ThreadUtils.shutdownGracefully(this.consumeExecutor, awaitTerminateMillis, TimeUnit.MILLISECONDS);
@@ -198,7 +201,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         final int consumeBatchSize = this.defaultMQPushConsumer.getConsumeMessageBatchMaxSize();
         /*下面的if-else的目的：根据消息的大小 对比 consumeBatchSize的大小 分情况处理*/
         /*
-        * if块的逻辑：如果消息的大小小于等于consumeBatchSize，组装消费请求，提交到消费线程池中进行消
+        * if块的逻辑：如果消息的大小 小于等于consumeBatchSize，组装消费请求，提交到消费线程池中进行消
         *       费操作。如果一场则稍后再次提交消费请求，通过方法submitConsumeRequestLater实现。
         * */
         if (msgs.size() <= consumeBatchSize) {
@@ -226,9 +229,9 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 }
 
                 ConsumeRequest consumeRequest = new ConsumeRequest(msgThis, processQueue, messageQueue);
-                try {
+                try { /*提交消费任务到消费线程池*/
                     this.consumeExecutor.submit(consumeRequest);
-                } catch (RejectedExecutionException e) {
+                } catch (RejectedExecutionException e) { /*提交异常则稍后再提交*/
                     for (; total < msgs.size(); total++) {
                         msgThis.add(msgs.get(total));
                     }
@@ -353,6 +356,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         return false;
     }
 
+    /*方法中调用了submitConsumeRequest进行了消息消费处理。*/
     private void submitConsumeRequestLater(
         final List<MessageExt> msgs,
         final ProcessQueue processQueue,
@@ -434,6 +438,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 consumeMessageContext.setSuccess(false);
                 ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.executeHookBefore(consumeMessageContext);
             }
+            /**step3是消费消息的核心逻辑*/
             /*step3:首先判断msgs是否为空，如果不为空，则迭代msgs，设置消费开始时间戳，回调客户端实现
             * 的MessageListenerConcurrently.consumeMessage方法执行具体消费逻辑，获得其消费结果status。*/
             long beginTimestamp = System.currentTimeMillis();
