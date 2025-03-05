@@ -124,6 +124,7 @@ public class MQClientInstance {
     private final NettyClientConfig nettyClientConfig;
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
+    /*key：topic名称；value：路由信息*/
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<>();
     /*key:主题名称；value:消息队列 以及 对应的brokerName。。。
     因此一对key-value存储的是某一个topic对应的 所有的消息队列以及该消息队列对应的brokerName

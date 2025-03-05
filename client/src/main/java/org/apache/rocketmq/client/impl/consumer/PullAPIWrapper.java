@@ -52,6 +52,10 @@ import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * PullAPIWrapper可能负责封装底层的拉取逻辑，比如处理Broker的通信、消息的拉取请求、处理响应等。用户使
+ * 用PullConsumer时，可能需要直接调用PullAPIWrapper的方法来拉取消息，或者它被更上层的类所使用。
+ * */
 public class PullAPIWrapper {
     private static final Logger log = LoggerFactory.getLogger(PullAPIWrapper.class);
     private final MQClientInstance mQClientFactory;
@@ -177,21 +181,23 @@ public class PullAPIWrapper {
         }
     }
 
+    /**底层具体的拉取消息的逻辑实现*/
     public PullResult pullKernelImpl(
-        final MessageQueue mq,
-        final String subExpression,
-        final String expressionType,
-        final long subVersion,
-        final long offset,
-        final int maxNums,
+        final MessageQueue mq, /*消息队列*/
+        final String subExpression, /*订阅表达式*/
+        final String expressionType, /*表达式类型*/
+        final long subVersion, /*订阅版本*/
+        final long offset, /*拉取消息的起始偏移量*/
+        final int maxNums, /*拉取消息的最大条数*/
         final int maxSizeInBytes,
-        final int sysFlag,
-        final long commitOffset,
-        final long brokerSuspendMaxTimeMillis,
-        final long timeoutMillis,
-        final CommunicationMode communicationMode,
-        final PullCallback pullCallback
+        final int sysFlag, /*系统标志位*/
+        final long commitOffset, /*提交的消费位点(用于事务回查)*/
+        final long brokerSuspendMaxTimeMillis, /*broker挂起最大时间(长轮询超时)*/
+        final long timeoutMillis, /*客户端拉取超时时间*/
+        final CommunicationMode communicationMode, /*通信模式*/
+        final PullCallback pullCallback /*异步回调，仅ASYNC有效*/
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        /**step1:查找指定的 broker,并将结果封装为FindBrokerResult*/
         /*调用recalculatePullFromWhichNode方法获取Broker ID，再调用findBrokerAddressInSubscribe根据ID获取Broker的相关信息
          */
         FindBrokerResult findBrokerResult =
@@ -204,7 +210,7 @@ public class PullAPIWrapper {
                 this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq),
                     this.recalculatePullFromWhichNode(mq), false);
         }
-
+        /**如果找到了则构造请求信息，构造完成后调用netty的方法进行发送*/
         /*如果找到了进入下面的if块进行处理；如果更新路由信息后还是找不到，直接到此方法的最后一行抛出异常*/
         if (findBrokerResult != null) {
             {
@@ -220,7 +226,7 @@ public class PullAPIWrapper {
             if (findBrokerResult.isSlave()) {
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }
-
+            /*构造消息请求头 requestHeader*/
             PullMessageRequestHeader requestHeader = new PullMessageRequestHeader();
             requestHeader.setConsumerGroup(this.consumerGroup);
             requestHeader.setTopic(mq.getTopic());
@@ -240,7 +246,7 @@ public class PullAPIWrapper {
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
-
+            /*最终是调用 Netty的方法进行发送*/
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,
@@ -309,7 +315,7 @@ public class PullAPIWrapper {
                 return list.get(randomNum() % list.size());
             }
         }
-
+        /**/
         throw new MQClientException("Find Filter Server Failed, Broker Addr: " + brokerAddr + " topic: "
             + topic, null);
     }
