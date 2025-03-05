@@ -21,6 +21,12 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.protocol.body.ConsumeMessageDirectlyResult;
 
+/**
+ * 1.用于定义消费者 消费消息的行为。
+ * 2.在 RocketMQ 客户端消费消息时，由 DefaultMQPushConsumer 内部调用的。具体来说，它负责将消费队列中的消息交给消费者进行处理。
+ * 3.ConsumeMessageService 是 DefaultMQPushConsumer 中的一个组件。消费者在启动时，会创建一个 ConsumeMessageService 实例来处
+ *      理消息的消费。当 DefaultMQPushConsumer 启动时，会调用 ConsumeMessageService 来不断拉取并处理消息，直到消费者停止。
+ * */
 public interface ConsumeMessageService {
     void start();
 

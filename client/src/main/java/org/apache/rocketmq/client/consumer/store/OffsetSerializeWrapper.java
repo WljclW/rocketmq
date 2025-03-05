@@ -23,10 +23,10 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 /**
- * Wrapper class for offset serialization
+ * Wrapper class for offset serialization...偏移量的包装类
  */
 public class OffsetSerializeWrapper extends RemotingSerializable {
-    private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
+    private ConcurrentMap<MessageQueue, AtomicLong> offsetTable = /*存储映射关系：某一个消息队列——》消费偏移量(即消费到哪里了)*/
         new ConcurrentHashMap<>();
 
     public ConcurrentMap<MessageQueue, AtomicLong> getOffsetTable() {

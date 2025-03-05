@@ -48,7 +48,12 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
- * 【总述】在大多数情况下，这是被推荐使用的 去消费消息的 类
+ * 【总述】在大多数情况下，这是被推荐使用的 去消费消息的 类。。也就是说面向rocketmq使用者的
+ * 【说明】共rocketmq使用者使用的 默认的消息消费者。。除了start、subscribe、unsubscribe，其他方法都是get/set提供给消费者设置属性，
+ *      真正干活(即消费消息的逻辑)的是在DefaultMQPushConsumerImpl中实现的。。这个类相当于在外面封装一层，让用户自定义一些属性或者特
+ *      性
+ * */
+/**
  * In most scenarios, this is the mostly recommended class to consume messages.
  * </p>
  *
@@ -69,6 +74,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Internal implementation. Most of the functions herein are delegated to it.
+     * DefaultMQPushConsumer的很多功能都委托给了内部实现类DefaultMQPushConsumerImpl
      */
     protected final transient DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
 
@@ -145,7 +151,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Subscription relationship
      */
-    // 订阅关系map
+    // 订阅关系map。。key为topic，value为表达式
     private Map<String /* topic */, String /* sub expression */> subscription = new HashMap<>();
 
     /**
@@ -364,16 +370,18 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * @param rpcHook RPC hook to execute before each remoting command.
      * @param allocateMessageQueueStrategy Message queue allocating algorithm.
      */
-    public DefaultMQPushConsumer(final String consumerGroup, RPCHook rpcHook,
+    public DefaultMQPushConsumer(final String consumerGroup, RPCHook rpcHook, /*携带参数消费者组、rpc钩子、消息队列分配算法*/
         AllocateMessageQueueStrategy allocateMessageQueueStrategy) {
         this.consumerGroup = consumerGroup;
         this.allocateMessageQueueStrategy = allocateMessageQueueStrategy;
-        //DefaultMQPushConsumerImpl和DefaultMQPushConsumer是相互持有的
+        /* DefaultMQPushConsumerImpl和DefaultMQPushConsumer是相互持有的。。。DefaultMQPushConsumerImpl是消费者消费消息
+         时rocketmq内部实际上的逻辑所在*/
         defaultMQPushConsumerImpl = new DefaultMQPushConsumerImpl(this, rpcHook);
     }
 
     /**
      * Constructor specifying consumer group, RPC hook, message queue allocating algorithm, enabled msg trace flag and customized trace topic name.
+     * 构造函数指定消费者组、RPC钩子、消息队列分配算法、启用msg跟踪标志和自定义跟踪主题名称。
      *
      * @param consumerGroup Consume queue.
      * @param rpcHook RPC hook to execute before each remoting command.
@@ -388,6 +396,10 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
         defaultMQPushConsumerImpl = new DefaultMQPushConsumerImpl(this, rpcHook);
         if (enableMsgTrace) {
             try {
+                /*AsyncTraceDispatcher：一个用于处理异步消息追踪的类..
+                customizedTraceTopic：自定义的追踪主题，通常是一个消息队列的主题，用于接收消息追踪数据。
+                TraceDispatcher.Type.CONSUME：指定追踪类型为 消费（consume）。这个类型表示这是一个用于消费消息的追踪任务。
+                rpcHook：一个钩子（hook）对象，通常用于 RPC 调用的扩展，比如在消息消费过程中记录额外的信息。*/
                 AsyncTraceDispatcher dispatcher = new AsyncTraceDispatcher(consumerGroup, TraceDispatcher.Type.CONSUME, customizedTraceTopic, rpcHook);
                 dispatcher.setHostConsumer(this.defaultMQPushConsumerImpl);
                 traceDispatcher = dispatcher;
@@ -774,11 +786,11 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      */
     @Override
     public void start() throws MQClientException {
-        //设置消费者组
+        //step1:设置消费者组
         setConsumerGroup(NamespaceUtil.wrapNamespace(this.getNamespace(), this.consumerGroup));
-        //启动消费者客户端
+        //step2:启动消费者客户端
         this.defaultMQPushConsumerImpl.start();
-        //trace处理逻辑
+        //step3:trace处理逻辑
         if (null != traceDispatcher) {
             try {
                 traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());
@@ -789,7 +801,8 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     }
 
     /**
-     * Shut down this client and releasing underlying resources.
+     * Shut down this client and releasing underlying resources..
+     * 关闭 DefaultMQPushConsumerImpl 以及 消息追踪服务
      */
     @Override
     public void shutdown() {
@@ -808,7 +821,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Register a callback to execute on message arrival for concurrent consuming.
-     *
+     * 注册一个 并发消息 到达时的处理回调
      * @param messageListener message handling callback.
      */
     /*
@@ -822,7 +835,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
 
     /**
      * Register a callback to execute on message arrival for orderly consuming.
-     *
+     * 注册一个 顺序消息到达时的 消息处理回调
      * @param messageListener message handling callback.
      */
     @Override

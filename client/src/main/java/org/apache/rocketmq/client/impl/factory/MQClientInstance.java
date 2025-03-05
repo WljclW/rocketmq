@@ -112,7 +112,7 @@ public class MQClientInstance {
 
     /**
      * The container of the consumer in the current client. The key is the name of consumerGroup.
-     * 用于缓存group和消费者的对于关系
+     * 用于缓存group和消费者的对应关系
      */
     private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
 
@@ -125,7 +125,9 @@ public class MQClientInstance {
     private final MQClientAPIImpl mQClientAPIImpl;
     private final MQAdminImpl mQAdminImpl;
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<>();
-    //key:主题名称；value:消息队列 以及 对应的brokerName
+    /*key:主题名称；value:消息队列 以及 对应的brokerName。。。
+    因此一对key-value存储的是某一个topic对应的 所有的消息队列以及该消息队列对应的brokerName
+    【说明】这个属性应该具有实时性，因此在下文的方法“getBrokerNameFromMessageQueue”中会先尝试在这里查找，而不是直接通过参数mq来拿取*/
     private final ConcurrentMap<String/* Topic */, ConcurrentMap<MessageQueue, String/*brokerName*/>> topicEndPointsTable = new ConcurrentHashMap<>();
     //下面是两个可重入锁。分别是从远程获取Topic信息的时候和进行Broker心跳检测的时候，这两个时候由于会有多线程对当前信息进行读
     // 写，但是在同一时间只能有一个线程进行读写操作，所以这样的操作就需要进行加锁。
@@ -136,13 +138,14 @@ public class MQClientInstance {
      * The container which stores the brokerClusterInfo. The key of the map is the brokerCluster name.
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
-     * 对集群中broker地址的缓存。。broker集群名————>该集群所有的broker实例(broker的id———>broker实例的地址)
+     * 对集群中broker地址的缓存。。broker集群名————>该集群所有的broker实例(broker的id———>broker实例的地址)。。
+     * 一个集群中所有broker的名字是一样的
      */
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
 
     /**
      * brokerVersionTable的key是broker集群的名称，value是该集群所有broker的版本信息
-     * value的map：key是broker的地址，value是该broker的版本号
+     * value的map：key是broker的name（就是broker集群名称），value是该broker的 地址 以及 版本号
      * */
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable = new ConcurrentHashMap<>();
     private final Set<String/* Broker address */> brokerSupportV2HeartbeatSet = new HashSet();
@@ -345,7 +348,7 @@ public class MQClientInstance {
                 case CREATE_JUST:
                     this.serviceState = ServiceState.START_FAILED;  //初始状态标记为启动失败
                     // If not specified,looking address from name server
-                    if (null == this.clientConfig.getNamesrvAddr()) {   // 如果未指定 Name Server 地址，则从 NameServer 获取地址。一般到这里已经完成设置了
+                    if (null == this.clientConfig.getNamesrvAddr()) {   // 如果未指定 NameServer 地址，则从 NameServer 获取地址。一般到这里已经完成设置了
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
                     // Start request-response channel
@@ -1035,7 +1038,7 @@ public class MQClientInstance {
         if (null == group || null == consumer) {
             return false;
         }
-
+        /*这里为什么保证一个消费者组只对应一个MQConsumerInner*/
         MQConsumerInner prev = this.consumerTable.putIfAbsent(group, consumer);
         if (prev != null) {
             log.warn("the consumer group[" + group + "] exist already.");
@@ -1152,6 +1155,10 @@ public class MQClientInstance {
         return this.consumerTable.get(group);
     }
 
+    /**
+     * 为什么不是直接从MessageQueue中获取brokerName，而是先从topicEndPointsTable中获取brokerName？？？？？
+     *      应该是因为topicEndPointsTable中的只具有实时性
+     * */
     public String getBrokerNameFromMessageQueue(final MessageQueue mq) {
         if (topicEndPointsTable.get(mq.getTopic()) != null && !topicEndPointsTable.get(mq.getTopic()).isEmpty()) {
             return topicEndPointsTable.get(mq.getTopic()).get(mq);
@@ -1205,12 +1212,13 @@ public class MQClientInstance {
         final long brokerId,
         final boolean onlyThisBroker
     ) {
+        //下面几行是 前置检查 以及 初始状态变量的设置
         if (brokerName == null) {
             return null;
         }
-        String brokerAddr = null;
-        boolean slave = false;
-        boolean found = false;
+        String brokerAddr = null; //存储找到的brokerAddr
+        boolean slave = false;   //broker是否是slave
+        boolean found = false; //是否找到了brokerAddr
 
         HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);
         if (map != null && !map.isEmpty()) {
@@ -1218,12 +1226,13 @@ public class MQClientInstance {
             slave = brokerId != MixAll.MASTER_ID;
             found = brokerAddr != null;
 
-            if (!found && slave) {
-                brokerAddr = map.get(brokerId + 1);
-                found = brokerAddr != null;
+            if (!found && slave) { /*brokerAddr==null是真 并且 brokerId不是0*/
+                brokerAddr = map.get(brokerId + 1); //这个时候尝试获取 brokerId+1的brokerAddr
+                found = brokerAddr != null; //获取后更新found标志
             }
 
-            if (!found && !onlyThisBroker) {
+            if (!found && !onlyThisBroker) { /*还是没有找到 并且 允许使用其他的broker*/
+                //会返回map中的第一个brokerAddr
                 Entry<Long, String> entry = map.entrySet().iterator().next();
                 brokerAddr = entry.getValue();
                 slave = entry.getKey() != MixAll.MASTER_ID;
@@ -1239,6 +1248,13 @@ public class MQClientInstance {
     }
 
     private int findBrokerVersion(String brokerName, String brokerAddr) {
+        /* 从brokerVersionTable中获取brokerAddr对应的brokerVersion。
+         * brokerVersionTable是一个value类型为map的map，形式：
+         * ConcurrentMap<String, HashMap<String, Integer>> brokerVersionTable
+         * 其中：
+         *   - String 为 Broker Name
+         *   - HashMap<String, Integer> 中的 String 为 address，Integer 为版本号
+         */
         if (this.brokerVersionTable.containsKey(brokerName)) {
             if (this.brokerVersionTable.get(brokerName).containsKey(brokerAddr)) {
                 return this.brokerVersionTable.get(brokerName).get(brokerAddr);

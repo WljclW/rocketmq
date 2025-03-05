@@ -31,6 +31,9 @@ import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 
+/**
+ * 【总述】自定义的消费钩子实现类，主要用于实现 消费消息的轨迹记录。
+ * */
 public class ConsumeMessageTraceHookImpl implements ConsumeMessageHook {
 
     private TraceDispatcher localDispatcher;

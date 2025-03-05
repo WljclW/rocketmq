@@ -192,9 +192,12 @@ public class PullAPIWrapper {
         final CommunicationMode communicationMode,
         final PullCallback pullCallback
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        /*调用recalculatePullFromWhichNode方法获取Broker ID，再调用findBrokerAddressInSubscribe根据ID获取Broker的相关信息
+         */
         FindBrokerResult findBrokerResult =
-            this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq),
+            this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq), /*getBrokerNameFromMessageQueue中的细节体现了获取的实时性*/
                 this.recalculatePullFromWhichNode(mq), false);
+        /*如果上述一通操作还是找不到，则下面的if块：先更新路由信息，然后再获取*/
         if (null == findBrokerResult) {
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
             findBrokerResult =
@@ -202,7 +205,7 @@ public class PullAPIWrapper {
                     this.recalculatePullFromWhichNode(mq), false);
         }
 
-
+        /*如果找到了进入下面的if块进行处理；如果更新路由信息后还是找不到，直接到此方法的最后一行抛出异常*/
         if (findBrokerResult != null) {
             {
                 // check version
@@ -281,6 +284,7 @@ public class PullAPIWrapper {
         );
     }
 
+    /**计算从哪一个broker节点拉消息*/
     public long recalculatePullFromWhichNode(final MessageQueue mq) {
         if (this.isConnectBrokerByUser()) {
             return this.defaultBrokerId;

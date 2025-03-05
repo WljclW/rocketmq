@@ -59,6 +59,7 @@ public class LocalFileOffsetStore implements OffsetStore {
             "offsets.json";
     }
 
+    /**从本地加载OffsetSerializeWrapper，遍历它将其中的value封装为ControllableOffset，将组成的新map设置给offsetTable属性*/
     @Override
     public void load() throws MQClientException {
         OffsetSerializeWrapper offsetSerializeWrapper = this.readLocalOffset();

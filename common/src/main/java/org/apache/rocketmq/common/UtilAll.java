@@ -459,6 +459,7 @@ public class UtilAll {
         return df.format(date);
     }
 
+    /*将时间戳 解析为 pattern的样式*/
     public static Date parseDate(String date, String pattern) {
         SimpleDateFormat df = new SimpleDateFormat(pattern);
         try {

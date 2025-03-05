@@ -25,6 +25,13 @@ import java.util.HashSet;
 import java.util.Set;
 import org.apache.rocketmq.common.filter.ExpressionType;
 
+/**
+ * 【总述】作用是保存消费者订阅的主题信息、标签信息和其它相关的订阅参数。消费者通过该类标识 自己感兴趣的主题 和 消息过滤
+ *      规则。RocketMQ在运行时根据SubscriptionData来决定向哪个消费者推送哪些消息。
+ * 【其他】
+ * 1. 重要！！对于rocketmq使用者来说，消费时指定topic、tag等；但是在内部，区分消费者订阅的队列依靠的是SubscriptionData对象(用这个类
+ *      的对象来标识当前消费者需要消费哪些消息)
+ * */
 public class SubscriptionData implements Comparable<SubscriptionData> {
     public final static String SUB_ALL = "*";
     private boolean classFilterMode = false;

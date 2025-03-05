@@ -16,6 +16,7 @@
  */
 package org.apache.rocketmq.client.impl;
 
+/**用于封装 查找到的broker*/
 public class FindBrokerResult {
     private final String brokerAddr;
     private final boolean slave;

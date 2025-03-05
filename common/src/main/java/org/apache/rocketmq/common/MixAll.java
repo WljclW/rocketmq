@@ -137,6 +137,7 @@ public class MixAll {
         return OS.indexOf("sunos") >= 0;
     }
 
+    /**获取远端服务器地址*/
     public static String getWSAddr() {
         String wsDomainName = System.getProperty("rocketmq.namesrv.domain", DEFAULT_NAMESRV_ADDR_LOOKUP);
         String wsDomainSubgroup = System.getProperty("rocketmq.namesrv.domain.subgroup", "nsaddr");
