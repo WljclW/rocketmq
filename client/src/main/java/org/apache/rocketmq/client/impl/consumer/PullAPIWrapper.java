@@ -181,7 +181,7 @@ public class PullAPIWrapper {
         }
     }
 
-    /**底层具体的拉取消息的逻辑实现*/
+    /**【总述】获取具体的brokerAddr 并且 构建请求头；最后调用this.mQClientFactory.getMQClientAPIImpl().pullMessage拉取消息*/
     public PullResult pullKernelImpl(
         final MessageQueue mq, /*消息队列*/
         final String subExpression, /*订阅表达式*/
@@ -201,16 +201,16 @@ public class PullAPIWrapper {
         /*调用recalculatePullFromWhichNode方法获取Broker ID，再调用findBrokerAddressInSubscribe根据ID获取Broker的相关信息
          */
         FindBrokerResult findBrokerResult =
-            this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq), /*getBrokerNameFromMessageQueue中的细节体现了获取的实时性*/
+            this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq), /*getBrokerNameFromMessageQueue体现了获取的实时性高*/
                 this.recalculatePullFromWhichNode(mq), false);
-        /*如果上述一通操作还是找不到，则下面的if块：先更新路由信息，然后再获取*/
+        /*如果上述一通操作还是找不到，则进入下面的if块：先更新路由信息，然后再获取*/
         if (null == findBrokerResult) {
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
             findBrokerResult =
                 this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq),
                     this.recalculatePullFromWhichNode(mq), false);
         }
-        /**如果找到了则构造请求信息，构造完成后调用netty的方法进行发送*/
+        /**step2:如果找到了则构造请求信息，构造完成后调用netty的方法进行发送*/
         /*如果找到了进入下面的if块进行处理；如果更新路由信息后还是找不到，直接到此方法的最后一行抛出异常*/
         if (findBrokerResult != null) {
             {
@@ -241,7 +241,7 @@ public class PullAPIWrapper {
             requestHeader.setMaxMsgBytes(maxSizeInBytes);
             requestHeader.setExpressionType(expressionType);
             requestHeader.setBrokerName(mq.getBrokerName());
-
+            /*如果是类过滤模式，则需要获取类过滤服务器地址*/
             String brokerAddr = findBrokerResult.getBrokerAddr();
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);
@@ -256,7 +256,7 @@ public class PullAPIWrapper {
 
             return pullResult;
         }
-
+        /**step3:过程中出现任何异常 或者 找不到Broker信息，抛出下面异常*/
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
 
@@ -304,6 +304,7 @@ public class PullAPIWrapper {
         return MixAll.MASTER_ID;
     }
 
+    /**从找到的过滤服务器列表中随机选择一个返回*/
     private String computePullFromWhichFilterServer(final String topic, final String brokerAddr)
         throws MQClientException {
         ConcurrentMap<String, TopicRouteData> topicRouteTable = this.mQClientFactory.getTopicRouteTable();

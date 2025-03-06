@@ -357,7 +357,7 @@ public class MQClientInstance {
                     // Start various schedule tasks
                     this.startScheduledTask();  //启动各种定时任务
                     // Start pull service
-                    this.pullMessageService.start();    //启动消息拉取服务
+                    this.pullMessageService.start();    /*消息拉取的服务————run方法逻辑：从阻塞队列拿出一个请求，根据它的类型最后执行ConsumerInner的pullMessage/popMessage方法*/
                     // Start rebalance service
                     this.rebalanceService.start();  //启动在平衡机制，对MQConsumer生效
                     // Start push service

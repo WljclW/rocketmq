@@ -22,6 +22,8 @@ import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 
+import java.lang.reflect.Proxy;
+
 /**
  * This example shows how to subscribe and consume messages using providing {@link DefaultMQPushConsumer}.
  */
@@ -50,7 +52,7 @@ public class Consumer {
          * </pre>
          */
         // Uncomment the following line while debugging, namesrvAddr should be set to your local address
-         consumer.setNamesrvAddr(DEFAULT_NAMESRVADDR);
+        consumer.setNamesrvAddr(DEFAULT_NAMESRVADDR);
 
         /*
          * Specify where to start in case the specific consumer group is a brand-new one.
@@ -64,6 +66,8 @@ public class Consumer {
 
         /*
          *  Register callback to execute on arrival of messages fetched from brokers.
+         *  注册一个回调，每当从Broker获取到消息后，就会执行这个回调。
+         *  Lambda表达式的写法，类似于动态代理————(proxy,method,args)—>{}
          */
         consumer.registerMessageListener((MessageListenerConcurrently) (msg, context) -> {
             System.out.printf("%s Receive New Messages: %s %n", Thread.currentThread().getName(), msg);

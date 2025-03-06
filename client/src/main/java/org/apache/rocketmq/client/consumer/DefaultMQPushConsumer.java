@@ -187,13 +187,16 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Concurrently max span offset.it has no effect on sequential consumption
      * 并发消息消费时处理队列最大跨度，默认2000，表示如果消息处理队列中偏移量最大的消息与偏移
-     *      量最小的消息的跨度超过2000，则延迟50ms后再拉取消息。
+     *      量最小的消息的跨度超过2000，则延迟50ms后再拉取消息。延迟50ms实际上表明————
+     *      (会进行流控，流控的参数见DefaultMQPushConsumerImpl#PULL_TIME_DELAY_MILLS_WHEN_CACHE_FLOW_CONTROL)
      */
     private int consumeConcurrentlyMaxSpan = 2000;
 
     /**
      * Flow control threshold on queue level, each message queue will cache at most 1000 messages by default,
      * Consider the {@code pullBatchSize}, the instantaneous value may exceed the limit
+     * 队列级别的流量控制阈值，默认情况下每个消息队列最多缓存1000条消息；
+     * 考虑{@code pullBatchSize}，瞬时值可能超过限制
      */
     private int pullThresholdForQueue = 1000;
 
@@ -257,7 +260,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Whether update subscription relationship when every pull
      */
-    //是否每次pull时都更新订阅消息
+    //是否每次pull时 都更新订阅消息
     private boolean postSubscriptionWhenPull = false;
 
     /**
@@ -781,6 +784,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * This method gets internal infrastructure readily to serve. Instances must call this method after configuration.
      * 这个方法使内部基础设施易于服务。实例必须在配置后调用此方法。。。如何理解？？
+     * 干三件事：①设置消费者组；②DefaultMQPushConsumerImpl.start()启动DefaultMQPushConsumerImpl；③如果需要的话,启动消息轨迹服务
      *
      * @throws MQClientException if there is any client error.
      */

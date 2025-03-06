@@ -234,6 +234,7 @@ public abstract class RebalanceImpl {
         return true;
     }
 
+    /**作用是对所有的消息队列进行负载均衡。。。返回值表示是不是所有的消息队列都已经再平衡完成*/
     public boolean doRebalance(final boolean isOrder) {
         boolean balanced = true;
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
@@ -266,7 +267,9 @@ public abstract class RebalanceImpl {
         return balanced;
     }
 
+    /**判断当前消费者是否可以从 Broker 获取负载均衡的分配结果，而不是由客户端自行计算分配。*/
     private boolean tryQueryAssignment(String topic) {
+        /*检查客户端 以及 broker端 是否已经进行过再平衡，如果已经进行过则直接返回*/
         if (topicClientRebalance.containsKey(topic)) {
             return false;
         }

@@ -17,11 +17,12 @@
 package org.apache.rocketmq.common.sysflag;
 
 public class PullSysFlag {
-    private final static int FLAG_COMMIT_OFFSET = 0x1;
-    private final static int FLAG_SUSPEND = 0x1 << 1;
-    private final static int FLAG_SUBSCRIPTION = 0x1 << 2;
-    private final static int FLAG_CLASS_FILTER = 0x1 << 3;
-    private final static int FLAG_LITE_PULL_MESSAGE = 0x1 << 4;
+    /*分别是1左移不同的位数*/
+    private final static int FLAG_COMMIT_OFFSET = 0x1; // 00000001，是否需要提交消费进度
+    private final static int FLAG_SUSPEND = 0x1 << 1; // 00000010，表示是否挂起拉取请求
+    private final static int FLAG_SUBSCRIPTION = 0x1 << 2; // 00001000，表示是否包含订阅关系(表示消费者拉取消息时会携带订阅的数据)
+    private final static int FLAG_CLASS_FILTER = 0x1 << 3; // 00010000，表示是否包含类过滤规则
+    private final static int FLAG_LITE_PULL_MESSAGE = 0x1 << 4; // 00100000，表示是否是轻量拉取消息
 
     public static int buildSysFlag(final boolean commitOffset, final boolean suspend,
         final boolean subscription, final boolean classFilter) {
@@ -57,6 +58,7 @@ public class PullSysFlag {
         return flag;
     }
 
+    /**清除某一个标志的方法"与该标志的非 求与"*/
     public static int clearCommitOffsetFlag(final int sysFlag) {
         return sysFlag & (~FLAG_COMMIT_OFFSET);
     }

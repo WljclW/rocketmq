@@ -34,6 +34,10 @@ public class TopicRouteData extends RemotingSerializable {
     private String orderTopicConf;
     private List<QueueData> queueDatas;     //topic队列元数据
     private List<BrokerData> brokerDatas;   //topic分布的broker元数据(其实就是topic在哪些broker中存储)
+    /*RocketMQ 提供了两种消息过滤方式：
+        Tag 过滤 ：基于消息的 Tag 字段进行简单的字符串匹配。
+        类过滤器 ：基于用户定义的 Java 类实现复杂的过滤逻辑。
+    如果使用类过滤器，Broker 需要将消息转发到过滤服务进行处理。filterServerTable 存储的就是这些过滤服务的地址信息。*/
     private HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable; //broker上过滤服务器的地址列表
     //It could be null or empty
     private Map<String/*brokerName*/, TopicQueueMappingInfo> topicQueueMappingByBroker;

@@ -243,6 +243,8 @@ public class ProcessQueue {
         return locked;
     }
 
+    /*RebalanceImpl中存在将该标志置为true；在PullMessageService#run执行时会调用到DefaultMQPushConsumerImpl.pullMessage，这个
+    方法内部在执行具体的拉取消息时，会用到这个locked标志*/
     public void setLocked(boolean locked) {
         this.locked = locked;
     }

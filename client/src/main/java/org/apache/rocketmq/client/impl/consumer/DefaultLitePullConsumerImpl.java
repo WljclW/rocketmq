@@ -1049,10 +1049,10 @@ public class DefaultLitePullConsumerImpl implements MQConsumerInner {
 
         boolean isTagType = ExpressionType.isTagType(subscriptionData.getExpressionType());
         PullResult pullResult = this.pullAPIWrapper.pullKernelImpl(
-            mq,
-            subscriptionData.getSubString(),
-            subscriptionData.getExpressionType(),
-            isTagType ? 0L : subscriptionData.getSubVersion(),
+            mq, //topic
+            subscriptionData.getSubString(), //subExpression
+            subscriptionData.getExpressionType(), //expressionType，两种：SQL92 以及 TAG
+            isTagType ? 0L : subscriptionData.getSubVersion(), /*如果订阅的是 Tag 类型，实际上是不依赖于具体的订阅版本的*/
             offset,
             maxNums,
             sysFlag,
