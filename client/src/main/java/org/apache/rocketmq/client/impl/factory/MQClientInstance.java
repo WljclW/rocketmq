@@ -1300,13 +1300,27 @@ public class MQClientInstance {
         return null;
     }
 
+    /**
+     * 【总述】根据topic然后查找topicRouteTable，随机返回一个存储该topic的brokerAddr
+     * 查找逻辑：①先是根据topic拿到topic对应的TopicRouteData；②从TopicRouteData中获取所有的BrokerData(一个BrokerData对
+     *      应一个cluster集群)；③从所有的BrokerData(List<BrokerData>)中随机挑选一个BrokerData————即随机选出一个Broker集
+     *      群；④从③中选出的BrokerData中，所有的brokerAddr中选出一个brokerAddr(优先返回master的brokerAddr，如果没有则
+     *      随机返回一个slave的brokerAddr)
+     *      [通俗理解]①拿出topic对应的路由信息；②从路由信息拿出所有的broker集群；③从所有的集群中随机选出一个集群；
+     *          ④返回选定集群的master broker的地址，如果没有则随机返回一个slave broker的地址
+     * */
     public String findBrokerAddrByTopic(final String topic) {
+        //step1:从topicRouteTable中获取topic对应的TopicRouteData
         TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
         if (topicRouteData != null) {
+            /*step2:从topicRouteData中获取所有的BrokerData(存放这个topic的 所有Broker的信息);
+            * [说明]一个BrokerData封装了一个集群中所有Broker的信息*/
             List<BrokerData> brokers = topicRouteData.getBrokerDatas();
             if (!brokers.isEmpty()) {
                 int index = random.nextInt(brokers.size());
+                //step3:先是 随机挑选一个Broker集群
                 BrokerData bd = brokers.get(index % brokers.size());
+                //step4:在这个集群中挑一个Broker————selectBrokerAddr()的逻辑是优先返回master的brokerAddr，如果没有则随机返回一个slave的brokerAddr
                 return bd.selectBrokerAddr();
             }
         }

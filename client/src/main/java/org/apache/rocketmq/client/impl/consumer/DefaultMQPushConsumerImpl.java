@@ -1033,7 +1033,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             default:
                 break;
         }
-        // 订阅关系改变，更新Nameserver的订阅关系表
+        // 更新topic的订阅关系表
         this.updateTopicSubscribeInfoWhenSubscriptionChanged();
         //检查客户端状态
         this.mQClientFactory.checkClientInBroker();
@@ -1277,6 +1277,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         if (doNotUpdateTopicSubscribeInfoWhenSubscriptionChanged) {
             return;
         }
+        /*获取内部订阅表，遍历表中的每一个主题，更新它的路由信息*/
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {

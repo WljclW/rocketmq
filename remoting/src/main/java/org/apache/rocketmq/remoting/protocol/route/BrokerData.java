@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.MixAll;
 
 /**
+ * 【总述】该类描述了典型的Broker集群的详细信息:集群的名称 以及 这个集群中所有Broker实例的信息。
  * The class describes that a typical broker cluster's (in replication) details: the cluster (in sharding) name
  * that it belongs to, and all the single instance information for this cluster.
  */
@@ -86,12 +87,14 @@ public class BrokerData implements Comparable<BrokerData> {
     /**
      * Selects a (preferably master) broker address from the registered list. If the master's address cannot be found, a
      * slave broker address is selected in a random manner.
+     * 从注册列表中选择一个（最好是主）Broker地址。如果找不到master Broker的地址，以随机方式选择slave Broker地址。
      *
      * @return Broker address.
      */
     public String selectBrokerAddr() {
+        //获取 主Broker 的地址
         String masterAddress = this.brokerAddrs.get(MixAll.MASTER_ID);
-
+        //如果主Broker地址为空，则从注册列表中随机选择一个slave Broker地址作为返回值。
         if (masterAddress == null) {
             List<String> addrs = new ArrayList<>(brokerAddrs.values());
             return addrs.get(random.nextInt(addrs.size()));
