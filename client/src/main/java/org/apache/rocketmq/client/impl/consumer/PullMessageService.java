@@ -31,7 +31,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 /**
  * 【总述】消息拉取服务线程，从Broker拉取消息供消费者消费。。
  * 1. 基本上所有的方法都会在DefaultMQPushConsumerImpl类中被使用
- * 2. run方法是真正"执行拉取任务的方法"，根据拿取消息的模式会调用DefaultMQPushConsumerImpl的对应方法(popMessage或者PullMessage)*/
+ * 2. run方法是真正"执行拉取任务的方法"，根据拿取消息的模式会调用DefaultMQPushConsumerImpl的对应方法(popMessage或者pullMessage)*/
 public class PullMessageService extends ServiceThread {
     private final Logger logger = LoggerFactory.getLogger(PullMessageService.class);
     private final LinkedBlockingQueue<MessageRequest> messageRequestQueue = new LinkedBlockingQueue<>();

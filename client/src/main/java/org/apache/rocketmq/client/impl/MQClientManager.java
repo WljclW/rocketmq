@@ -40,9 +40,11 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 public class MQClientManager {
     private final static Logger log = LoggerFactory.getLogger(MQClientManager.class);
     private static MQClientManager instance = new MQClientManager();
-    private AtomicInteger factoryIndexGenerator = new AtomicInteger();  //后面在创建MQClientInstance实例的时候，会使用并自增该值。。最终会记录日志，除此以外没其他作用
-    //整个JVM实例中只存在一个MQClientManager实例，维护一个MQClientInstance缓存表ConcurrentMap<String, MQClientInstance> factoryTable,即
-    //同一个clientId只会创建一个MQClientInstance实例
+    /*factoryIndexGenerator：后面在创建MQClientInstance实例的时候，会使用并自增该值(因此这个值表示创建了多少个ClientInstance实例)。
+    最终会记录日志，除此以外没其他作用*/
+    private AtomicInteger factoryIndexGenerator = new AtomicInteger();
+    /*factoryTable：整个JVM实例中只存在一个MQClientManager实例，维护一个MQClientInstance缓存表ConcurrentMap<String, MQClientInstance> factoryTable,即
+    同一个clientId只会创建一个MQClientInstance实例*/
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<>();      //clientId的格式是“clientIp”+@+“InstanceName”
     private ConcurrentMap<String/* clientId */, ProduceAccumulator> accumulatorTable =

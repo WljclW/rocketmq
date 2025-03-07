@@ -24,6 +24,7 @@ import org.apache.rocketmq.remoting.protocol.body.ConsumeStatus;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**主要作用是收集和存储消费者在运行过程中的各种统计信息，并提供查询接口供开发者使用。这些统计信息包括消息拉取、消费延迟、消费速率等关键指标*/
 public class ConsumerStatsManager {
     private static final Logger log = LoggerFactory.getLogger(ConsumerStatsManager.class);
 
@@ -39,6 +40,9 @@ public class ConsumerStatsManager {
     private final StatsItemSet topicAndGroupPullTPS;
     private final StatsItemSet topicAndGroupPullRT;
 
+    /**
+     * 初始化五个 StatsItemSet 对象，分别对应五种统计指标....使用 ScheduledExecutorService 定期更新统计数据。
+     * */
     public ConsumerStatsManager(final ScheduledExecutorService scheduledExecutorService) {
         this.topicAndGroupConsumeOKTPS =
             new StatsItemSet(TOPIC_AND_GROUP_CONSUME_OK_TPS, scheduledExecutorService, log);
@@ -59,7 +63,9 @@ public class ConsumerStatsManager {
 
     public void shutdown() {
     }
-
+    /**
+     * StatsItemSet提供了多个addXxxxValue方法，这些方法用于添加不同的指标值，更新统计数据
+     * */
     public void incPullRT(final String group, final String topic, final long rt) {
         this.topicAndGroupPullRT.addRTValue(topic + "@" + group, (int) rt, 1);
     }
@@ -80,6 +86,16 @@ public class ConsumerStatsManager {
         this.topicAndGroupConsumeFailedTPS.addValue(topic + "@" + group, (int) msgs, 1);
     }
 
+    /**
+     * 查询指定消费者组和主题的消费状态（ConsumeStatus）。
+     * 包括以下指标：
+     * 消息拉取的平均响应时间（PullRT）。
+     * 消息拉取的速率（PullTPS）。
+     * 消费的平均响应时间（ConsumeRT）。
+     * 成功消费的消息速率（ConsumeOKTPS）。
+     * 失败消费的消息速率（ConsumeFailedTPS）。
+     * 最近一小时内失败消费的消息总数（ConsumeFailedMsgs）。
+     * */
     public ConsumeStatus consumeStatus(final String group, final String topic) {
         ConsumeStatus cs = new ConsumeStatus();
         {
@@ -127,6 +143,7 @@ public class ConsumerStatsManager {
         return cs;
     }
 
+    /**获取某个统计值的快照*/
     private StatsSnapshot getPullRT(final String group, final String topic) {
         return this.topicAndGroupPullRT.getStatsDataInMinute(topic + "@" + group);
     }

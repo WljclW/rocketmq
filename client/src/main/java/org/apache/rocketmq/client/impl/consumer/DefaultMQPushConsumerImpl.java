@@ -1033,12 +1033,12 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             default:
                 break;
         }
-        // 更新topic的订阅关系表
+        // 拿出订阅信息表中的所有topic，更新这些topic对应的路由信息
         this.updateTopicSubscribeInfoWhenSubscriptionChanged();
         //检查客户端状态
         this.mQClientFactory.checkClientInBroker();
-        if (this.mQClientFactory.sendHeartbeatToAllBrokerWithLock()) { //如果向所有的broker发送心跳包成功
-            this.mQClientFactory.rebalanceImmediately(); //唤醒消费者负载均衡的执行
+        if (this.mQClientFactory.sendHeartbeatToAllBrokerWithLock()) { //向所有的broker发送心跳包，成功时进入if块
+            this.mQClientFactory.rebalanceImmediately(); //唤醒 消费者负载均衡逻辑 的执行
         }
     }
 
@@ -1273,6 +1273,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return messageListenerInner;
     }
 
+    /**【功能】更新订阅信息中 所有的topic的路由信息
+     * 【逻辑】step1:根据getSubscriptionInner()方法拿到订阅关系表；step2:遍历表中的每一个key————即主题topic；
+     *      step3:调用updateTopicRouteInfoFromNameServer方法更新该主题的路由信息
+     * */
     private void updateTopicSubscribeInfoWhenSubscriptionChanged() {
         if (doNotUpdateTopicSubscribeInfoWhenSubscriptionChanged) {
             return;

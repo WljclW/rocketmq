@@ -237,6 +237,17 @@ import static org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode.SUCC
  *  交互。这个类属于 RocketMQ 客户端中的 内部实现类，并且它通常不直接暴露给用户！！而是通过 MQProducer, MQConsumer, MQAdmin 等更高
  *  层次的 API 使用。
  *  */
+/**
+ * MQClientAPIImpl 是 RocketMQ 客户端与服务端（Broker 和 NameServer）通信的桥梁，主要作用包括：
+ *      发送请求 ：
+ *          封装了向 Broker 和 NameServer 发送请求的逻辑，例如发送消息、拉取消息、更新消费进度等。
+ *      处理响应 ：
+ *          负责接收和解析服务端返回的响应数据。
+ *      管理连接 ：
+ *          维护客户端与 Broker 和 NameServer 的长连接，并处理连接异常（如断开、重连等）。
+ *      异步与同步支持 ：
+ *          提供同步和异步两种调用方式，满足不同场景的需求。
+ *  */
 public class MQClientAPIImpl implements NameServerUpdateCallback {
     private final static Logger log = LoggerFactory.getLogger(MQClientAPIImpl.class);
     private static boolean sendSmartMsg =
@@ -1483,6 +1494,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         this.remotingClient.invokeOneway(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr), request, timeoutMillis);
     }
 
+    /**构建RemotingCommand，借助netty同步发送请求*/
     public int sendHeartbeat(
         final String addr,
         final HeartbeatData heartbeatData,

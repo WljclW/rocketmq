@@ -30,7 +30,7 @@ public class HeartbeatData extends RemotingSerializable {
     private Set<ProducerData> producerDataSet = new HashSet<>();
     private Set<ConsumerData> consumerDataSet = new HashSet<>();
     private int heartbeatFingerprint = 0;
-    private boolean isWithoutSub = false;
+    private boolean isWithoutSub = false; //标识消费者 是否没有订阅任何主题
 
     public String getClientID() {
         return clientID;
@@ -78,8 +78,14 @@ public class HeartbeatData extends RemotingSerializable {
             + ", consumerDataSet=" + consumerDataSet + "]";
     }
 
+    /**计算一个心跳包HeartbeatData的指纹(其实就是计算哈希值)，深拷贝得到一个新对象后置无关字段(换言之关注心跳包的实质性内容)为零值，然后
+     * 序列化成字符串并计算它的哈希值*/
     public int computeHeartbeatFingerprint() {
         HeartbeatData heartbeatDataCopy = JSON.parseObject(JSON.toJSONString(this), HeartbeatData.class);
+        /*下面的几行是将无关字段置0，比如：订阅数据版本号置0、包含订阅关系、置指纹值为0、置clientId为0。。
+        * 为什么需要这样做？？
+        *       猜测：这些字段的值可能会因为环境改变而改变，但是重要的是他们不影响心跳检测的实际内容，因此他们置为相同的可以让
+        *       这里的哈希值集中关注实质性的内容*/
         for (ConsumerData consumerData : heartbeatDataCopy.getConsumerDataSet()) {
             for (SubscriptionData subscriptionData : consumerData.getSubscriptionDataSet()) {
                 subscriptionData.setSubVersion(0L);
@@ -88,6 +94,7 @@ public class HeartbeatData extends RemotingSerializable {
         heartbeatDataCopy.setWithoutSub(false);
         heartbeatDataCopy.setHeartbeatFingerprint(0);
         heartbeatDataCopy.setClientID("");
+        /*将heartbeatDataCopy对象重新序列化成json串并计算它的哈希值，返回*/
         return JSON.toJSONString(heartbeatDataCopy).hashCode();
     }
 }

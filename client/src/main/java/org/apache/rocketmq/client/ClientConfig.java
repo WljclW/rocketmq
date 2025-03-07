@@ -31,7 +31,7 @@ import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 import org.apache.rocketmq.remoting.protocol.RequestType;
 
 /**
- * Client Common configuration....配置客户端的通用配置
+ * Client Common configuration....配置客户端的通用配置，内部提供默认的消费者 和 生产者 都是它的子类
  */
 public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
@@ -96,7 +96,8 @@ public class ClientConfig {
     private boolean sendLatencyEnable = Boolean.parseBoolean(System.getProperty(SEND_LATENCY_ENABLE, "false"));
     private boolean startDetectorEnable = Boolean.parseBoolean(System.getProperty(START_DETECTOR_ENABLE, "false"));
 
-    private boolean enableHeartbeatChannelEventListener = true;
+    //enableHeartbeatChannelEventListener决定是否在客户端中注册一个专门的事件监听器，用于监听与 Broker 的心跳通道相关的事件。
+    private boolean enableHeartbeatChannelEventListener = true; /*是否启用 心跳事件通道监听器*/
 
     //根据client的ip、instanceName、unitName构建mqClientId..完整的名称：IP地址@InstanceName@unitName@0
     public String buildMQClientId() {

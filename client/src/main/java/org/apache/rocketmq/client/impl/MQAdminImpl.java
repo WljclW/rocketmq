@@ -58,6 +58,9 @@ import org.apache.rocketmq.remoting.protocol.header.QueryMessageResponseHeader;
 import org.apache.rocketmq.remoting.protocol.route.BrokerData;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
+/**
+ * AI:主要用于管理和操作 RocketMQ 的元数据和运行时状态。它是 MQAdmin 接口的默认实现，提供了对主题（Topic）、消费者组（Consumer Group）、Broker 和消息等资源的管理功能。
+ * */
 public class MQAdminImpl {
 
     private static final Logger log = LoggerFactory.getLogger(MQAdminImpl.class);

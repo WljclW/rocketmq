@@ -87,7 +87,7 @@ public class BrokerData implements Comparable<BrokerData> {
     /**
      * Selects a (preferably master) broker address from the registered list. If the master's address cannot be found, a
      * slave broker address is selected in a random manner.
-     * 从注册列表中选择一个（最好是主）Broker地址。如果找不到master Broker的地址，以随机方式选择slave Broker地址。
+     * 从注册列表中选择一个（最好是主）Broker地址。如果找不到master Broker的地址，以随机方式选择一个slave Broker地址。
      *
      * @return Broker address.
      */

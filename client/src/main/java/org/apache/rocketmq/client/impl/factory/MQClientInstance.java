@@ -106,13 +106,15 @@ public class MQClientInstance {
 
     /**
      * The container of the producer in the current client. The key is the name of producerGroup.
+     * 【作用】用于(缓)存当前客户机中的producer
      * 用于缓存group和生产者的对应关系
      */
     private final ConcurrentMap<String, MQProducerInner> producerTable = new ConcurrentHashMap<>();
 
     /**
      * The container of the consumer in the current client. The key is the name of consumerGroup.
-     * 用于缓存group和消费者的对应关系
+     * 【作用】用于(缓)存当前客户机中的consumer
+     * 用于缓存consumer group和消费者的对应关系
      */
     private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
 
@@ -146,7 +148,7 @@ public class MQClientInstance {
 
     /**
      * brokerVersionTable的key是broker集群的名称，value是该集群所有broker的版本信息
-     * value的map：key是broker的name（就是broker集群名称），value是该broker的 地址 以及 版本号
+     * value的map：key是broker的name（就是broker集群名称），value是 这个集群中某一个broker的 地址 以及 版本号
      * */
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable = new ConcurrentHashMap<>();
     private final Set<String/* Broker address */> brokerSupportV2HeartbeatSet = new HashSet();
@@ -172,8 +174,8 @@ public class MQClientInstance {
 
     public MQClientInstance(ClientConfig clientConfig, int instanceIndex, String clientId, RPCHook rpcHook) {
         /**
-         * clientConfig是对作为rocketmq客户端的配置；NettyClientConfig是作为netty客户端的配置。因此这个类就有了这两个配置的
-         *      所有优点
+         * clientConfig是对作为rocketmq客户端的配置；NettyClientConfig是作为netty客户端的配置。。并且ClientInstance内部持有
+         *      NettyConfig实例，因此这个类就有了这两个配置的所有可配置项
          * */
         this.clientConfig = clientConfig;   //客户端配置类
         this.nettyClientConfig = new NettyClientConfig();
@@ -182,6 +184,7 @@ public class MQClientInstance {
         this.nettyClientConfig.setSocksProxyConfig(clientConfig.getSocksProxyConfig());
         ClientRemotingProcessor clientRemotingProcessor = new ClientRemotingProcessor(this);
         ChannelEventListener channelEventListener;
+        /*如果 开启心跳事件通道监听器(if语句块逻辑)，则初始化一个；否则的话(else语句块)初始化为null*/
         if (clientConfig.isEnableHeartbeatChannelEventListener()) {
             channelEventListener = new ChannelEventListener() {
                 private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = MQClientInstance.this.brokerAddrTable;
@@ -231,10 +234,11 @@ public class MQClientInstance {
         this.clientId = clientId;
 
         this.mQAdminImpl = new MQAdminImpl(this);
-
+        /*创建消息拉取服务*/
         this.pullMessageService = new PullMessageService(this);
-
+        /*创建消息队列负载均衡服务*/
         this.rebalanceService = new RebalanceService(this);
+        /**为什么这里需要创建一个默认的生产者，后面的作用是什么？？？*/
         /*
           这里也会创建一个DefaultMQProducer，这个producer是作为内部使用的。。刚开始发送消息就
           会创建一个DefaultMQProducer实例，这两个是不一样的，这个实例的生产者组是CLIENT_INNER_PRODUCER_GROUP
@@ -520,18 +524,22 @@ public class MQClientInstance {
         }
     }
 
+    /**【功能】主要是判断过滤表达式Broker是不是支持*/
     public void checkClientInBroker() throws MQClientException {
-
+        /*方法的主题逻辑：for循环遍历 consumerTable中的每一个entry*/
         for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
+            //拿到这个 消费者实例的所有订阅————Set<SubscriptionData>
             Set<SubscriptionData> subscriptionInner = entry.getValue().subscriptions();
             if (subscriptionInner == null || subscriptionInner.isEmpty()) {
                 return;
             }
-
+            //for循环遍历这个消费者实例的所有订阅————Set<SubscriptionData>
             for (SubscriptionData subscriptionData : subscriptionInner) {
+                /*如果是TAG类型则跳过，因为所有的Broker都支持这种过滤类型*/
                 if (ExpressionType.isTagType(subscriptionData.getExpressionType())) {
                     continue;
                 }
+                /*如果是其他的类型则需要进入下面的逻辑 继续判断*/
                 // may need to check one broker every cluster...
                 // assume that the configs of every broker in cluster are the same.
                 String addr = findBrokerAddrByTopic(subscriptionData.getTopic());
@@ -638,8 +646,11 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 【参数】1.brokerId 2.brokerName(Broker集群的名称) 3.brokerAddr(这个Broker的地址)
+     * */
     public boolean sendHeartbeatToBroker(long id, String brokerName, String addr) {
-        if (this.lockHeartbeat.tryLock()) {
+        if (this.lockHeartbeat.tryLock()) { /**确保同一时间只有一个线程能进行心跳发送逻辑*/
             final HeartbeatData heartbeatDataWithSub = this.prepareHeartbeatData(false);
             final boolean producerEmpty = heartbeatDataWithSub.getProducerDataSet().isEmpty();
             final boolean consumerEmpty = heartbeatDataWithSub.getConsumerDataSet().isEmpty();
@@ -647,11 +658,14 @@ public class MQClientInstance {
                 log.warn("sendHeartbeatToBroker sending heartbeat, but no consumer and no producer. [{}]", this.clientId);
                 return false;
             }
-            try {
+            try { /*判断心跳包的版本，并发送*/
                 if (clientConfig.isUseHeartbeatV2()) {
+                    /*V2和V1的区别(看方法形参)：
+                        第一点区别：携带两个HeartbeatData参数：其中一个是有订阅信息的；一个是没有订阅信息的。。
+                        第二点区别：携带一个指纹(心跳包实质性内容的哈希值)*/
                     int currentHeartbeatFingerprint = heartbeatDataWithSub.computeHeartbeatFingerprint();
                     heartbeatDataWithSub.setHeartbeatFingerprint(currentHeartbeatFingerprint);
-                    HeartbeatData heartbeatDataWithoutSub = this.prepareHeartbeatData(true);
+                    HeartbeatData heartbeatDataWithoutSub = this.prepareHeartbeatData(true); //准备没有订阅信息的心跳包
                     heartbeatDataWithoutSub.setHeartbeatFingerprint(currentHeartbeatFingerprint);
                     return this.sendHeartbeatToBrokerV2(id, brokerName, addr, heartbeatDataWithSub, heartbeatDataWithoutSub, currentHeartbeatFingerprint);
                 } else {
@@ -669,33 +683,38 @@ public class MQClientInstance {
     }
 
     /**
-     * 【总述】
+     * 【总述】向方法参数指定的Broker发送心跳信息，并更新brokerVersionTable中的版本号。。所有操作成功就返回true，否则返回false。
+     * 【逻辑】step1:mQClientAPIImpl.sendHeartbeat向这个Broker发送心跳包；step2:更新brokerVersionTable中这个Broker对应的版本号
+     *      step3:记录心跳发送的次数sendHeartbeatTimesTotal，并决定是否打印日志
+     *      ======以后操作都成功，返回true
+     *      step4:异常处理
+     *      ======catch块之后返回false
      * */
     private boolean sendHeartbeatToBroker(long id, String brokerName, String addr, HeartbeatData heartbeatData) {
         try {
+            /*mQClientAPIImpl.sendHeartbeat是借助netty发送请求，如果成功后会返回一个版本号version*/
             int version = this.mQClientAPIImpl.sendHeartbeat(addr, heartbeatData, clientConfig.getMqClientApiTimeout());
             if (!this.brokerVersionTable.containsKey(brokerName)) { //如果还没有这个broker集群的信息，则创建key放进去
                 this.brokerVersionTable.put(brokerName, new HashMap<>(4));
             }
             /*
-            经过第一步就知道了信条是成功响应了。。。。这里会进行版本的更新
-                   将broker地址——>版本号这样的映射存到brokerVersionTable的value中。
+            经过第一步就知道了netty请求是成功响应了。。。。这里会进行版本的更新
+                   将broker地址——>版本号 这样的映射存到brokerVersionTable的value中。
                    具体做法：先是拿到brokerVersionTable的value，value是一个map，因此将映
                         射broker地址————>version放进去，如果本来value就有这样的映射，根据
-                        jdk源码可知就会更新原来的值
             * **/
             this.brokerVersionTable.get(brokerName).put(addr, version);
             //AtomicLong类型的sendHeartbeatTimesTotal，每心跳成功一次，就加一
             long times = this.sendHeartbeatTimesTotal.getAndIncrement();
-            if (times % 20 == 0) {
+            if (times % 20 == 0) { //每心跳20次，打印一次日志
                 log.info("send heart beat to broker[{} {} {}] success", brokerName, id, addr);
                 log.info(heartbeatData.toString());
             }
             return true;
         } catch (Exception e) {
-            if (this.isBrokerInNameServer(addr)) {
+            if (this.isBrokerInNameServer(addr)) { //如果broker不nameserver中，则记录：发送心跳失败
                 log.warn("send heart beat to broker[{} {} {}] failed", brokerName, id, addr, e);
-            } else {
+            } else { //否则的话，会记录："the broker not up, forget it"
                 log.warn("send heart beat to broker[{} {} {}] exception, because the broker not up, forget it", brokerName,
                     id, addr, e);
             }
@@ -703,6 +722,9 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 【功能】遍历brokerAddrTable拿到所有的Broker，经过一些检查之后，向满足条件的Broker(使用sendHeartbeatToBroker方法)发送心跳。
+     * */
     private boolean sendHeartbeatToAllBroker() {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData(false);
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
@@ -714,27 +736,30 @@ public class MQClientInstance {
         /**
          * 下面才是方法主体：
          *     检查broker实例集合是否为空，为空则直接返回;
+         *     如果不是空，拿出其中的每一个Broker实例，然后经过一些检查之后，向满足条件的Broker(使用sendHeartbeatToBroker方法)发送心跳。
          * */
         if (this.brokerAddrTable.isEmpty()) {
             return false;
         }
         for (Entry<String, HashMap<Long, String>> brokerClusterInfo : this.brokerAddrTable.entrySet()) {
+            /*step1:拿到brokerAddrTable的一个value*/
             String brokerName = brokerClusterInfo.getKey(); //拿到的key是broker集群的名称
             HashMap<Long, String> oneTable = brokerClusterInfo.getValue();
-            if (oneTable == null) {
+            if (oneTable == null) { //说明这个集群对应的Broker实例集合为空，则跳过
                 continue;
             }
-            //brokerAddrTable的value是一个map，存放的是一个broker集群下所有的broker实例
+            //step2:brokerAddrTable的value是一个map，存放的是一个broker集群下所有的broker实例
             for (Entry<Long, String> singleBrokerInstance : oneTable.entrySet()) {
-                Long id = singleBrokerInstance.getKey();
-                String addr = singleBrokerInstance.getValue();
+                Long id = singleBrokerInstance.getKey(); //拿到的key是broker实例的id
+                String addr = singleBrokerInstance.getValue(); //拿到的value是broker实例的地址
+                /**下面的两个条件是什么意思？？*/
                 if (addr == null) {
                     continue;
                 }
                 if (consumerEmpty && MixAll.MASTER_ID != id) {
                     continue;
                 }
-                //向某一个具体的broker实例发送心跳
+                //向集群中一个具体的broker实例发送心跳
                 sendHeartbeatToBroker(id, brokerName, addr, heartbeatData);
             }
         }
@@ -921,13 +946,20 @@ public class MQClientInstance {
         return false;
     }
 
+    /**
+     * 【作用】构建心跳包
+     * 【流程】以HeartbeatData对象来存放所需数据：1.客户机的ID、2.所有的Consumer信息(用ConsumerData来封装一个Consumer实例的信息，将
+     *      所有的实例添加到consumerDataSet)、3.所有的Producer信息(每一个生产者的信息使用一个ProducerData来存储，将所有的生产者的信息放
+     *      到producerDataSet)、4.是否有订阅消息
+     * */
     private HeartbeatData prepareHeartbeatData(boolean isWithoutSub) {
+        //创建HeartbeatData对象用来存放 客户端的心跳包数据
         HeartbeatData heartbeatData = new HeartbeatData();
 
-        // clientID
+        // clientID。给该心跳包设置clientID属性
         heartbeatData.setClientID(this.clientId);
 
-        // Consumer
+        // Consumer。给该心跳包设置consumerDataSet属性
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
@@ -945,7 +977,7 @@ public class MQClientInstance {
             }
         }
 
-        // Producer
+        // Producer。给该心跳包设置producerDataSet属性
         for (Map.Entry<String/* group */, MQProducerInner> entry : this.producerTable.entrySet()) {
             MQProducerInner impl = entry.getValue();
             if (impl != null) {
@@ -959,6 +991,7 @@ public class MQClientInstance {
         return heartbeatData;
     }
 
+    /**返回路由信息表topicRouteTable是否存在地址为brokerAddr的Broker*/
     private boolean isBrokerInNameServer(final String brokerAddr) {
         for (Entry<String, TopicRouteData> itNext : this.topicRouteTable.entrySet()) {
             List<BrokerData> brokerDatas = itNext.getValue().getBrokerDatas();
@@ -1118,10 +1151,21 @@ public class MQClientInstance {
         this.adminExtTable.remove(group);
     }
 
+    /**延迟指定的时间进行唤醒再平衡*/
     public void rebalanceLater(long delayMillis) {
         if (delayMillis <= 0) {
             this.rebalanceService.wakeup();
         } else {
+            /*【注意】下面的调用使用了java8的语法糖
+            * 正规的写法可以写成下面的形式(schedule的第一个参数是runable，没有参数 且 没有返回值)，表示runable匿名对象的run方法就是执
+            * 行RebalanceService服务的wakeup()：
+            *   this.scheduledExecutorService.schedule(
+                    () -> {MQClientInstance.this.rebalanceService.wakeup()},
+                    delayMillis,
+                    TimeUnit.MILLISECONDS
+                );
+              思考得到一个动态代理的java8写法
+            * */
             this.scheduledExecutorService.schedule(MQClientInstance.this.rebalanceService::wakeup, delayMillis, TimeUnit.MILLISECONDS);
         }
     }
