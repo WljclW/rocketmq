@@ -184,20 +184,23 @@ public class PullAPIWrapper {
     /**【总述】获取具体的brokerAddr 并且 构建请求头；最后调用this.mQClientFactory.getMQClientAPIImpl().pullMessage拉取消息*/
     public PullResult pullKernelImpl(
         final MessageQueue mq, /*消息队列*/
-        final String subExpression, /*订阅表达式*/
-        final String expressionType, /*表达式类型*/
+        final String subExpression, /*订阅表达式，消息过滤表达式*/
+        final String expressionType, /*表达式类型，分为TAG、SQL92*/
         final long subVersion, /*订阅版本*/
         final long offset, /*拉取消息的起始偏移量*/
-        final int maxNums, /*拉取消息的最大条数*/
+        final int maxNums, /*拉取消息的最大条数(本次拉取消息最大条数，默认32)*/
         final int maxSizeInBytes,
-        final int sysFlag, /*系统标志位*/
-        final long commitOffset, /*提交的消费位点(用于事务回查)*/
-        final long brokerSuspendMaxTimeMillis, /*broker挂起最大时间(长轮询超时)*/
-        final long timeoutMillis, /*客户端拉取超时时间*/
-        final CommunicationMode communicationMode, /*通信模式*/
-        final PullCallback pullCallback /*异步回调，仅ASYNC有效*/
+            /*系统标志位，目前只有低4位使用,分别表示：FLAG_CLASS_FILTER|FLAG_SUBSCRIPTION|
+            FLAG_SUSPEND|FLAG_COMMIT_OFFSET..含义分别是：消息过滤机制位类模式|消息过滤机制为表达式|
+            消息拉取时支持挂起|从内存中读取的消息进度大于0*/
+        final int sysFlag,
+        final long commitOffset, /*提交的消费位点(用于事务回查) 或者 叫做当前messagequeue的消费进度(内存中)*/
+        final long brokerSuspendMaxTimeMillis, /*消息拉取过程允许broker挂起的最大时间(长轮询超时)，默认15秒*/
+        final long timeoutMillis, /*客户端拉取(即消息拉取)超时时间*/
+        final CommunicationMode communicationMode, /*通信模式，默认异步*/
+        final PullCallback pullCallback /*异步回调(从Broker拉取到消息后的回调)，仅ASYNC有效*/
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
-        /**step1:查找指定的 broker,并将结果封装为FindBrokerResult*/
+        /**step1:根据brokerName、brokerId查找指定的 broker,并将结果封装为FindBrokerResult*/
         /*调用recalculatePullFromWhichNode方法获取Broker ID，再调用findBrokerAddressInSubscribe根据ID获取Broker的相关信息
          */
         FindBrokerResult findBrokerResult =
@@ -241,12 +244,14 @@ public class PullAPIWrapper {
             requestHeader.setMaxMsgBytes(maxSizeInBytes);
             requestHeader.setExpressionType(expressionType);
             requestHeader.setBrokerName(mq.getBrokerName());
-            /*如果是类过滤模式，则需要获取类过滤服务器地址*/
+            /*如果是类过滤模式，则需要获取类过滤服务器地址————即需要根据主题名称、broker地址找到注册在
+            Broker上的FilterServer地址(方法computePullFromWhichFilterServer的作用)，从FilterServer上
+            拉取消息*/
             String brokerAddr = findBrokerResult.getBrokerAddr();
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
-            /*最终是调用 Netty的方法进行发送*/
+            /*最终是调用 Netty的方法异步向broker拉取信息*/
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,

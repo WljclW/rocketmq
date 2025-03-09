@@ -477,7 +477,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             response.setRemark("The broker does not support consumer to filter message by " + subscriptionData.getExpressionType());
             return response;
         }
-
+        /*根据订阅消息构建消息过滤器*/
         MessageFilter messageFilter;
         if (this.brokerController.getBrokerConfig().isFilterSupportRetry()) {
             messageFilter = new ExpressionForRetryMessageFilter(subscriptionData, consumerFilterData,
@@ -534,11 +534,11 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 getMessageResult = new GetMessageResult();
                 getMessageResult.setStatus(GetMessageStatus.OFFSET_RESET);
                 getMessageResult.setNextBeginOffset(broadcastInitOffset);
-            } else {
+            } else { /*调用getMessageAsync查找消息*/
                 SubscriptionData finalSubscriptionData = subscriptionData;
                 RemotingCommand finalResponse = response;
-                messageStore.getMessageAsync(group, topic, queueId, requestHeader.getQueueOffset(),
-                        requestHeader.getMaxMsgNums(), messageFilter)
+                messageStore.getMessageAsync(group, topic, queueId, requestHeader.getQueueOffset() /*待拉取偏移量*/,
+                        requestHeader.getMaxMsgNums() /*最大拉取消息数*/, messageFilter /*消息过滤器*/)
                     .thenApply(result -> {
                         if (null == result) {
                             finalResponse.setCode(ResponseCode.SYSTEM_ERROR);

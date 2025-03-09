@@ -16,11 +16,11 @@
  */
 package org.apache.rocketmq.client.impl;
 
-/**用于封装 查找到的broker*/
+/**用于封装 查找到的broker信息*/
 public class FindBrokerResult {
-    private final String brokerAddr;
-    private final boolean slave;
-    private final int brokerVersion;
+    private final String brokerAddr; //broker地址
+    private final boolean slave; //是否是slave
+    private final int brokerVersion; //broker版本号
 
     public FindBrokerResult(String brokerAddr, boolean slave) {
         this.brokerAddr = brokerAddr;

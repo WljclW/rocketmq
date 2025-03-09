@@ -252,9 +252,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
      *      MQClientAPIImpl#pullMessage方法则是调用netty的功能真正的拉取消息
      * */
     public void pullMessage(final PullRequest pullRequest) {
+        /**
+         * step1：从PullRequest中获取ProcessQueue，如果处理队列当前状态未被丢弃，则更新ProcessQueue的
+         *      lastPullTimestamp为当前时间戳。如果当前消费者被挂起，则将拉取任务延迟1s再放入
+         *      PullMessageService的拉取任务队列中，最后结束本次消息拉取
+         * 确保ProcessQueue、DefaultMQPushConsumerImpl的状态正常;更新ProcessQueue的最后拉取时
+         *      间戳字段。。。对于中间的不正确现象抛出异常
+         * */
         final ProcessQueue processQueue = pullRequest.getProcessQueue();
-        /**step1:确保ProcessQueue、DefaultMQPushConsumerImpl的状态正常;更新ProcessQueue的最后拉取时
-         * 间戳字段。。。对于中间的不正确现象抛出异常*/
         if (processQueue.isDropped()) {
             log.info("the pull request[{}] is dropped.", pullRequest.toString());
             return;
@@ -269,13 +274,13 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             this.executePullRequestLater(pullRequest, pullTimeDelayMillsWhenException);
             return;
         }
-
+        /*如果被挂起，则将拉去任务延迟1s再放入PullMessageService的拉取任务队列中*/
         if (this.isPause()) {
             log.warn("consumer was paused, execute pull request later. instanceName={}, group={}", this.defaultMQPushConsumer.getInstanceName(), this.defaultMQPushConsumer.getConsumerGroup());
             this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_SUSPEND);
             return;
         }
-        /**step2:查看缓存的消息的数量 以及 总大小，然后判断是不是需要流控;*/
+        /**step2:查看缓存的消息的数量、总大小、消费间隔，然后判断是不是需要流控;*/
         long cachedMessageCount = processQueue.getMsgCount().get();
         long cachedMessageSizeInMiB = processQueue.getMsgSize().get() / (1024 * 1024);
         //缓存消息的数量超过阈值，则进行流控
@@ -300,7 +305,8 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
         /*如果不是顺序消息：判断消息队列的跨度是否超过阈值，如果超过则进行流控(即非顺序类型消息多一个要求：待消
         费的消息的"最大偏移-最小偏移"超出2000的时候,会延迟50ms再拉取消息)
-        processQueue.getMaxSpan()：计算出来消息队列的堆积情况(实质就是最大偏移 和 最小偏移之差)*/
+        processQueue.getMaxSpan()：计算出来消息队列的堆积情况(实质就是最大偏移 和 最小偏移之差)
+        这一种情况主要的考量：担心因为一条消息堵塞，使消息进度无法向前推进，可能造成大量消息重复消费*/
         if (!this.consumeOrderly) {
             if (processQueue.getMaxSpan() > this.defaultMQPushConsumer.getConsumeConcurrentlyMaxSpan()) {
                 this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_CACHE_FLOW_CONTROL);
@@ -494,7 +500,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             classFilter // class filter
         );
         try {
-            /**step9:调用PullAPIWrapper的方法拉取消息*/
+            /**step9:调用PullAPIWrapper的方法与服务端交互 拉取消息*/
             this.pullAPIWrapper.pullKernelImpl(
                 pullRequest.getMessageQueue(),
                 subExpression,
