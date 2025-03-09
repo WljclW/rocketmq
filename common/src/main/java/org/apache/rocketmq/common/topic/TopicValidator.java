@@ -88,6 +88,9 @@ public class TopicValidator {
         }
     }
 
+    /**【作用】判断一个消费者组名是不是合法
+     * 技巧：用了一个布尔类型数组存放每一个index对应的元素是不是合法，这个index值就代表字符所对应的ASCII码。比
+     *      如：'e'对应的ASCII码是101，则bitMap[101]存放的就是组名中包含'e'字母是不是非法的*/
     public static boolean isTopicOrGroupIllegal(String str) {
         int strLen = str.length();
         int len = VALID_CHAR_BIT_MAP.length;

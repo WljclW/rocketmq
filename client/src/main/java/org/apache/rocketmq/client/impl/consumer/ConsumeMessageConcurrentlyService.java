@@ -55,18 +55,20 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
     private final DefaultMQPushConsumer defaultMQPushConsumer; //消费者 引用
     private final MessageListenerConcurrently messageListener; //并发消息监听事件回调
     private final BlockingQueue<Runnable> consumeRequestQueue; //消息消费任务队列
-    private final ThreadPoolExecutor consumeExecutor; //消息消费线程池
+    private final ThreadPoolExecutor consumeExecutor; //消息消费线程池————消费消息
     private final String consumerGroup; //消息消费组
-    //添加消费任务到consumeExecutor队列的定时任务线程池
+    /*scheduledExecutorService：添加消费任务到consumeExecutor队列的定时任务线程池(主要用于xxxLater方法，也就
+    是说稍后多久才会真正干事)*/
     private final ScheduledExecutorService scheduledExecutorService;
-    private final ScheduledExecutorService cleanExpireMsgExecutors; //定时清理过期消息线程池
+    /*cleanExpireMsgExecutors:定时清理过期消息线程池*/
+    private final ScheduledExecutorService cleanExpireMsgExecutors;
 
     public ConsumeMessageConcurrentlyService(DefaultMQPushConsumerImpl defaultMQPushConsumerImpl,
         MessageListenerConcurrently messageListener) {
         //初始化 defaultMQPushConsumerImpl、messageListener
         this.defaultMQPushConsumerImpl = defaultMQPushConsumerImpl;
         this.messageListener = messageListener;
-        //本类引用 指向 外部的具体实现
+        //本类字段 指向 外部的具体实现
         this.defaultMQPushConsumer = this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer();
         this.consumerGroup = this.defaultMQPushConsumer.getConsumerGroup(); //消费者组
         // 初始化"消费请求队列"为LinkedBlockingQueue无界队列
@@ -87,6 +89,9 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         this.cleanExpireMsgExecutors = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("CleanExpireMsgScheduledThread_" + consumerGroupTag));
     }
 
+    /**start方法中就只是 开启了定期清理过期消息的服务。
+     * consumeExecutor的使用是在有任务提交时使用；
+     * scheduledExecutorService的使用是在该类的xxxxxLater方法，即有未来任务提交的时候使用*/
     public void start() {
         /*以固定的时间间隔 清理过期消息。。默认是每隔15min执行一次*/
         this.cleanExpireMsgExecutors.scheduleAtFixedRate(new Runnable() {

@@ -25,6 +25,7 @@ import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import java.lang.reflect.Proxy;
 
 /**
+ * 此示例展示了如何使用提供的DefaultMQPushConsumer来订阅和使用消息
  * This example shows how to subscribe and consume messages using providing {@link DefaultMQPushConsumer}.
  */
 public class Consumer {
@@ -61,13 +62,18 @@ public class Consumer {
 
         /*
          * Subscribe one more topic to consume.
+         * 构建订阅消息数据结构SubscriptionData，然后将这个数据设置到DefaultMQPushConsumerImpl.rebalanceImpl的
+         *      有关map中
+         * 【说明】总的来说，订阅的关系来源有两个渠道：
+         *      1.DefaultMQPushConsumer#subscribe方法,实现主题的订阅
+         *      2.对于cluster消费模式，需要订阅重试主题消息。这个过程是消费者启动时判断
          */
         consumer.subscribe(TOPIC, "*");
 
         /*
          *  Register callback to execute on arrival of messages fetched from brokers.
          *  注册一个回调，每当从Broker获取到消息后，就会执行这个回调。
-         *  Lambda表达式的写法，类似于动态代理————(proxy,method,args)—>{}
+         *  Lambda表达式的写法，类似于动态代理时写InvocationHandler的时候————(proxy,method,args)—>{}
          */
         consumer.registerMessageListener((MessageListenerConcurrently) (msg, context) -> {
             System.out.printf("%s Receive New Messages: %s %n", Thread.currentThread().getName(), msg);

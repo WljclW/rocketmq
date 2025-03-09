@@ -262,7 +262,7 @@ public class ClientConfig {
      *
      * @param namesrvAddr name server address
      */
-    public void setNamesrvAddr(String namesrvAddr) {
+    public void setNamesrvAddr(String namesrvAddr) { /*这里的参数只能携带一个namesrv*/
         this.namesrvAddr = namesrvAddr;
         this.namespaceInitialized = false;
     }

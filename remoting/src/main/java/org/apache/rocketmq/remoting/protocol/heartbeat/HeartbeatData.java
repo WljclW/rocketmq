@@ -78,8 +78,9 @@ public class HeartbeatData extends RemotingSerializable {
             + ", consumerDataSet=" + consumerDataSet + "]";
     }
 
-    /**计算一个心跳包HeartbeatData的指纹(其实就是计算哈希值)，深拷贝得到一个新对象后置无关字段(换言之关注心跳包的实质性内容)为零值，然后
-     * 序列化成字符串并计算它的哈希值*/
+    /**【功能】计算一个心跳包HeartbeatData的指纹(其实就是计算哈希值)。
+     * 处理逻辑：深拷贝得到一个新对象后置无关字段(换言之关注心跳包的实质性内容)为零值，然后
+     *      序列化成字符串并计算它的哈希值*/
     public int computeHeartbeatFingerprint() {
         HeartbeatData heartbeatDataCopy = JSON.parseObject(JSON.toJSONString(this), HeartbeatData.class);
         /*下面的几行是将无关字段置0，比如：订阅数据版本号置0、包含订阅关系、置指纹值为0、置clientId为0。。

@@ -18,7 +18,7 @@ package org.apache.rocketmq.remoting.common;
 
 public class HeartbeatV2Result {
     private int version = 0;
-    private boolean isSubChange = false;
+    private boolean isSubChange = false; /*表示 订阅关系是否发生改变*/
     private boolean isSupportV2 = false;
 
     public HeartbeatV2Result(int version, boolean isSubChange, boolean isSupportV2) {

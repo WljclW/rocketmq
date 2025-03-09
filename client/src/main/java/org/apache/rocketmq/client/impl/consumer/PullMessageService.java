@@ -60,7 +60,8 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
-    /*将一个PullRequest立即放入到messageRequestQueue。。【说明】因此立即拉取并不是实时的，只是将PullRequest放入在阻塞队列*/
+    /*将一个PullRequest立即放入到messageRequestQueue。。
+    【说明】立即拉取并不是实时的，只是将PullRequest放入在阻塞队列*/
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.messageRequestQueue.put(pullRequest);
@@ -114,7 +115,7 @@ public class PullMessageService extends ServiceThread {
 
     /**
      * pullMessage/popMessage方法都是从阻塞队列中取出拿消息的请求；然后根据请求中的消费者组从consmerTbale中取出MQConsumerInner
-     *      如果找不到会报错，如果找到了就会根据请求的类型来执行pullMessage/popMessage方法
+     *      如果找不到会报错，如果找到了就会根据pullMessage方法
      * */
     private void pullMessage(final PullRequest pullRequest) {
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
@@ -145,8 +146,8 @@ public class PullMessageService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
-                /**从messageRequestQueue中获取一个messageRequest,根据mode来选取不同的方法请求消息..
-                 * 阻塞队列在获取的时候，如果是空的，进行等待*/
+                /**从messageRequestQueue中获取一个messageRequest,根据MessageRequestMode来选取不同
+                 * 的方法请求消息..阻塞队列在获取的时候，如果是空的，进行等待*/
                 MessageRequest messageRequest = this.messageRequestQueue.take();
                 if (messageRequest.getMessageRequestMode() == MessageRequestMode.POP) {
                     this.popMessage((PopRequest) messageRequest);

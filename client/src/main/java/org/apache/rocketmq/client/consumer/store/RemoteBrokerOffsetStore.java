@@ -37,7 +37,7 @@ import org.apache.rocketmq.remoting.protocol.header.QueryConsumerOffsetRequestHe
 import org.apache.rocketmq.remoting.protocol.header.UpdateConsumerOffsetRequestHeader;
 
 /**
- * Remote storage implementation
+ * Remote storage implementation...远端模式的offset存储类(clustering模式偏移量存储在远端)
  */
 public class RemoteBrokerOffsetStore implements OffsetStore {
     private final static Logger log = LoggerFactory.getLogger(RemoteBrokerOffsetStore.class);

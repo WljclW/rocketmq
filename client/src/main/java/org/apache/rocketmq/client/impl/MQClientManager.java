@@ -63,6 +63,7 @@ public class MQClientManager {
         return getOrCreateMQClientInstance(clientConfig, null);
     }
     /**
+     * 【作用】创建或者获取当前jvm里面的MQClientInstance实例
      * 1. 整个 JVM 实例中只存在一个MQClientManager实例，维护一个 MQClientlnstance 缓存表
      *      ConcurrentMap<String， MQClientinstance＞ factoryTable = new ConcurrentHashMap<String， MQClientlnstance＞（），
      *      也就是同一个 clientId 只会创建一个MQClientinstance。

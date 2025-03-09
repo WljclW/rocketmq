@@ -49,7 +49,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
  * 【总述】在大多数情况下，这是被推荐使用的 去消费消息的 类。。也就是说面向rocketmq使用者的
- * 【说明】共rocketmq使用者使用的 默认的消息消费者。。除了start、subscribe、unsubscribe，其他方法都是get/set提供给消费者设置属性，
+ * 【说明】供rocketmq使用者使用的 默认的消息消费者。。除了start、subscribe、unsubscribe，其他方法都是get/set提供给使用者给消费者设置属性，
  *      真正干活(即消费消息的逻辑)的是在DefaultMQPushConsumerImpl中实现的。。这个类相当于在外面封装一层，让用户自定义一些属性或者特
  *      性
  * */
@@ -212,6 +212,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      *
      * <p>
      * The size(MB) of a message only measured by message body, so it's not accurate
+     * 消息body的大小
      */
     private int pullThresholdSizeForQueue = 100;
 
@@ -290,7 +291,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Maximum amount of time in minutes a message may block the consuming thread.
      */
-    //消息消费的超时时间
+    //消息消费的超时时间，单位：分钟
     private long consumeTimeout = 15;
 
     /**
@@ -328,7 +329,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      *
      * @param consumerGroup Consumer group.
      */
-    public DefaultMQPushConsumer(final String consumerGroup) {
+    public DefaultMQPushConsumer(final String consumerGroup) { /*默认使用 平均分配策略*/
         this(consumerGroup, null, new AllocateMessageQueueAveragely());
     }
 
@@ -790,7 +791,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      */
     @Override
     public void start() throws MQClientException {
-        //step1:设置消费者组
+        //step1:设置消费者组。。这里比之前创建消费者时指定的组名，多了一层包装(this.getNamespace())..最终形式：this.getNamespace()%this.consumerGroup)
         setConsumerGroup(NamespaceUtil.wrapNamespace(this.getNamespace(), this.consumerGroup));
         //step2:启动消费者客户端
         this.defaultMQPushConsumerImpl.start();
@@ -849,7 +850,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     }
 
     /**
-     * Subscribe a topic to consuming subscription.
+     * Subscribe a topic to consuming subscription...订阅一个消费的主题(会将订阅信息数据设置到RebalanceImpl中)
      *
      * @param topic topic to subscribe.
      * @param subExpression subscription expression.it only support or operation such as "tag1 || tag2 || tag3" <br>
