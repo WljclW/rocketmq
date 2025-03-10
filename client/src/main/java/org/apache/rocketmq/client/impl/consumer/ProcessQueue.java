@@ -35,6 +35,15 @@ import org.apache.rocketmq.remoting.protocol.body.ProcessQueueInfo;
 
 /**
  * Queue consumption snapshot....队列消费快照
+ * [作用]1.消息缓存：消息者本地的消息缓冲区，存储从broker拉取到的消息。通过msgTreeMap进行存储，键是消息在ConsumeQueue中的偏移量。
+ *      2.跟踪消息的消费进度：
+ *      3.
+ * [作用时机](1) 消息拉取
+ * 消费者从 Broker 拉取消息后，将消息插入到 ProcessQueue 中。插入时会检查消息的偏移量是否连续，确保消息的完整性。
+ * (2) 消息消费
+ * 消费者从 ProcessQueue 中获取消息进行消费。消费完成后，更新消费进度，并标记消息为已消费。
+ * (3) 消费进度同步
+ * 定期将 ProcessQueue 中的消费进度同步到 Broker，确保消费进度的持久化。如果消费者重启，可以从 Broker 获取最新的消费进度，继续消费。
  */
 public class ProcessQueue {
     public final static long REBALANCE_LOCK_MAX_LIVE_TIME =

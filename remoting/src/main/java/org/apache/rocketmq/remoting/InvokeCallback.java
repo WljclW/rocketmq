@@ -19,6 +19,7 @@ package org.apache.rocketmq.remoting;
 import org.apache.rocketmq.remoting.netty.ResponseFuture;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**RemotingCommand异步执行时的回调接口*/
 public interface InvokeCallback {
     /**
      * This method is expected to be invoked after {@link #operationSucceed(RemotingCommand)}

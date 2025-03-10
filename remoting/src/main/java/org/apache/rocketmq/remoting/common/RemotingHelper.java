@@ -194,14 +194,16 @@ public class RemotingHelper {
         }
     }
 
+    /**解析netty channel的远端地址*/
     public static String parseChannelRemoteAddr(final Channel channel) {
         if (null == channel) {
             return "";
         }
-        String addr = getProxyProtocolAddress(channel);
+        String addr = getProxyProtocolAddress(channel); //获取代理协议地址
         if (StringUtils.isNotBlank(addr)) {
             return addr;
         }
+        //获取Channel的远程地址属性，若不存在则调用辅助方法解析并返回。”AttributeKeys.REMOTE_ADDR_KEY“是一个键，用于存储和检索特定Channel的属性。
         Attribute<String> att = channel.attr(AttributeKeys.REMOTE_ADDR_KEY);
         if (att == null) {
             // mocked in unit test
@@ -227,6 +229,7 @@ public class RemotingHelper {
         return proxyProtocolAddr + ":" + proxyProtocolPort;
     }
 
+    /**[功能]就是截取最后一个"/"后面的字符串，最终截取到的是"IP:port"这样的形式*/
     private static String parseChannelRemoteAddr0(final Channel channel) {
         SocketAddress remote = channel.remoteAddress();
         final String addr = remote != null ? remote.toString() : "";

@@ -19,13 +19,16 @@ package org.apache.rocketmq.client.impl.consumer;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.message.MessageRequestMode;
 
+/**封装消费者 从 broker 拉取消息的请求*/
 public class PullRequest implements MessageRequest {
     private String consumerGroup; // 消费者组
     private MessageQueue messageQueue; //待拉取消息的队列————即想从哪个队列拿取消息
-    /*消息处理队列，从Broker中拉取到的消息会先存入ProccessQueue，然后再
-    提交到消费者消费线程池进行消费*/
+    /*1.消息处理队列，从Broker中拉取到的消息会先存入ProccessQueue，然后再
+    提交到消费者消费线程池进行消费；
+    2.表示与当前消息队列关联的处理队列（ProcessQueue）。ProcessQueue 是消费者
+    本地内存中的一个数据结构，用于暂存从 Broker 拉取到的消息，并维护消息的消费状态。*/
     private ProcessQueue processQueue;
-    private long nextOffset; //待拉取的MessageQueue偏移量
+    private long nextOffset; //下一次拉取的消息在MessageQueue的偏移量。
     private boolean previouslyLocked = false; /*在DefaultMQPushConsumerImpl.pullMessage方法中会用到，标识是不是已经计算过offset了*/
 
     public boolean isPreviouslyLocked() {

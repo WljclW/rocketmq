@@ -77,6 +77,8 @@ import org.apache.rocketmq.store.stats.BrokerStatsManager;
 
 import static org.apache.rocketmq.remoting.protocol.RemotingCommand.buildErrorResponse;
 
+/**用于处理消费者拉取消息请求的核心类。它的主要作用是接收消费者的拉取请求，根据请求参数从消息存储中获取消息，并将结果返回给消费者
+ * */
 public class PullMessageProcessor implements NettyRequestProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private List<ConsumeMessageHook> consumeMessageHookList;
@@ -88,6 +90,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         this.pullMessageResultHandler = new DefaultPullMessageResultHandler(brokerController);
     }
 
+    /**【功能】处理请求拉取消息时，针对静态主题（static topic）的特殊处理，确保请求的消息拉取能够正确地
+     * 路由到正确的物理队列，并在需要时进行跨 broker 调度*/
     private RemotingCommand rewriteRequestForStaticTopic(PullMessageRequestHeader requestHeader,
         TopicQueueMappingContext mappingContext) {
         try {
@@ -97,11 +101,12 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             TopicQueueMappingDetail mappingDetail = mappingContext.getMappingDetail();
             String topic = mappingContext.getTopic();
             Integer globalId = mappingContext.getGlobalId();
+            /**step2：检查是否是领导者？？？*/
             // if the leader? consider the order consumer, which will lock the mq
             if (!mappingContext.isLeader()) {
                 return buildErrorResponse(ResponseCode.NOT_LEADER_FOR_QUEUE, String.format("%s-%d cannot find mapping item in request process of current broker %s", topic, globalId, mappingDetail.getBname()));
             }
-
+            /**step3：根据请求头中的globalOffset，执行findLogicQueueMappingItem找到对应的逻辑队列映射项*/
             Long globalOffset = requestHeader.getQueueOffset();
             LogicQueueMappingItem mappingItem = TopicQueueMappingUtils.findLogicQueueMappingItem(mappingContext.getMappingItemList(), globalOffset, true);
             mappingContext.setCurrentItem(mappingItem);
@@ -112,21 +117,27 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 //Otherwise, we could just transfer it to the physical process
             }
             //below are physical info
+            /**step4：根据逻辑队列映射项来计算物理队列的信息，并将其更新到 requestHeader 中，设置队列ID和队列偏移量。。
+             * 同时，如果映射项已经确定了结束偏移量，并且请求中有 MaxMsgNums 参数，方法会调整 MaxMsgNums，确保不超过物
+             * 理队列的可用消息范围。*/
             String bname = mappingItem.getBname();
             Integer phyQueueId = mappingItem.getQueueId();
             Long phyQueueOffset = mappingItem.computePhysicalQueueOffset(globalOffset);
             requestHeader.setQueueId(phyQueueId);
             requestHeader.setQueueOffset(phyQueueOffset);
             if (mappingItem.checkIfEndOffsetDecided()
-                && requestHeader.getMaxMsgNums() != null) {
+                && requestHeader.getMaxMsgNums() != null) { /*如果有maxMsgNums信息，需要判断*/
                 requestHeader.setMaxMsgNums((int) Math.min(mappingItem.getEndOffset() - mappingItem.getStartOffset(), requestHeader.getMaxMsgNums()));
             }
-
+            /**step5：如果映射详情中的 bname（物理队列的名称）和当前计算的 bname 一致，说明可以直接在本地 broker 上拉取消
+             * 息，方法返回 null，继续本地处理*/
             if (mappingDetail.getBname().equals(bname)) {
                 //just let it go, do the local pull process
                 return null;
             }
-
+            /**step6：如果当前 broker 不是消息的目标 broker，需要通过 RPC 请求将消息拉取到当前 broker。方法会创建一个新
+             * 的 RPC 请求，将请求的 requestHeader 转发给目标 broker，执行远程拉取操作。请求被发送到目标 broker 并等待响应。
+             * 如果有异常，需要抛出异常*/
             int sysFlag = requestHeader.getSysFlag();
             requestHeader.setLo(false);
             requestHeader.setBrokerName(bname);
@@ -138,7 +149,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             if (rpcResponse.getException() != null) {
                 throw rpcResponse.getException();
             }
-
+            /**接着，调用 rewriteResponseForStaticTopic 方法对响应进行重写处理，确保响应格式符合要求。如果响应需要重写，方法返
+             * 回修改后的响应。*/
             PullMessageResponseHeader responseHeader = (PullMessageResponseHeader) rpcResponse.getHeader();
             {
                 RemotingCommand rewriteResult = rewriteResponseForStaticTopic(requestHeader, responseHeader, mappingContext, rpcResponse.getCode());
@@ -301,6 +313,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
     private RemotingCommand processRequest(final Channel channel, RemotingCommand request, boolean brokerAllowSuspend, boolean brokerAllowFlowCtrSuspend)
         throws RemotingCommandException {
         final long beginTimeMills = this.brokerController.getMessageStore().now();
+        /**step1：创建一个响应命令response，设置Opaque值(该字段的作用是关联请求和响应)*/
         RemotingCommand response = RemotingCommand.createResponseCommand(PullMessageResponseHeader.class);
         final PullMessageResponseHeader responseHeader = (PullMessageResponseHeader) response.readCustomHeader();
         final PullMessageRequestHeader requestHeader =
@@ -309,7 +322,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         response.setOpaque(request.getOpaque());
 
         LOGGER.debug("receive PullMessage request command, {}", request);
-
+        /**step2：Broker的权限检查*/
+        /*检查broker是不是有权限，如果没有则设置响应码并返回response*/
         if (!PermName.isReadable(this.brokerController.getBrokerConfig().getBrokerPermission())) {
             response.setCode(ResponseCode.NO_PERMISSION);
             responseHeader.setForbiddenType(ForbiddenType.BROKER_FORBIDDEN);
@@ -317,7 +331,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 this.brokerController.getBrokerConfig().getBrokerIP1()));
             return response;
         }
-
+        /*如果请求是LITE_PULL_MESSAGE类型，判断broker是不是支持这种类型*/
         if (request.getCode() == RequestCode.LITE_PULL_MESSAGE && !this.brokerController.getBrokerConfig().isLitePullMessageEnable()) {
             response.setCode(ResponseCode.NO_PERMISSION);
             responseHeader.setForbiddenType(ForbiddenType.BROKER_FORBIDDEN);
@@ -325,22 +339,24 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 "the broker[" + this.brokerController.getBrokerConfig().getBrokerIP1() + "] for lite pull consumer is forbidden");
             return response;
         }
-
+        /**step3；消费组和订阅组的权限检查*/
         SubscriptionGroupConfig subscriptionGroupConfig =
             this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(requestHeader.getConsumerGroup());
+        /*拿取订阅信息的配置*/
         if (null == subscriptionGroupConfig) {
             response.setCode(ResponseCode.SUBSCRIPTION_GROUP_NOT_EXIST);
             response.setRemark(String.format("subscription group [%s] does not exist, %s", requestHeader.getConsumerGroup(), FAQUrl.suggestTodo(FAQUrl.SUBSCRIPTION_GROUP_NOT_EXIST)));
             return response;
         }
-
+        /*检查订阅是否允许消费*/
         if (!subscriptionGroupConfig.isConsumeEnable()) {
             response.setCode(ResponseCode.NO_PERMISSION);
             responseHeader.setForbiddenType(ForbiddenType.GROUP_FORBIDDEN);
             response.setRemark("subscription group no permission, " + requestHeader.getConsumerGroup());
             return response;
         }
-
+        /**step4：主题配置检查。获取当前主题配置信息，检查非空 以及 拥有权限*/
+        /*检查非空*/
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
         if (null == topicConfig) {
             LOGGER.error("the topic {} not exist, consumer: {}", requestHeader.getTopic(), RemotingHelper.parseChannelRemoteAddr(channel));
@@ -348,7 +364,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             response.setRemark(String.format("topic[%s] not exist, apply first please! %s", requestHeader.getTopic(), FAQUrl.suggestTodo(FAQUrl.APPLY_TOPIC_URL)));
             return response;
         }
-
+        /*检查拥有权限*/
         if (!PermName.isReadable(topicConfig.getPerm())) {
             response.setCode(ResponseCode.NO_PERMISSION);
             responseHeader.setForbiddenType(ForbiddenType.TOPIC_FORBIDDEN);
@@ -357,14 +373,15 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
 
         TopicQueueMappingContext mappingContext = this.brokerController.getTopicQueueMappingManager().buildTopicQueueMappingContext(requestHeader, false);
-
+        /**step5：适配静态主题的逻辑。rewriteRequestForStaticTopic方法会根据静态主题的配置，将逻辑队列id转换为物理队列id。如果不需要
+         * 转换则方法返回null，表示使用原始请求即可；否则直接返回rewriteRequestForStaticTopic的返回结果*/
         {
             RemotingCommand rewriteResult = rewriteRequestForStaticTopic(requestHeader, mappingContext);
             if (rewriteResult != null) {
                 return rewriteResult;
             }
         }
-
+        /**step6：队列id是否合法*/
         if (requestHeader.getQueueId() < 0 || requestHeader.getQueueId() >= topicConfig.getReadQueueNums()) {
             String errorInfo = String.format("queueId[%d] is illegal, topic:[%s] topicConfig.readQueueNums:[%d] consumer:[%s]",
                 requestHeader.getQueueId(), requestHeader.getTopic(), topicConfig.getReadQueueNums(), channel.remoteAddress());
@@ -412,6 +429,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 return response;
             }
         } else {
+            /*消费者组信息不存在*/
             ConsumerGroupInfo consumerGroupInfo =
                 this.brokerController.getConsumerManager().getConsumerGroupInfo(requestHeader.getConsumerGroup());
             if (null == consumerGroupInfo) {
@@ -420,7 +438,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 response.setRemark("the consumer's group info not exist" + FAQUrl.suggestTodo(FAQUrl.SAME_GROUP_DIFFERENT_TOPIC));
                 return response;
             }
-
+            /*检查消费的模式 以及 是否支持匹配的权限*/
             if (!subscriptionGroupConfig.isConsumeBroadcastEnable()
                 && consumerGroupInfo.getMessageModel() == MessageModel.BROADCASTING) {
                 response.setCode(ResponseCode.NO_PERMISSION);

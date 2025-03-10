@@ -764,6 +764,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
          * 真正的请求发送动作。
          * */
         long beginStartTime = System.currentTimeMillis();
+        /*获取 或者 创建 目标addr对应的Netty Channel*/
         final Channel channel = this.getAndCreateChannel(addr);
         String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
         if (channel != null && channel.isActive()) {

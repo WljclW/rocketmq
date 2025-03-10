@@ -79,6 +79,7 @@ public class PullAPIWrapper {
         PullResultExt pullResultExt = (PullResultExt) pullResult;
 
         this.updatePullFromWhichNode(mq, pullResultExt.getSuggestWhichBrokerId());
+        /*确保pullStatus的值是 FOUND----即找到了*/
         if (PullStatus.FOUND == pullResult.getPullStatus()) {
             ByteBuffer byteBuffer = ByteBuffer.wrap(pullResultExt.getMessageBinary());
             List<MessageExt> msgList = MessageDecoder.decodesBatch(
@@ -112,7 +113,7 @@ public class PullAPIWrapper {
                     log.error("Try to decode the inner batch failed for {}", pullResult.toString(), t);
                 }
             }
-
+            /*根据订阅数据过滤消息*/
             List<MessageExt> msgListFilterAgain = msgList;
             if (!subscriptionData.getTagsSet().isEmpty() && !subscriptionData.isClassFilterMode()) {
                 msgListFilterAgain = new ArrayList<>(msgList.size());
@@ -124,14 +125,14 @@ public class PullAPIWrapper {
                     }
                 }
             }
-
+            /*执行消息过滤钩子函数*/
             if (this.hasHook()) {
                 FilterMessageContext filterMessageContext = new FilterMessageContext();
                 filterMessageContext.setUnitMode(unitMode);
                 filterMessageContext.setMsgList(msgListFilterAgain);
                 this.executeHook(filterMessageContext);
             }
-
+            /*设置消息属性 和 偏移量信息*/
             for (MessageExt msg : msgListFilterAgain) {
                 String traFlag = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
                 if (Boolean.parseBoolean(traFlag)) {
@@ -150,7 +151,7 @@ public class PullAPIWrapper {
 
             pullResultExt.setMsgFoundList(msgListFilterAgain);
         }
-
+        /*清理二进制消息内容，并返回处理后的结果*/
         pullResultExt.setMessageBinary(null);
 
         return pullResult;
@@ -206,7 +207,7 @@ public class PullAPIWrapper {
         FindBrokerResult findBrokerResult =
             this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq), /*getBrokerNameFromMessageQueue体现了获取的实时性高*/
                 this.recalculatePullFromWhichNode(mq), false);
-        /*如果上述一通操作还是找不到，则进入下面的if块：先更新路由信息，然后再获取*/
+        /*如果上述一通操作还是找不到，则进入下面的if块：先更新路由信息，然后再获取(获取流程和上面的步骤一样)*/
         if (null == findBrokerResult) {
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
             findBrokerResult =
@@ -217,6 +218,7 @@ public class PullAPIWrapper {
         /*如果找到了进入下面的if块进行处理；如果更新路由信息后还是找不到，直接到此方法的最后一行抛出异常*/
         if (findBrokerResult != null) {
             {
+                /*rocketmq所有的版本都支持TAG过滤类型，但是SQL92过滤的支持是V4_1_0_SNAPSHOT版本才引入的，因此这里需要判断*/
                 // check version
                 if (!ExpressionType.isTagType(expressionType)
                     && findBrokerResult.getBrokerVersion() < MQVersion.Version.V4_1_0_SNAPSHOT.ordinal()) {

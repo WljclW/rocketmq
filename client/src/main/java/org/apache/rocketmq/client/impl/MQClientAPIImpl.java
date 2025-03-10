@@ -830,7 +830,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         sendResult.setTraceOn(!Boolean.FALSE.toString().equals(traceOn));
         return sendResult;
     }
-
+    /**消息拉取的客户端最终的出口*/
     public PullResult pullMessage(
         final String addr,
         final PullMessageRequestHeader requestHeader,
@@ -1030,6 +1030,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         });
     }
 
+    /**异步拉取消息的实现*/
     private void pullMessageAsync(
         final String addr,
         final RemotingCommand request,
@@ -1045,7 +1046,9 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
             @Override
             public void operationSucceed(RemotingCommand response) {
                 try {
+                    /*先执行processPullResponse方法*/
                     PullResult pullResult = MQClientAPIImpl.this.processPullResponse(response, addr);
+                    /*再执行消息拉取成功后的回调*/
                     pullCallback.onSuccess(pullResult);
                 } catch (Exception e) {
                     pullCallback.onException(e);
@@ -1069,6 +1072,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         return this.processPullResponse(response, addr);
     }
 
+    /**根据响应的状态码设置pullStatus*/
     private PullResult processPullResponse(
         final RemotingCommand response,
         final String addr) throws MQBrokerException, RemotingCommandException {
