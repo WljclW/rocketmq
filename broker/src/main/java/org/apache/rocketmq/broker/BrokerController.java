@@ -1012,6 +1012,7 @@ public class BrokerController {
         }
     }
 
+    /**完成Processors的注册。。。后续Broker就会根据请求码的不同，来调用处理器进行请求的处理*/
     public void registerProcessor() {
         /*
          * SendMessageProcessor

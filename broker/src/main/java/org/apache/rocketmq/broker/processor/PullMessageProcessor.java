@@ -606,6 +606,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
     }
 
     /**
+     * [作用]组成要响应给客户端的响应消息头部；设置response的响应码
      * Composes the header of the response message to be sent back to the client
      * @param requestHeader - the header of the request message
      * @param getMessageResult - the result of the GetMessage request

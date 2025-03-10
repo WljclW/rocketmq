@@ -86,14 +86,17 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
         RemotingCommand response,
         TopicQueueMappingContext mappingContext,
         long beginTimeMills) {
+        /*获取具体的处理器，并组装响应头、设置响应码*/
         PullMessageProcessor processor = brokerController.getPullMessageProcessor();
         final String clientAddress = RemotingHelper.parseChannelRemoteAddr(channel);
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
         processor.composeResponseHeader(requestHeader, getMessageResult, topicConfig.getTopicSysFlag(),
             subscriptionGroupConfig, response, clientAddress);
         try {
+            //执行钩子的前置方法
             processor.executeConsumeMessageHookBefore(request, requestHeader, getMessageResult, brokerAllowSuspend, response.getCode());
         } catch (AbortProcessException e) {
+            /*response的异常是执行钩子方法过程中发生的异常*/
             response.setCode(e.getResponseCode());
             response.setRemark(e.getErrorMessage());
             return response;
@@ -113,12 +116,11 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
 
         switch (response.getCode()) {
             case ResponseCode.SUCCESS:
+                /*更新一些统计信息：消费者组在指定topic获取消息的总数量、总大小，broker(集群)获取消息的总数量*/
                 this.brokerController.getBrokerStatsManager().incGroupGetNums(requestHeader.getConsumerGroup(), requestHeader.getTopic(),
                     getMessageResult.getMessageCount());
-
                 this.brokerController.getBrokerStatsManager().incGroupGetSize(requestHeader.getConsumerGroup(), requestHeader.getTopic(),
                     getMessageResult.getBufferTotalSize());
-
                 this.brokerController.getBrokerStatsManager().incBrokerGetNums(requestHeader.getTopic(), getMessageResult.getMessageCount());
 
                 if (!BrokerMetricsManager.isRetryOrDlqTopic(requestHeader.getTopic())) {
@@ -136,26 +138,30 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
                     //ignore pull request
                     return null;
                 }
-
-                if (this.brokerController.getBrokerConfig().isTransferMsgByHeap()) {
+                /**”堆内存“、”堆外内存“的不同，进行不同的处理，前者需要将数据加载到堆内存*/
+                if (this.brokerController.getBrokerConfig().isTransferMsgByHeap()) { //Broker配置使用"堆内存"转存消息
+                    /*将消息数据加载到堆内存中，并设置到响应对象的 body 中。*/
                     final byte[] r = this.readGetMessageResult(getMessageResult, requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId());
+                    //记录本次拉取消息的延迟时间
                     this.brokerController.getBrokerStatsManager().incGroupGetLatency(requestHeader.getConsumerGroup(),
                         requestHeader.getTopic(), requestHeader.getQueueId(),
                         (int) (this.brokerController.getMessageStore().now() - beginTimeMills));
+                    //将加载到 堆内存 的数据设置到响应对象的 body 中。
                     response.setBody(r);
                     return response;
-                } else {
+                } else { /*else说明使用"堆外内存"，这种情况下需要依靠监听器*/
                     try {
                         FileRegion fileRegion =
                             new ManyMessageTransfer(response.encodeHeader(getMessageResult.getBufferTotalSize()), getMessageResult);
                         RemotingCommand finalResponse = response;
-                        channel.writeAndFlush(fileRegion)
+                        channel.writeAndFlush(fileRegion) /*将封装好的数据异步写入到网络通道*/
                             .addListener((ChannelFutureListener) future -> {
+                                /*写入后执行回调函数，回调函数做的事：释放资源、记录一些监控指标、如果不成功则记录错误日志*/
                                 getMessageResult.release();
                                 Attributes attributes = RemotingMetricsManager.newAttributesBuilder()
-                                    .put(LABEL_REQUEST_CODE, RemotingHelper.getRequestCodeDesc(request.getCode()))
-                                    .put(LABEL_RESPONSE_CODE, RemotingHelper.getResponseCodeDesc(finalResponse.getCode()))
-                                    .put(LABEL_RESULT, RemotingMetricsManager.getWriteAndFlushResult(future))
+                                    .put(LABEL_REQUEST_CODE, RemotingHelper.getRequestCodeDesc(request.getCode())) //请求吗
+                                    .put(LABEL_RESPONSE_CODE, RemotingHelper.getResponseCodeDesc(finalResponse.getCode())) //响应码
+                                    .put(LABEL_RESULT, RemotingMetricsManager.getWriteAndFlushResult(future)) //写入结果
                                     .build();
                                 RemotingMetricsManager.rpcLatency.record(request.getProcessTimer().elapsed(TimeUnit.MILLISECONDS), attributes);
                                 if (!future.isSuccess()) {
@@ -168,11 +174,12 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
                     }
                     return null;
                 }
-            case ResponseCode.PULL_NOT_FOUND:
+            case ResponseCode.PULL_NOT_FOUND: /*没有找到对应的消息*/
                 final boolean hasSuspendFlag = PullSysFlag.hasSuspendFlag(requestHeader.getSysFlag());
                 final long suspendTimeoutMillisLong = hasSuspendFlag ? requestHeader.getSuspendTimeoutMillis() : 0;
 
                 if (brokerAllowSuspend && hasSuspendFlag) {
+                    /*获取最大的 被允许挂起 时间。if块表明即使没有开启长轮询，也允许被挂起1秒*/
                     long pollingTimeMills = suspendTimeoutMillisLong;
                     if (!this.brokerController.getBrokerConfig().isLongPollingEnable()) {
                         pollingTimeMills = this.brokerController.getBrokerConfig().getShortPollingTimeMills();
@@ -181,8 +188,10 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
                     String topic = requestHeader.getTopic();
                     long offset = requestHeader.getQueueOffset();
                     int queueId = requestHeader.getQueueId();
+                    //重新创建一个 拉取请求
                     PullRequest pullRequest = new PullRequest(request, channel, pollingTimeMills,
                         this.brokerController.getMessageStore().now(), offset, subscriptionData, messageFilter);
+                    //将请求放入到pullRequestTable
                     this.brokerController.getPullRequestHoldService().suspendPullRequest(topic, queueId, pullRequest);
                     return null;
                 }

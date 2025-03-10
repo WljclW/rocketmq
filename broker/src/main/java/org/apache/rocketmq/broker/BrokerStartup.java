@@ -237,7 +237,7 @@ public class BrokerStartup {
     public static BrokerController createBrokerController(String[] args) {
         try {
             BrokerController controller = buildBrokerController(args);
-            boolean initResult = controller.initialize();
+            boolean initResult = controller.initialize(); //会完成处理器的注册
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);

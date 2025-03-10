@@ -129,6 +129,10 @@ public class BrokerConfig extends BrokerIdentity {
     private boolean accountStatsEnable = true;
     private boolean accountStatsPrintZeroValues = true;
 
+    /* 含义：消息在broker内部传输时是否使用堆内存进行转储
+        如果设置为 true，消息会先被加载到 JVM 堆内存中，然后再进行后续处理（如存储、转发等）。兼容性更好
+        如果设置为 false，消息会直接通过零拷贝（Zero-Copy）技术或其他方式绕过堆内存，减少堆内存的使用。效率更高
+    * */
     private boolean transferMsgByHeap = true;
 
     private String regionId = MixAll.DEFAULT_TRACE_REGION_ID;

@@ -427,6 +427,7 @@ public class BrokerStatsManager {
         this.statsTable.get(Stats.TOPIC_PUT_SIZE).addValue(topic, size, 1);
     }
 
+    /**统计某个消费者组 从 某个topic 获取的消息的数量*/
     public void incGroupGetNums(final String group, final String topic, final int incValue) {
         final String statsKey = buildStatsKey(topic, group);
         this.statsTable.get(Stats.GROUP_GET_NUMS).addValue(statsKey, incValue, 1);
@@ -486,13 +487,16 @@ public class BrokerStatsManager {
         return strBuilder.toString();
     }
 
+    /**统计某个消费者组 在 指定topic 获取的消息的总大小*/
     public void incGroupGetSize(final String group, final String topic, final int incValue) {
         final String statsKey = buildStatsKey(topic, group);
         this.statsTable.get(Stats.GROUP_GET_SIZE).addValue(statsKey, incValue, 1);
     }
 
+    /**记录消费者拉取消息的延迟统计时间*/
     public void incGroupGetLatency(final String group, final String topic, final int queueId, final int incValue) {
         String statsKey;
+        /*根据是否启用 队列级别的统计，选择不同的构建方式*/
         if (enableQueueStat) {
             statsKey = buildStatsKey(queueId, topic, group);
         } else {
@@ -521,6 +525,7 @@ public class BrokerStatsManager {
         incBrokerPutNumsWithoutSystemTopic(topic, incValue);
     }
 
+    /**增加broker获取消息的次数*/
     public void incBrokerGetNums(final String topic, final int incValue) {
         this.statsTable.get(Stats.BROKER_GET_NUMS).getAndCreateStatsItem(this.clusterName).getValue().add(incValue);
         this.incBrokerGetNumsWithoutSystemTopic(topic, incValue);

@@ -1037,6 +1037,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         final long timeoutMillis,
         final PullCallback pullCallback
     ) throws RemotingException, InterruptedException {
+        //执行invokeAsync方法,得到响应结果时就会执行这里创建的匿名InvokeCallback对象的方法(即回调方法)
         this.remotingClient.invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
             @Override
             public void operationComplete(ResponseFuture responseFuture) {
@@ -1048,9 +1049,10 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
                 try {
                     /*先执行processPullResponse方法*/
                     PullResult pullResult = MQClientAPIImpl.this.processPullResponse(response, addr);
-                    /*再执行消息拉取成功后的回调*/
+                    /*消息拉取成功后的回调*/
                     pullCallback.onSuccess(pullResult);
                 } catch (Exception e) {
+                    /*出现异常后执行的回调*/
                     pullCallback.onException(e);
                 }
             }

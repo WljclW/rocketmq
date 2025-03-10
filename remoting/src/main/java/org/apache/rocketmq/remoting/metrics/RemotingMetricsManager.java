@@ -41,6 +41,17 @@ import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESUL
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESULT_SUCCESS;
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESULT_WRITE_CHANNEL_FAILED;
 
+/**用于管理和记录远程通信（Remoting）相关指标的一个工具类。它的主要作用是收集和监控 RPC 调用的性能数据，
+ *      例如延迟、吞吐量、请求结果等。
+ * 通常会与外部与外部监控系统（如 Prometheus、Grafana）集成，以便实时查看和分析性能数据。以下是一些常见的集成方式：
+ *      Prometheus ：
+ *          使用 Prometheus 的客户端库（如 Micrometer）将 RocketMQ 的指标导出到 Prometheus。
+ *          在 Grafana 中创建仪表盘，实时监控 RPC 延迟、吞吐量等指标。
+ *      日志分析 ：
+ *          将指标数据写入日志文件，通过 ELK（Elasticsearch、Logstash、Kibana）进行分析。
+ *      自定义监控系统 ：
+ *          根据业务需求，开发自定义的监控系统，定期拉取 RocketMQ 的指标数据。
+*/
 public class RemotingMetricsManager {
     public static LongHistogram rpcLatency = new NopLongHistogram();
     public static Supplier<AttributesBuilder> attributesBuilderSupplier;
