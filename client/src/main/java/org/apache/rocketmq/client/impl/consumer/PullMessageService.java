@@ -52,7 +52,7 @@ public class PullMessageService extends ServiceThread {
             this.scheduledExecutorService.schedule(new Runnable() {
                 @Override
                 public void run() {
-                    PullMessageService.this.executePullRequestImmediately(pullRequest); /*延迟拉取的实现原理：过一段时间执行立即拉取方法(xxxxImmediately)*/
+                    PullMessageService.this.executePullRequestImmediately(pullRequest); /*延迟拉取的实现原理：过一段时间(定时任务)执行立即拉取方法(xxxxImmediately)*/
                 }
             }, timeDelay, TimeUnit.MILLISECONDS);
         } else {
@@ -61,7 +61,8 @@ public class PullMessageService extends ServiceThread {
     }
 
     /*将一个PullRequest立即放入到messageRequestQueue。。
-    【说明】立即拉取并不是实时的，只是将PullRequest放入在阻塞队列*/
+    【注意】立即拉取并不是实时的，只是将PullRequest放入在阻塞队列。。在PullMessageService的run方法中会不断从阻塞队列take请
+            求，然后向broker拉消息*/
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.messageRequestQueue.put(pullRequest);

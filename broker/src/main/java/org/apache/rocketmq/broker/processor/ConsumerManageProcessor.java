@@ -78,15 +78,18 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
 
     public RemotingCommand getConsumerListByGroup(ChannelHandlerContext ctx, RemotingCommand request)
         throws RemotingCommandException {
+        //创建响应命令
         final RemotingCommand response =
             RemotingCommand.createResponseCommand(GetConsumerListByGroupResponseHeader.class);
+        //解析请求头
         final GetConsumerListByGroupRequestHeader requestHeader =
             (GetConsumerListByGroupRequestHeader) request
                 .decodeCommandCustomHeader(GetConsumerListByGroupRequestHeader.class);
-
+        //通过brokerController获取指定的消费者组的信息(即consumerGroupInfo)
         ConsumerGroupInfo consumerGroupInfo =
             this.brokerController.getConsumerManager().getConsumerGroupInfo(
                 requestHeader.getConsumerGroup());
+        //如果存在，则获取该消费者组下的所有客户端的id，封装到body中，返回response
         if (consumerGroupInfo != null) {
             List<String> clientIds = consumerGroupInfo.getAllClientId();
             if (!clientIds.isEmpty()) {

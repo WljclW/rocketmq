@@ -18,7 +18,9 @@ package org.apache.rocketmq.client.impl.consumer;
 
 import org.apache.rocketmq.common.message.MessageRequestMode;
 
-/**从这个接口继承出来：消费者获取消息的请求模式，目前就是PullRequest 和 PopRequest*/
+/**【说明】从这个接口继承出来：消费者获取消息的请求模式，目前就是PullRequest 和 PopRequest。
+ * 【作用】主要用于封装消费者向 Broker 发起拉取消息请求的相关信息。它的主要作用是作为消息拉取请
+ * 求的载体，包含拉取操作所需的关键数据。*/
 public interface MessageRequest {
     MessageRequestMode getMessageRequestMode();
 }

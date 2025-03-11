@@ -48,12 +48,13 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 public abstract class RebalanceImpl {
     protected static final Logger log = LoggerFactory.getLogger(RebalanceImpl.class);
-
+    /*消息队列 ——> 该队列的消费状态*/
     protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<>(64);
     protected final ConcurrentMap<MessageQueue, PopProcessQueue> popProcessQueueTable = new ConcurrentHashMap<>(64);
-
+    /*【topicSubscribeInfoTable】维护消费者订阅的主题(键) 与 该主题下消息队列(值) 的映射关系 */
     protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
         new ConcurrentHashMap<>();
+    /*主题名称 ——> 订阅关系 的映射*/
     protected final ConcurrentMap<String /* topic */, SubscriptionData> subscriptionInner =
         new ConcurrentHashMap<>();
     protected String consumerGroup;
@@ -234,13 +235,19 @@ public abstract class RebalanceImpl {
         return true;
     }
 
-    /**作用是对所有的消息队列进行负载均衡。。。返回值表示是不是所有的消息队列都已经再平衡完成*/
+    /**【作用】是对所有的消息队列进行负载均衡。。。返回值表示是不是所有的消息队列都已经再平衡完成*/
     public boolean doRebalance(final boolean isOrder) {
         boolean balanced = true;
+        /*拿到所有的订阅信息。
+        * 【注意】每一个消费者内部持有一个属于自己的RebalanceImpl对象，因此这里拿到的订阅信息其实是当前消费者所有的订阅信息。
+        *       在这个维度上，继续细化，这个订阅信息的键值是topic*/
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
                 final String topic = entry.getKey();
+                /*依次从subscriptionInner拿出每一个topic，执行具体的再平衡逻辑，但是分两种情况：
+                *   情况1：从Broker获取再平衡的结果
+                *   情况2：本地计算再平衡*/
                 try {
                     if (!clientRebalance(topic) && tryQueryAssignment(topic)) {
                         boolean result = this.getRebalanceResultFromBroker(topic, isOrder);
@@ -305,11 +312,14 @@ public abstract class RebalanceImpl {
         return subscriptionInner;
     }
 
+    /**【作用】根据消费的类型(集群消费？广播消费？)，对指定主题进行负载均衡*/
     private boolean rebalanceByTopic(final String topic, final boolean isOrder) {
         boolean balanced = true;
         switch (messageModel) {
-            case BROADCASTING: {
+            case BROADCASTING: { //广播模式，每一个消费者都会消费主题的所有消息
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
+                /*如果mqSet不是null，则调用updateProcessQueueTableInRebalance进行更新；
+                * 如果mqSet是null，则直接调用messageQueueChanged，实参传空集合即可*/
                 if (mqSet != null) {
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, mqSet, isOrder);
                     if (changed) {
@@ -325,7 +335,9 @@ public abstract class RebalanceImpl {
                 break;
             }
             case CLUSTERING: {
+                //1.从topicSubscribeInfoTable列表中获取与该topic相关的所有消息队列
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
+                //2. 从broker端获取消费该消费组的所有客户端clientId(思考：所有客户端id添加的时间)
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -344,16 +356,16 @@ public abstract class RebalanceImpl {
 
                     Collections.sort(mqAll);
                     Collections.sort(cidAll);
-
+                    // 获取分配策略，在创建DefaultMQPushConsumer对象时默认设置为AllocateMessageQueueAveragely，即平均分配
                     AllocateMessageQueueStrategy strategy = this.allocateMessageQueueStrategy;
 
                     List<MessageQueue> allocateResult = null;
                     try {
                         allocateResult = strategy.allocate(
-                            this.consumerGroup,
-                            this.mQClientFactory.getClientId(),
-                            mqAll,
-                            cidAll);
+                            this.consumerGroup, /*消费者组名*/
+                            this.mQClientFactory.getClientId(), /*当前的clientId，即消费者之前等级的*/
+                            mqAll, /*所有的消息队列*/
+                            cidAll /*所有的消费者*/);
                     } catch (Throwable e) {
                         log.error("allocate message queue exception. strategy name: {}, ex: {}", strategy.getName(), e);
                         return false;
@@ -440,8 +452,10 @@ public abstract class RebalanceImpl {
     }
 
     private void truncateMessageQueueNotMyTopic() {
+        /*step1：获取当前消费者的订阅信息*/
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
-
+        /*step2:
+        * 遍历processQueueTable、popProcessQueueTable,移除不属于当前订阅主题的消息队列*/
         for (MessageQueue mq : this.processQueueTable.keySet()) {
             if (!subTable.containsKey(mq.getTopic())) {
 
@@ -463,7 +477,8 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        /*step3:
+        清理topicClientRebalance和topicBrokerRebalance中不在属于当前订阅主题的条目*/
         Iterator<Map.Entry<String, String>> clientIter = topicClientRebalance.entrySet().iterator();
         while (clientIter.hasNext()) {
             if (!subTable.containsKey(clientIter.next().getKey())) {

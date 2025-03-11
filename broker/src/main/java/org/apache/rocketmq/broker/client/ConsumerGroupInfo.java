@@ -38,6 +38,10 @@ public class ConsumerGroupInfo {
     private final String groupName;
     private final ConcurrentMap<String/* Topic */, SubscriptionData> subscriptionTable =
         new ConcurrentHashMap<>();
+    /*channelInfoTable————
+    键：消费者与Broker的网络连接通道(netty的Channel对象)
+    * 值：封装了消费者的连接信息，包括：clientId、版本号*/
+    /**疑问？什么时候将消费者的信息添加进来的*/
     private final ConcurrentMap<Channel, ClientChannelInfo> channelInfoTable =
         new ConcurrentHashMap<>(16);
     private volatile ConsumeType consumeType;

@@ -166,6 +166,7 @@ public class RebalancePushImpl extends RebalanceImpl {
         return result;
     }
 
+    /**【待研究，这个方法在DefaultMQPushConsumerImpl#pullMessage中会用到，用于确定nextOffset字段，为什么需要这样做？？？】*/
     @Override
     public long computePullFromWhereWithException(MessageQueue mq) throws MQClientException {
         long result = -1;

@@ -97,7 +97,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 /**消费者消费消息时，rocketmq内部实际干活的方法*/
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     /**
-     * Delay some time when exception occur
+     * Delay some time when exception occur。。拉起消息时出现异常的延迟时间(比如：DefaultMQPushConsumerImpl的状态核对过程)
      */
     private long pullTimeDelayMillsWhenException = 3000;
     /**
@@ -109,7 +109,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
      */
     private static final long PULL_TIME_DELAY_MILLS_WHEN_BROKER_FLOW_CONTROL = 20;
     /**
-     * Delay some time when suspend pull service
+     * Delay some time when suspend pull service..如果当前消费者处于挂起状态时，延迟多久再拉取消息
      */
     private static final long PULL_TIME_DELAY_MILLS_WHEN_SUSPEND = 1000;
     private static final long BROKER_SUSPEND_MAX_TIME_MILLIS = 1000 * 15;
@@ -249,10 +249,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
      * 【如何理解这个方法 和 PullAPIWrapper。pullKernelImpl、MQClientAPIImpl#pullMessage方法的区别】
      *      这个方法可以看成是纯rocketmq层面的功能，主要用于计算拉取消息时的所需要参数计算；
      *      pullKernelImpl方法则是rocketmq 和 netty 的中间层，主要的目的是 找到具体的broker地址 并且 构建请求头等信息
-     *      MQClientAPIImpl#pullMessage方法则是调用netty的功能真正的拉取消息
+     *      MQClientAPIImpl#pullMessage方法则是调用netty的功能真正的拉取消息(用到了零拷贝的技术)
      * */
     public void pullMessage(final PullRequest pullRequest) {
         /**
+         * 【疑问】意思是MessageRequest对应着不同的ProcessQueue？？这里先判断这个ProcessQueue已经失效了
          * step1：从PullRequest中获取ProcessQueue，如果处理队列当前状态未被丢弃，则更新ProcessQueue的
          *      lastPullTimestamp为当前时间戳。如果当前消费者被挂起，则将拉取任务延迟1s再放入
          *      PullMessageService的拉取任务队列中，最后结束本次消息拉取
@@ -271,6 +272,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             this.makeSureStateOK(); //确保DefaultMQPushConsumerImpl的状态是ServiceState.RUNNING
         } catch (MQClientException e) {
             log.warn("pullMessage exception, consumer state not ok", e);
+            //出现异常时，延迟3秒再拉取
             this.executePullRequestLater(pullRequest, pullTimeDelayMillsWhenException);
             return;
         }
@@ -323,6 +325,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 /*如果这个请求是第一次执行锁定逻辑，则进入下面的if语句块————表明需要计算拉取偏移量*/
                 if (!pullRequest.isPreviouslyLocked()) {
                     long offset = -1L;
+                    /**注意下面的try-catch块，try中出现的异常会被catch块捕获。。同时如果offset<0，就会抛出异常中断方法执行*/
                     try {
                         /*计算当前的请求从哪里偏移量拉取消息*/
                         offset = this.rebalanceImpl.computePullFromWhereWithException(pullRequest.getMessageQueue());
@@ -345,7 +348,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                     /*同一个PullRequest只会被执行一次锁定逻辑。注意与上面代码"if (!pullRequest.isPreviouslyLocked())"的呼应,上
                     面if条件的逻辑表明：如果不是第一次锁定，就没必要再走一次计算偏移的逻辑了*/
                     pullRequest.setPreviouslyLocked(true);
-                    //更新下此拉取消息的偏移量
+                    //更新下次拉取消息的偏移量 为 计算出的偏移量
                     pullRequest.setNextOffset(offset);
                 }
             } else {
@@ -382,12 +385,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                             long pullRT = System.currentTimeMillis() - beginTimestamp;
                             DefaultMQPushConsumerImpl.this.getConsumerStatsManager().incPullRT(pullRequest.getConsumerGroup(),
                                 pullRequest.getMessageQueue().getTopic(), pullRT);
-                            /*如果msgFoundList为空，则立即将PullReqeuest放入PullMessageService的pullRequestQueue，以
-                            便PullMessageSerivce能及时唤醒并再次执行消息拉取*/
+                            /*如果msgFoundList为空，则立即将PullReqeuest放入PullMessageService的pullRequestQueue(这个流程就是
+                            方法executePullRequestImmediately的逻辑)，以便PullMessageSerivce能及时唤醒并再次执行消息拉取*/
                             long firstMsgOffset = Long.MAX_VALUE;
                             if (pullResult.getMsgFoundList() == null || pullResult.getMsgFoundList().isEmpty()) {
-                                //拉取消息
-                                DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
+                                DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest); //队列为空，立即拉取消息
                             } else {
                                 firstMsgOffset = pullResult.getMsgFoundList().get(0).getQueueOffset();
                                 /*记录消费者的统计信息————*/
@@ -405,6 +407,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                                     DefaultMQPushConsumerImpl.this.executePullRequestLater(pullRequest,
                                         DefaultMQPushConsumerImpl.this.defaultMQPushConsumer.getPullInterval());
                                 } else {
+                                    //如果更新后的下次拉取等待时间<0，则立即拉取
                                     DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
                                 }
                             }
@@ -487,7 +490,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 commitOffsetEnable = true;
             }
         }
-        /**step7:构建过滤表达式 subExpression；设置是不是类过滤模式*/
+        /**step7:取出过滤表达式 subExpression；设置是不是类过滤模式*/
         String subExpression = null;
         boolean classFilter = false;
         SubscriptionData sd = this.rebalanceImpl.getSubscriptionInner().get(pullRequest.getMessageQueue().getTopic());

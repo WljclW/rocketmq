@@ -124,8 +124,7 @@ public class MQClientInstance {
 
     /**
      * The container of the consumer in the current client. The key is the name of consumerGroup.
-     * 【作用】用于(缓)存当前客户机中的consumer
-     * 用于缓存consumer group和消费者的对应关系
+     * 【作用】用于(缓)存当前客户机中的consumer————用于缓存consumer group和消费者的对应关系
      */
     private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
 
@@ -1216,6 +1215,8 @@ public class MQClientInstance {
         this.rebalanceService.wakeup();
     }
 
+    /**【功能】从consumerTable拿出每一个消费者进行平衡处理。
+     * 只有所有的消费者都再平衡成功时，才返回true；但凡有一个再平衡失败，就将"balanced"标志设置为false，返回值就是false*/
     public boolean doRebalance() {
         boolean balanced = true;
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
