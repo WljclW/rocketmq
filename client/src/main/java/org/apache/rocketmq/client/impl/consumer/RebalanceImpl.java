@@ -361,6 +361,7 @@ public abstract class RebalanceImpl {
 
                     List<MessageQueue> allocateResult = null;
                     try {
+                        /*获取当前这个消费者对应分配到的队列集合allocateResult*/
                         allocateResult = strategy.allocate(
                             this.consumerGroup, /*消费者组名*/
                             this.mQClientFactory.getClientId(), /*当前的clientId，即消费者之前等级的*/
@@ -370,7 +371,8 @@ public abstract class RebalanceImpl {
                         log.error("allocate message queue exception. strategy name: {}, ex: {}", strategy.getName(), e);
                         return false;
                     }
-
+                    /**【疑问】为什么上面得到的结果allocateResult不使用，而是下面重新声明一个set类型的
+                     * allocateResultSet使用？？*/
                     Set<MessageQueue> allocateResultSet = new HashSet<>();
                     if (allocateResult != null) {
                         allocateResultSet.addAll(allocateResult);
@@ -494,18 +496,31 @@ public abstract class RebalanceImpl {
         }
     }
 
+    /**
+     * @description:
+     * @param topic:主题名称，表示当前需要重新平衡的消息队列所属的主题。
+     * @param mqSet:一个集合，包含当前消费者应该处理的消息队列（MessageQueue）。
+     * @param isOrder:布尔值，表示是否是顺序消费模式（Ordered Consumption）。如果是顺序消
+     *                  费，需要额外的锁机制来保证消息的顺序性。
+     * @return boolean: 表示是否发生了变化（即是否有消息队列被添加或移除）。
+     * @author: Zhou
+     * @date: 2025/3/12 0:33
+     */
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet,
         final boolean isOrder) {
         boolean changed = false;
 
-        // drop process queues no longer belong me
+        // drop process queues no longer belong me..移除不属于当前消费者处理的消息队列
         HashMap<MessageQueue, ProcessQueue> removeQueueMap = new HashMap<>(this.processQueueTable.size());
         Iterator<Entry<MessageQueue, ProcessQueue>> it = this.processQueueTable.entrySet().iterator();
+        //遍历当前消费者维护的消息队列表(processQueueTable)。根据mqSet集合中的元素，判断当前消费者是否需要处理该消息队列。
         while (it.hasNext()) {
             Entry<MessageQueue, ProcessQueue> next = it.next();
             MessageQueue mq = next.getKey();
             ProcessQueue pq = next.getValue();
-
+            /*如果某个消息队列 mq 不再属于当前消费者（即不在 mqSet 中），或者该队列的拉取操
+            作已过期（isPullExpired()），则将其标记为“丢弃”（setDropped(true)），并记录
+            到 removeQueueMap 中。*/
             if (mq.getTopic().equals(topic)) {
                 if (!mqSet.contains(mq)) {
                     pq.setDropped(true);
@@ -519,7 +534,8 @@ public abstract class RebalanceImpl {
             }
         }
 
-        // remove message queues no longer belong me
+        // remove message queues no longer belong me...遍历 removeQueueMap 中的所有队列，调
+        // 用 removeUnnecessaryMessageQueue 方法尝试删除这些队列。
         for (Entry<MessageQueue, ProcessQueue> entry : removeQueueMap.entrySet()) {
             MessageQueue mq = entry.getKey();
             ProcessQueue pq = entry.getValue();
@@ -534,8 +550,12 @@ public abstract class RebalanceImpl {
         // add new message queue
         boolean allMQLocked = true;
         List<PullRequest> pullRequestList = new ArrayList<>();
+        //for循环：遍历 mqSet 中的所有消息队列，检查是否已经存在于 processQueueTable 中。
         for (MessageQueue mq : mqSet) {
+            //如果 mq 不存在于 processQueueTable中，进入处理逻辑。。(for循环中就只有这个if块)
             if (!this.processQueueTable.containsKey(mq)) {
+                /*对于顺序消费模式（isOrder），尝试对消息队列加锁（lock(mq)）。如果加
+                锁失败，则记录警告日志，并跳过该队列。*/
                 if (isOrder && !this.lock(mq)) {
                     log.warn("doRebalance, {}, add a new mq failed, {}, because lock failed", consumerGroup, mq);
                     allMQLocked = false;
@@ -543,8 +563,12 @@ public abstract class RebalanceImpl {
                 }
 
                 this.removeDirtyOffset(mq);
+                //创建一个新的 ProcessQueue，并设置其状态为“已锁定”（setLocked(true)）。
                 ProcessQueue pq = createProcessQueue(topic);
                 pq.setLocked(true);
+                /*计算从哪个偏移量开始拉取消息（computePullFromWhere(mq)）。如果计算结果
+                有效（nextOffset >= 0），则将该队列添加到 processQueueTable 中，并创建一
+                个拉取请求（PullRequest）*/
                 long nextOffset = this.computePullFromWhere(mq);
                 if (nextOffset >= 0) {
                     ProcessQueue pre = this.processQueueTable.putIfAbsent(mq, pq);
@@ -557,6 +581,7 @@ public abstract class RebalanceImpl {
                         pullRequest.setNextOffset(nextOffset);
                         pullRequest.setMessageQueue(mq);
                         pullRequest.setProcessQueue(pq);
+                        //把拉取请求加入 pullRequestList，并将 changed 标志设置为 true。
                         pullRequestList.add(pullRequest);
                         changed = true;
                     }
@@ -566,11 +591,12 @@ public abstract class RebalanceImpl {
             }
 
         }
-
+        /*如果有消息队列未能成功加锁（allMQLocked == false），则延迟 500 毫秒后重新触
+        发重新平衡（rebalanceLater）————仅仅针对顺序消息(顺序消息才需要枷锁)*/
         if (!allMQLocked) {
             mQClientFactory.rebalanceLater(500);
         }
-
+        //将所有新创建的拉取请求（pullRequestList）分发给消费者进行处理，延迟时间为 500 毫秒。
         this.dispatchPullRequest(pullRequestList, 500);
 
         return changed;

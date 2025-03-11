@@ -92,6 +92,11 @@ public class RebalancePushImpl extends RebalanceImpl {
 
     @Override
     public boolean removeUnnecessaryMessageQueue(final MessageQueue mq, final ProcessQueue pq) {
+        /*
+        * 如果是顺序消费且消息模型为集群模式，则立即提交偏移量并调用
+        *  tryRemoveOrderMessageQueue 方法解锁并移除队列。————if块逻辑
+        * 否则的话，直接提交并移除偏移量。————else块逻辑
+        * */
         if (this.defaultMQPushConsumerImpl.isConsumeOrderly()
             && MessageModel.CLUSTERING.equals(this.defaultMQPushConsumerImpl.messageModel())) {
 

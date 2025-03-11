@@ -94,7 +94,8 @@ import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
-/**消费者消费消息时，rocketmq内部实际干活的方法*/
+/**消费者消费消息时，rocketmq内部实际干活的方法在这个类实现。。
+ * 比如：消费者在启动的时候，start方法的主要逻辑是在这个类的start方法完成*/
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     /**
      * Delay some time when exception occur。。拉起消息时出现异常的延迟时间(比如：DefaultMQPushConsumerImpl的状态核对过程)

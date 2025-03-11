@@ -25,7 +25,7 @@ import org.apache.rocketmq.remoting.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 
 /**
- * Consumer inner interface....如何理解？？意思是在rocketmq内部使用的消费者一些重要的标志集合？？
+ * Consumer inner interface....如何理解？？意思是在rocketmq内部使用的消费者一些重要的标志、功能集合？？
  */
 public interface MQConsumerInner {
     String groupName();
