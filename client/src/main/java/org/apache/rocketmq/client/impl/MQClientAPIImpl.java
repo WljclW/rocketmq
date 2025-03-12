@@ -1365,15 +1365,16 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         throw new MQBrokerException(response.getCode(), response.getRemark(), addr);
     }
 
+    /**【作用】获取指定消费者组的消费者ID列表*/
     public List<String> getConsumerIdListByGroup(
-        final String addr,
-        final String consumerGroup,
-        final long timeoutMillis) throws RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
+        final String addr, /*brokerAddr*/
+        final String consumerGroup, /*消费者组名*/
+        final long timeoutMillis /*超时时间*/) throws RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
         MQBrokerException, InterruptedException {
         GetConsumerListByGroupRequestHeader requestHeader = new GetConsumerListByGroupRequestHeader();
         requestHeader.setConsumerGroup(consumerGroup);
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_CONSUMER_LIST_BY_GROUP, requestHeader);
-
+        /*同步发送请求：先是通过"MixAll.brokerVIPChannel"检查是不是要将brokerAddr的端口号改为VIP的端口号；*/
         RemotingCommand response = this.remotingClient.invokeSync(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr),
             request, timeoutMillis);
         assert response != null;

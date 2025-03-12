@@ -39,6 +39,7 @@ import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 
 /**
  * Consumer filter data manager.Just manage the consumers use expression filter.
+ * 消费者过滤数据管理，仅仅管理使用表达式过滤的消费者。
  */
 public class ConsumerFilterManager extends ConfigManager {
 

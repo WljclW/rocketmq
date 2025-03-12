@@ -1354,12 +1354,14 @@ public class MQClientInstance {
     }
 
     public List<String> findConsumerIdList(final String topic, final String group) {
+        /*去查找topic所有集群，拿一个brokerAddr(优先拿取master的brokerAddr);
+        * 如果没有找到，则更新路由信息，重新找一下*/
         String brokerAddr = this.findBrokerAddrByTopic(topic);
         if (null == brokerAddr) {
             this.updateTopicRouteInfoFromNameServer(topic);
             brokerAddr = this.findBrokerAddrByTopic(topic);
         }
-
+        /*如果找到了brokerAddr，则*/
         if (null != brokerAddr) {
             try {
                 return this.mQClientAPIImpl.getConsumerIdListByGroup(brokerAddr, group, clientConfig.getMqClientApiTimeout());
@@ -1394,7 +1396,7 @@ public class MQClientInstance {
      *      应一个cluster集群)；③从所有的BrokerData(List<BrokerData>)中随机挑选一个BrokerData————即随机选出一个Broker集
      *      群；④从③中选出的BrokerData中，所有的brokerAddr中选出一个brokerAddr(优先返回master的brokerAddr，如果没有则
      *      随机返回一个slave的brokerAddr)
-     *      [通俗理解]①拿出topic对应的路由信息；②从路由信息拿出所有的broker集群；③从所有的集群中随机选出一个集群；
+     *      [通俗理解]①拿出topic对应的路由信息；②从路由信息拿出特定topic对应的所有broker集群；③从所有的集群中随机选出一个集群；
      *          ④返回选定集群的master broker的地址，如果没有则随机返回一个slave broker的地址
      * */
     public String findBrokerAddrByTopic(final String topic) {

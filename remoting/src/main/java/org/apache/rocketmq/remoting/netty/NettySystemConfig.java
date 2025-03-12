@@ -45,6 +45,7 @@ public class NettySystemConfig {
 
     public static final boolean NETTY_POOLED_BYTE_BUF_ALLOCATOR_ENABLE = //
         Boolean.parseBoolean(System.getProperty(COM_ROCKETMQ_REMOTING_NETTY_POOLED_BYTE_BUF_ALLOCATOR_ENABLE, "false"));
+    //客户端异步请求的信号量，表示了最高的并发请求数量
     public static final int CLIENT_ASYNC_SEMAPHORE_VALUE = //
         Integer.parseInt(System.getProperty(COM_ROCKETMQ_REMOTING_CLIENT_ASYNC_SEMAPHORE_VALUE, "65535"));
     public static final int CLIENT_ONEWAY_SEMAPHORE_VALUE =

@@ -74,18 +74,21 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
         this.brokerController = brokerController;
     }
 
+    /**【作用】RocketMQ的Broker中处理拉取消息结果的核心方法。它负责对从存储层（messageStore）拉取到的消息进
+     * 行进一步处理，并生成最终的响应对象返回给客户端..重点：对从存储层拿到的消息进一步处理
+     * 一句话：负责根据(从messageStore拉取的)结果生成最终的(返回给客户端的)响应。*/
     @Override
-    public RemotingCommand handle(final GetMessageResult getMessageResult,
-        final RemotingCommand request,
-        final PullMessageRequestHeader requestHeader,
-        final Channel channel,
-        final SubscriptionData subscriptionData,
-        final SubscriptionGroupConfig subscriptionGroupConfig,
-        final boolean brokerAllowSuspend,
-        final MessageFilter messageFilter,
-        RemotingCommand response,
-        TopicQueueMappingContext mappingContext,
-        long beginTimeMills) {
+    public RemotingCommand handle(final GetMessageResult getMessageResult, /*从存储层（MessageStore）拿到的消息*/
+        final RemotingCommand request, /*原始的客户端请求*/
+        final PullMessageRequestHeader requestHeader, /*客户端请求头*/
+        final Channel channel, /*客户端对应的channel*/
+        final SubscriptionData subscriptionData, /*客户端的订阅信息*/
+        final SubscriptionGroupConfig subscriptionGroupConfig, /*消费者组配置*/
+        final boolean brokerAllowSuspend, /*broker是否允许挂起*/
+        final MessageFilter messageFilter, /*消息过滤器*/
+        RemotingCommand response, /*响应对象*/
+        TopicQueueMappingContext mappingContext, /**/
+        long beginTimeMills /*开始时间戳*/) {
         /*获取具体的处理器，并组装响应头、设置响应码*/
         PullMessageProcessor processor = brokerController.getPullMessageProcessor();
         final String clientAddress = RemotingHelper.parseChannelRemoteAddr(channel);

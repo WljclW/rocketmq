@@ -152,6 +152,7 @@ public class RemotingCommand {
         return buildErrorResponse(code, remark, null);
     }
 
+    /**创建响应命令对象*/
     public static RemotingCommand createResponseCommand(int code, String remark,
         Class<? extends CommandCustomHeader> classHeader) {
         RemotingCommand cmd = new RemotingCommand();
@@ -270,6 +271,7 @@ public class RemotingCommand {
         return decodeCommandCustomHeader(classHeader, false);
     }
 
+    /**解码自定义命令头*/
     public CommandCustomHeader decodeCommandCustomHeader(
         Class<? extends CommandCustomHeader> classHeader, boolean isCached) throws RemotingCommandException {
         if (isCached && cachedHeader != null) {
@@ -293,7 +295,7 @@ public class RemotingCommand {
         } catch (NoSuchMethodException e) {
             return null;
         }
-
+        /**对于自定义扩展信息的处理*/
         if (this.extFields != null) {
             if (objectHeader instanceof FastCodesHeader && useFastEncode) {
                 ((FastCodesHeader) objectHeader).decode(this.extFields);
@@ -301,14 +303,16 @@ public class RemotingCommand {
                 return objectHeader;
             }
 
+            /**通过反射机制，将 extFields 中的键值对映射到目标对象（objectHeader）的字段中。*/
             Field[] fields = getClazzFields(classHeader);
             for (Field field : fields) {
-                if (!Modifier.isStatic(field.getModifiers())) {
+                if (!Modifier.isStatic(field.getModifiers())) { //跳过static修饰的字段
                     String fieldName = field.getName();
-                    if (!fieldName.startsWith("this")) {
+                    if (!fieldName.startsWith("this")) { //跳过this开头的字段
                         try {
                             String value = this.extFields.get(fieldName);
                             if (null == value) {
+                                //如果当前字段不允许是null抛出异常；否则的话跳过当前字段(因为创建对象后引用类型的字段值默认就是null)
                                 if (!isFieldNullable(field)) {
                                     throw new RemotingCommandException("the custom field <" + fieldName + "> is null");
                                 }
@@ -316,9 +320,10 @@ public class RemotingCommand {
                             }
 
                             field.setAccessible(true);
+                            //获取字段类型的全限定类名
                             String type = getCanonicalName(field.getType());
                             Object valueParsed;
-
+                            //根据不同的类型名来解析字符串为对应的类型
                             if (type.equals(STRING_CANONICAL_NAME)) {
                                 valueParsed = value;
                             } else if (type.equals(INTEGER_CANONICAL_NAME_1) || type.equals(INTEGER_CANONICAL_NAME_2)) {
@@ -329,12 +334,12 @@ public class RemotingCommand {
                                 valueParsed = Boolean.parseBoolean(value);
                             } else if (type.equals(DOUBLE_CANONICAL_NAME_1) || type.equals(DOUBLE_CANONICAL_NAME_2)) {
                                 valueParsed = Double.parseDouble(value);
-                            } else if (type.equals(BOUNDARY_TYPE_CANONICAL_NAME)) {
+                            } else if (type.equals(BOUNDARY_TYPE_CANONICAL_NAME)) { //自定义类型？？
                                 valueParsed = BoundaryType.getType(value);
                             } else {
                                 throw new RemotingCommandException("the custom field <" + fieldName + "> type is not supported");
                             }
-
+                            //将解析后的值设置到目标对象中。field表示当前字段；valueParsed表示解析后的值；objectHeader表示目标对象。
                             field.set(objectHeader, valueParsed);
 
                         } catch (Throwable e) {

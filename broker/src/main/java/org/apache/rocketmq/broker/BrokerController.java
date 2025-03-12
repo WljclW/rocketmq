@@ -229,6 +229,14 @@ public class BrokerController {
     protected MessageStore messageStore;
     protected RemotingServer remotingServer;
     protected CountDownLatch remotingServerStartLatch;
+    /*remotingServer和fastRemotingServer的区别：
+        Broker端————
+        remotingServer可以处理客户端所有请求，如：生产者发送消息的请求，消费者拉取消息的请求。
+        fastRemotingServer功能基本与remotingServer相同，唯一不同的是不可以处理消费者拉取消息的请求。
+        Broker在向NameServer注册时，只会上报remotingServer监听的listenPort端口。
+        客户端————
+        默认情况下，生产者发送消息是请求fastRemotingServer，我们也可以通过配置让其请求remotingServer；消
+        费者拉取消息只能请求remotingServer。*/
     protected RemotingServer fastRemotingServer;
     protected TopicConfigManager topicConfigManager;
     protected SubscriptionGroupManager subscriptionGroupManager;
@@ -291,6 +299,7 @@ public class BrokerController {
         this.shutdownHook = shutdownHook;
     }
 
+    /**BrokerController的初始化，干了很多事啊啊啊*/
     public BrokerController(
         final BrokerConfig brokerConfig,
         final MessageStoreConfig messageStoreConfig
@@ -440,6 +449,8 @@ public class BrokerController {
         return brokerMetricsManager;
     }
 
+    /**初始化两个NettyRemotingServer。。区别在于fastRemotingServer的配置中监听的端口号 比 remotingServer监听端口号 小2；
+     * 关于二者的区别见上面列出的类的字段"protected RemotingServer fastRemotingServer"*/
     protected void initializeRemotingServer() throws CloneNotSupportedException {
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
         NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();

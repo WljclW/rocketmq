@@ -19,11 +19,12 @@ package org.apache.rocketmq.remoting;
 import org.apache.rocketmq.remoting.netty.ResponseFuture;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
-/**RemotingCommand异步执行时的回调接口*/
+/**RemotingCommand异步执行时的回调接口；这个接口是rocketmq内部远程调用的回调接口*/
 public interface InvokeCallback {
     /**
      * This method is expected to be invoked after {@link #operationSucceed(RemotingCommand)}
      * or {@link #operationFail(Throwable)}
+     * 远程调用成功 或者 抛出异常 都会调用这个方法。。类似属于@Aspect中的@Finish
      *
      * @param responseFuture the returned object contains response or exception
      */

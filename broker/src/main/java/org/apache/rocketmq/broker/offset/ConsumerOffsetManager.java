@@ -429,12 +429,13 @@ public class ConsumerOffsetManager extends ConfigManager {
         return map.containsKey(queueId);
     }
 
+    /**查询 并 移除 重置偏移量*/
     public Long queryThenEraseResetOffset(String topic, String group, Integer queueId) {
         String key = topic + TOPIC_GROUP_SEPARATOR + group;
         ConcurrentMap<Integer, Long> map = resetOffsetTable.get(key);
         if (null == map) {
             return null;
-        } else {
+        } else { //删除对应消息队列的偏移量，并返回原来的值
             return map.remove(queueId);
         }
     }

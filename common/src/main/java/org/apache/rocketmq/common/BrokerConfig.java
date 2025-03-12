@@ -175,7 +175,7 @@ public class BrokerConfig extends BrokerIdentity {
     //how long to clean filter data after dead.Default: 24h
     private long filterDataCleanTimeSpan = 24 * 3600 * 1000;
 
-    // whether do filter when retry.
+    // whether do filter when retry.消息重试时是否过滤
     private boolean filterSupportRetry = false;
     private boolean enablePropertyFilter = false;
 
@@ -313,7 +313,7 @@ public class BrokerConfig extends BrokerIdentity {
     private boolean skipPreOnline = false;
 
     private boolean asyncSendEnable = true;
-
+    //是否启用服务端(Broker)的偏移量重置功能
     private boolean useServerSideResetOffset = true;
 
     private long consumerOffsetUpdateVersionStep = 500;

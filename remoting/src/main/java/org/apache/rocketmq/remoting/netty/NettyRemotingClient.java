@@ -93,7 +93,7 @@ import org.apache.rocketmq.remoting.proxy.SocksProxyConfig;
  *
  * @description: NettyRemotingClient以及NettyRemotingServer：分别实现了RemotingClient和
  *          RemotingServer，都继承了NettyRemotingAbstract抽象类。RocketMQ中其他的组件（如client、
- *          nameServer、broker在进行消息的发送和接收时均使用这两个组件）。
+ *          nameServer、broker在进行消息的发送和接收时，最终使用的是这两个组件的相关功能）。
  * @author: Zhou
  * @date: 2024/11/4 22:49
  */
@@ -109,7 +109,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final Lock lockChannelTables = new ReentrantLock();
     private final Map<String /* cidr */, SocksProxyConfig /* proxy */> proxyMap = new HashMap<>();
     private final ConcurrentHashMap<String /* cidr */, Bootstrap> bootstrapMap = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();   //当前客户端已创建的连接(网络通道、netty channel)，每一个地址一条长连接
+    /*Channel 是 Netty 中表示网络连接的核心组件，用于与远程服务通信。
+    channelTables：当前客户端已创建的连接(网络通道、netty channel)。每一个远程地址对应一条长连接*/
+    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();
     private final ConcurrentMap<Channel, ChannelWrapper> channelWrapperTables = new ConcurrentHashMap<>();
 
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ClientHouseKeepingService"));
@@ -546,18 +548,23 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**【功能】同步调用远程服务的核心方法 invokeSync，它的主要作用是通过指定的地址（addr）向远程服务发送请求，并等待响应。。
+     * 【】其中，核心逻辑是调用this.invokeSyncImpl；本方法主要完成的是超时时间的更新、发生异常的处理(请求异常 和 超时异常)*/
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
         long beginStartTime = System.currentTimeMillis();
-        final Channel channel = this.getAndCreateChannel(addr); //根据地址获取channel
+        //根据地址获取(或者创建)channel，channel就是一个网络连接的抽象...后续的流程用的就是channel，而不是针对addr了
+        final Channel channel = this.getAndCreateChannel(addr);
         String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
+        //如果Channel不为空且处于活动状态，继续执行；否则关闭Channel并抛出连接异常。
         if (channel != null && channel.isActive()) {
             long left = timeoutMillis;
             try {
+                //计算出剩余超时时间left
                 long costTime = System.currentTimeMillis() - beginStartTime;
                 left -= costTime;
-                if (left <= 0) {
+                if (left <= 0) { //剩余超时时间<0，抛出异常
                     throw new RemotingTimeoutException("invokeSync call the addr[" + channelRemoteAddr + "] timeout");
                 }
                 RemotingCommand response = this.invokeSyncImpl(channel, request, left);
@@ -569,6 +576,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 throw e;
             } catch (RemotingTimeoutException e) {
                 // avoid close the success channel if left timeout is small, since it may cost too much time in get the success channel, the left timeout for read is small
+                /*如果left timeout很小，避免关闭成功通道，因为获取成功通道可能花费太多时间，所以read的left timeout很小..
+                * 通俗理解：可能剩余超时时间left不大会导致误关闭，因此添加如下逻辑————
+                *       1.如果left>100ms 或者 left>timeoutMillis / 4————说明调用invokeSyncImpl时剩余超时时间还不少呢，但是都
+                *    超时了，因此认为应该关闭channel,设置标志shouldClose为true；
+                *       2.看一下客户端的配置：nettyClientConfig.isClientCloseSocketIfTimeout()————该参数说明了客户端在远程调
+                *    用发生超时时，是不是要关闭socket连接
+                *       上述两点都满足时，才关闭连接；否则只是记录警告日志*/
                 boolean shouldClose = left > MIN_CLOSE_TIMEOUT_MILLIS || left > timeoutMillis / 4;
                 if (nettyClientConfig.isClientCloseSocketIfTimeout() && shouldClose) {
                     this.closeChannel(addr, channel);
@@ -610,6 +624,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**【功能】更新指定地址addr的最后响应时间*/
     private void updateChannelLastResponseTime(final String addr) {
         String address = addr;
         if (address == null) {

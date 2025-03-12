@@ -50,6 +50,9 @@ public class ColdDataCgCtrService extends ServiceThread {
     /**
      * as soon as the consumerGroup read the cold data then it will be put into @code cgColdThresholdMapRuntime,
      * and it also will be removed when does not read cold data in @code cgColdAccResideTimeoutMills later;
+     * 一旦consumerGroup读取冷数据，这个消费者组会被加入到cgColdThresholdMapRuntime中；同时，如果该消费者组不再读取冷数据，
+     *      在cgColdAccResideTimeoutMills之后，会从cgColdThresholdMapRuntime中移除————因此从上面的表述中可以发现这个清
+     *      除操作应该在当前服务的run方法
      */
     private final ConcurrentHashMap<String, AccAndTimeStamp> cgColdThresholdMapRuntime = new ConcurrentHashMap<>();
     /**
@@ -184,18 +187,22 @@ public class ColdDataCgCtrService extends ServiceThread {
         cgColdThresholdMapConfig.remove(consumerGroup);
     }
 
+    /**【功能】判断参数给定的消费者组是不是需要进行"冷数据流量控制"*/
     public boolean isCgNeedColdDataFlowCtr(String consumerGroup) {
+        //消息存储配置中是不是设置了冷数据流量控制
         if (!this.messageStoreConfig.isColdDataFlowControlEnable()) {
             return false;
         }
+        //消费者组是不是系统组，系统组不走"冷数据流量控制"
         if (MixAll.isSysConsumerGroupForNoColdReadLimit(consumerGroup)) {
             return false;
         }
+        //从cgColdThresholdMapRuntime获取消费者组的冷数据访问记录
         AccAndTimeStamp accAndTimeStamp = cgColdThresholdMapRuntime.get(consumerGroup);
         if (null == accAndTimeStamp) {
             return false;
         }
-
+        //判断是不是超过了阈值
         Long threshold = getThresholdByConsumerGroup(consumerGroup);
         if (accAndTimeStamp.getColdAcc().get() >= threshold) {
             return true;
@@ -211,6 +218,7 @@ public class ColdDataCgCtrService extends ServiceThread {
         return brokerConfig;
     }
 
+    /**【作用】读取给定消费者组的冷数据读取阈值。*/
     private Long getThresholdByConsumerGroup(String consumerGroup) {
         if (isAdminConfig(consumerGroup)) {
             if (consumerGroup.endsWith(ADAPTIVE)) {

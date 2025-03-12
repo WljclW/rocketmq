@@ -73,13 +73,12 @@ import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESUL
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.RESULT_WRITE_CHANNEL_FAILED;
 
 /**
+ * 【功能】用于实现远程通信（RPC）的核心抽象类。它是基于 Netty 的网络通信框架，提供了通用的远程调用功能
  * Netty 远程服务抽象实现类，定义网络远程调用、请求，响应等处理逻辑。
  * Netty通信处理的抽象类，定义并封装了Netty处理的公共处理方法。
  * 该类抽象了invokeSync、invokeOneway等公用的方法实现。
- * */
-/**
- * RocketMQ 支持同步、异步、Oneway 三种消息发送方式。
  *
+ * RocketMQ 支持同步、异步、Oneway 三种消息发送方式。
  * 同步：客户端发起一次消息发送后会同步等待服务器的响应结果。
  * 异步：客户端发起一下消息发起请求后不等待服务器响应结果而是立即返回，这样不会阻塞客户端
  *      子线程，当客户端收到服务端（Broker）的响应结果后会自动调用回调函数。
@@ -517,6 +516,7 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**【功能】发起一次远程调用，并在远程调用的前后执行注册的RPC钩子*/
     public CompletableFuture<ResponseFuture> invokeImpl(final Channel channel, final RemotingCommand request,
         final long timeoutMillis) {
         String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
@@ -528,21 +528,28 @@ public abstract class NettyRemotingAbstract {
         });
     }
 
+    /**【功能】实现异步远程调用（RPC）的核心方法 invoke0，它的主要作用是通过指定的网络通道（Channel）发送
+     *      请求，并返回一个异步结果（CompletableFuture<ResponseFuture>）
+     * @param channel 网络连接通道
+     * @param request 请求
+     * @param timeoutMillis 超时时间
+     * */
     protected CompletableFuture<ResponseFuture> invoke0(final Channel channel, final RemotingCommand request,
         final long timeoutMillis) {
-        CompletableFuture<ResponseFuture> future = new CompletableFuture<>();
-        long beginStartTime = System.currentTimeMillis();
-        final int opaque = request.getOpaque();
+        CompletableFuture<ResponseFuture> future = new CompletableFuture<>(); //用于后续的返回结果设置
+        long beginStartTime = System.currentTimeMillis(); //记录当前的时间戳
+        final int opaque = request.getOpaque(); //请求的opaque唯一码，用于唯一标识请求，匹配请求和响应
 
         boolean acquired;
-        try {
+        try {   //获取一个信号量(这个用于控制并发请求的最大数量)
             acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         } catch (Throwable t) {
-            future.completeExceptionally(t);
+            future.completeExceptionally(t); //如果无法在指定的时间内获取到信号量，则抛出异常
             return future;
         }
         if (acquired) {
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreAsync);
+            /*计算从开始执行方法到现在的时间————如果超时，释放信号量，抛出异常*/
             long costTime = System.currentTimeMillis() - beginStartTime;
             if (timeoutMillis < costTime) {
                 once.release();
@@ -551,6 +558,7 @@ public abstract class NettyRemotingAbstract {
             }
 
             AtomicReference<ResponseFuture> responseFutureReference = new AtomicReference<>();
+            //创建一个异步请求的响应对象。channel：网络连接通道；opaque：请求的opaque唯一码；request：请求；timeoutMillis：超时时间；InvokeCallback：回调函数；once：信号量释放器
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, request, timeoutMillis - costTime,
                 new InvokeCallback() {
                     @Override
@@ -571,6 +579,7 @@ public abstract class NettyRemotingAbstract {
             responseFutureReference.set(responseFuture);
             this.responseTable.put(opaque, responseFuture);
             try {
+                /**使用writeAndFlush将请求写入到网络通道并刷新；*/
                 channel.writeAndFlush(request).addListener((ChannelFutureListener) f -> {
                     if (f.isSuccess()) {
                         responseFuture.setSendRequestOK(true);

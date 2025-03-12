@@ -202,6 +202,7 @@ public class SubscriptionGroupManager extends ConfigManager {
         return (topicForbidden & bitForbidden) == bitForbidden;
     }
 
+    /**从forbiddenTable获取消费者组对于topic的禁止值*/
     public int getForbidden(String group, String topic) {
         ConcurrentMap<String, Integer> topicForbiddens = this.forbiddenTable.get(group);
         if (topicForbiddens == null) {

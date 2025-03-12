@@ -58,6 +58,7 @@ public class PullMessageRequestHeader extends TopicQueueRequestHeader implements
 
     /**
      * mark the source of this pull request
+     * 用于标识拉取消息请求的来源。它主要用于区分不同类型的消费者或请求场景，帮助 Broker 端更好地处理和统计拉取请求。
      */
     private Integer requestSource;
 
