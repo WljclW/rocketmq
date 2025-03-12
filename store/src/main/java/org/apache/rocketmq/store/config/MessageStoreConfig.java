@@ -229,6 +229,8 @@ public class MessageStoreConfig {
     private boolean offsetCheckInSlave = false;
     private boolean debugLockEnable = false;
     private boolean duplicationEnable = false;
+    /*是否记录磁盘落后（Disk Fall Behind）的统计信息。它的主要
+    作用是帮助监控和分析消费者的消费速度，以及主从节点之间的消息同步状态。*/
     private boolean diskFallRecorded = true;
     private long osPageCacheBusyTimeOutMills = 1000;
     private int defaultQueryMaxNum = 32;
@@ -281,6 +283,12 @@ public class MessageStoreConfig {
      */
     private boolean enabledAppendPropCRC = false;
     private boolean forceVerifyPropCRC = false;
+    /*控制在拉取消息时遍历消费队列（ConsumeQueue）文件的最大数量。它的作用是限制每
+    次拉取消息操作中对消费队列文件的访问范围，从而避免因消费队列过大而导致性能下降或
+    资源浪费。
+    如果消费队列文件过多，且消费者的偏移量接近文件边界，可能需要跨越多个文件才能找到
+    足够的消息。为了防止过度遍历文件导致性能问题，travelCqFileNumWhenGetMessage 限
+    制了每次拉取消息时最多可以遍历的消费队列文件数量。*/
     private int travelCqFileNumWhenGetMessage = 1;
     // Sleep interval between to corrections
     private int correctLogicMinOffsetSleepInterval = 1;

@@ -22,18 +22,21 @@ import java.util.Collections;
 import java.util.List;
 
 public class GetMessageResult {
-
+    //用于存储所有的 SelectMappedBufferResult 对象，每个 SelectMappedBufferResult 表示一条消息的内容及其元信息。
     private final List<SelectMappedBufferResult> messageMapedList;
+    //用于存储所有消息的字节缓冲区（ByteBuffer）。字节缓冲区包含了消息的实际内容。
     private final List<ByteBuffer> messageBufferList;
+    /*这是一个列表，用于存储（这个结果集中）每条消息的逻辑偏移量（queueOffset）。
+        逻辑偏移量用于标识消息在消费队列中的位置。*/
     private final List<Long> messageQueueOffset;
 
     private GetMessageStatus status;
     private long nextBeginOffset;
     private long minOffset;
     private long maxOffset;
-
+    //当前结果集中所有消息的总字节数。
     private int bufferTotalSize = 0;
-
+    //当前结果集中包含的消息总数。
     private int messageCount = 0;
 
     private boolean suggestPullingFromSlave = false;
@@ -119,6 +122,8 @@ public class GetMessageResult {
         this.messageCount++;
     }
 
+    /**将从存储中读取的消息（SelectMappedBufferResult）添加到结果集中。它的
+     * 主要功能是更新消息的元信息、统计数据以及相关的计数器*/
     public void addMessage(final SelectMappedBufferResult mapedBuffer, final long queueOffset) {
         this.messageMapedList.add(mapedBuffer);
         this.messageBufferList.add(mapedBuffer.getByteBuffer());
@@ -130,6 +135,11 @@ public class GetMessageResult {
     }
 
 
+    /**用于将从存储中读取的消息添加到 GetMessageResult 对象中。这个方法在消息拉取过程中被
+     * 调用，用于逐步构建返回给消费者的消息结果集。
+     * @param mapedBuffer 存表示从 commitLog 中读取到的消息内容的封装对象（内存缓冲区的封装）
+     * @param queueOffset 消息在消费队列中的逻辑偏移量（queueOffset）
+     * @param batchNum 当前消息批次的数量，表示该消息单元中包含的消息条数（通常是 1，但在批量消息场景下可能大于 1）。*/
     public void addMessage(final SelectMappedBufferResult mapedBuffer, final long queueOffset, final int batchNum) {
         addMessage(mapedBuffer, queueOffset);
         messageCount += batchNum - 1;

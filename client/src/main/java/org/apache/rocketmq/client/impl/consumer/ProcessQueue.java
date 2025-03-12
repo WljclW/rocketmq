@@ -35,6 +35,10 @@ import org.apache.rocketmq.remoting.protocol.body.ProcessQueueInfo;
 
 /**
  * Queue consumption snapshot....队列消费快照
+ * ProcessQueue是MessageQueue在消费端的重现、快照。
+ * PullMessageService从消息服务器默认每次拉取32条消息，按消息队列偏移量的顺序存放
+ * 在ProcessQueue中，PullMessageService将消息提交到消费者消费线程池，消息成功消费
+ * 后，再从ProcessQueue中移除
  * [作用]1.消息缓存：消息者本地的消息缓冲区，存储从broker拉取到的消息。通过msgTreeMap进行存储，键是消息在ConsumeQueue中的偏移量。
  *      2.跟踪消息的消费进度：
  *      3.
