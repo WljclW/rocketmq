@@ -25,15 +25,17 @@ import org.apache.rocketmq.store.logfile.MappedFile;
  *      用于封装从内存映射文件中读取的数据缓冲区。。。。包含了对内存映射文件缓冲区的操作方法
  * */
 public class SelectMappedBufferResult {
-
+    /*读取数据的起始偏移量*/
     private final long startOffset;
-
+    /*表示实际读取到的数据缓冲区，通常是通过内存映射文件（Memory-Mapped File）技术创建的 MappedByteBuffer;
+    * 【作用】提供对读取到数据的访问接口*/
     private final ByteBuffer byteBuffer;
-
+    /*读取到数据的大小，单位字节。同时也暗示了byteBuffer的有效长度*/
     private int size;
-
+    /*表示与当前读取结果关联的内存映射文件对象。
+    用途 : 用于管理底层的内存映射资源，确保在使用完缓冲区后能够正确释放资源。*/
     protected MappedFile mappedFile;
-
+    /*标识当前读取到的结果是不是已经在缓存*/
     private boolean isInCache = true;
 
     public SelectMappedBufferResult(long startOffset, ByteBuffer byteBuffer, int size, MappedFile mappedFile) {

@@ -2121,6 +2121,7 @@ public class BrokerController {
         }
     }
 
+    //改动“定时消息”(延时消息)的状态————启动或停止这个服务
     public synchronized void changeScheduleServiceStatus(boolean shouldStart) {
         if (isScheduleServiceStart != shouldStart) {
             LOG.info("ScheduleServiceStatus changed to {}", shouldStart);

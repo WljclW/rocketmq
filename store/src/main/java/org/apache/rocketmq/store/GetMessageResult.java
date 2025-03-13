@@ -21,29 +21,37 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**用于表示从存储层（如 CommitLog 或 ConsumeQueue）拉取消息的结果的一个类。它的主要作用是封装从存储层读取到的消息数据及其
+ * 相关元信息，供消费者或调用方使用。*/
 public class GetMessageResult {
-    //用于存储所有的 SelectMappedBufferResult 对象，每个 SelectMappedBufferResult 表示一条消息的内容及其元信息。
+    /*存储所有从存储层读取到的消息缓冲区对象（SelectMappedBufferResult）；
+    * 每个 SelectMappedBufferResult 对象封装了一段内存映射文件中的数据，表示一条或多条消息的内容。
+    调用方可以通过这些对象访问消息的实际内容。*/
     private final List<SelectMappedBufferResult> messageMapedList;
-    //用于存储所有消息的字节缓冲区（ByteBuffer）。字节缓冲区包含了消息的实际内容。
+    /*用于存储所有消息的字节缓冲区（ByteBuffer）。字节缓冲区包含了消息的实际内容。
+    与messageMapedList的区别：messageMapedList仅仅关注消息的实际内容
+    */
     private final List<ByteBuffer> messageBufferList;
     /*这是一个列表，用于存储（这个结果集中）每条消息的逻辑偏移量（queueOffset）。
         逻辑偏移量用于标识消息在消费队列中的位置。*/
     private final List<Long> messageQueueOffset;
-
+    /*标识消息拉取的状态*/
     private GetMessageStatus status;
     private long nextBeginOffset;
+    //当前结果集中包含的消息的最小偏移量。
     private long minOffset;
+    //当前结果集中包含的消息的最大偏移量。
     private long maxOffset;
     //当前结果集中所有消息的总字节数。
     private int bufferTotalSize = 0;
     //当前结果集中包含的消息总数。
     private int messageCount = 0;
-
+    //是否建议 从从节点拉取消息
     private boolean suggestPullingFromSlave = false;
 
     private int msgCount4Commercial = 0;
     private int commercialSizePerMsg = 4 * 1024;
-
+    //冷数据总量
     private long coldDataSum = 0L;
 
     public static final GetMessageResult NO_MATCH_LOGIC_QUEUE =

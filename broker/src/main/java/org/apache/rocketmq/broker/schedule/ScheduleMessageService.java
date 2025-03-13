@@ -62,6 +62,8 @@ import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_IS_
 import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_MESSAGE_TYPE;
 import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_TOPIC;
 
+/**用于支持定时消息（Scheduled Messages） 功能的核心组件。它的主要作用是管理定时消息的存储、调度和投递，确保定时消息能够在指
+ * 定的时间被正确地发送到消费者。*/
 public class ScheduleMessageService extends ConfigManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
 
@@ -70,7 +72,7 @@ public class ScheduleMessageService extends ConfigManager {
     private static final long DELAY_FOR_A_PERIOD = 10000L;
     private static final long WAIT_FOR_SHUTDOWN = 5000L;
     private static final long DELAY_FOR_A_SLEEP = 10L;
-
+    /*键：延迟级别；值：延迟时间*/
     private final ConcurrentSkipListMap<Integer /* level */, Long/* delay timeMillis */> delayLevelTable =
         new ConcurrentSkipListMap<>();
 
@@ -132,12 +134,16 @@ public class ScheduleMessageService extends ConfigManager {
     }
 
     public void start() {
+        /*利用started.compareAndSet以及一个原子类型标志，保证只会被启动一次*/
         if (started.compareAndSet(false, true)) {
             this.load();
+            /*创建一个定时任务线程池，用于调度定时信息的投递任务。。
+            * 通过“this.maxDelayLevel”可以知道，有多少个延迟级别，就有多少个核心线程*/
             this.deliverExecutorService = ThreadUtils.newScheduledThreadPool(this.maxDelayLevel, new ThreadFactoryImpl("ScheduleMessageTimerThread_"));
             if (this.enableAsyncDeliver) {
                 this.handleExecutorService = ThreadUtils.newScheduledThreadPool(this.maxDelayLevel, new ThreadFactoryImpl("ScheduleMessageExecutorHandleThread_"));
             }
+            /*为每一个延迟级别创建定时任务*/
             for (Map.Entry<Integer, Long> entry : this.delayLevelTable.entrySet()) {
                 Integer level = entry.getKey();
                 Long timeDelay = entry.getValue();
