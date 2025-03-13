@@ -56,41 +56,49 @@ public class ExpressionMessageFilter implements MessageFilter {
         }
     }
 
+    /**用于在 Broker 端 基于 ConsumeQueue 的数据对消息进行初步过滤。它的主要目的是在拉取消息时，快速判断
+     * 某条消息是否符合消费者的订阅条件*/
     @Override
     public boolean isMatchedByConsumeQueue(Long tagsCode, ConsumeQueueExt.CqExtUnit cqExtUnit) {
+        //如果订阅数据是null，则表示订阅数据为空，则表示订阅所有消息（如果 subscriptionData 为 null，表示消费者没有指定任
+        //何订阅条件，默认订阅所有消息，返回 true。）————则返回true.
         if (null == subscriptionData) {
             return true;
         }
-
+        //如果订阅数据是classFilterMode，则表示订阅所有消息，则返回true
         if (subscriptionData.isClassFilterMode()) {
             return true;
         }
-
-        // by tags code.
+        /**根据是否TAG类型进行分类处理：
+         * if块：处理TAG类型的过滤
+         * else：处理其他的情况*/
+        // by tags code.如果是‘表达式过滤’中的TAG类型的消息过滤，使用下面的if块
         if (ExpressionType.isTagType(subscriptionData.getExpressionType())) {
-
+            //没有哈希码 或者 订阅表达式是"*"，表示订阅所有，返回true
             if (tagsCode == null) {
                 return true;
             }
-
             if (subscriptionData.getSubString().equals(SubscriptionData.SUB_ALL)) {
                 return true;
             }
-
+            /* 比对tagsCode是不是包含在订阅信息的tagsSet中，如果包含，则返回true，否则返回false————完成对tag表达式
+                    的'初步'过滤(仅仅过滤了哈希码)
+            【注意】基于TAG模式根据ConsumeQueue进行消息过滤时只对比tag的哈希码，所以还需要
+            在消息消费端对消息标志进行精确匹配*/
             return subscriptionData.getCodeSet().contains(tagsCode.intValue());
-        } else {
-            // no expression or no bloom
+        } else { /**只要不是TAG类型的过滤类型，都走else分支*/
+            // no expression or no bloom....没有表达式 或者 没有布隆过滤器，则返回true
             if (consumerFilterData == null || consumerFilterData.getExpression() == null
                 || consumerFilterData.getCompiledExpression() == null || consumerFilterData.getBloomFilterData() == null) {
                 return true;
             }
 
-            // message is before consumer
+            // message is before consumer————下面的代码表示消费者订阅的时候，消息还没有存储
             if (cqExtUnit == null || !consumerFilterData.isMsgInLive(cqExtUnit.getMsgStoreTime())) {
                 log.debug("Pull matched because not in live: {}, {}", consumerFilterData, cqExtUnit);
                 return true;
             }
-
+            /*下面的逻辑是 布隆过滤器校验 的逻辑*/
             byte[] filterBitMap = cqExtUnit.getFilterBitMap();
             BloomFilter bloomFilter = this.consumerFilterManager.getBloomFilter();
             if (filterBitMap == null || !this.bloomDataValid

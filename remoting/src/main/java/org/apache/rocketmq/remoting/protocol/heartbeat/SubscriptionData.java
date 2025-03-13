@@ -33,14 +33,14 @@ import org.apache.rocketmq.common.filter.ExpressionType;
  *      的对象来标识当前消费者需要消费哪些消息)
  * */
 public class SubscriptionData implements Comparable<SubscriptionData> {
-    public final static String SUB_ALL = "*";
-    private boolean classFilterMode = false;
-    private String topic;
-    private String subString;
-    private Set<String> tagsSet = new HashSet<>();
-    private Set<Integer> codeSet = new HashSet<>();
-    private long subVersion = System.currentTimeMillis();
-    private String expressionType = ExpressionType.TAG;
+    public final static String SUB_ALL = "*"; //表示订阅所有消息，默认订阅所有
+    private boolean classFilterMode = false; //是否使用类过滤器
+    private String topic; //主题名称
+    private String subString; //消息过滤表达式，多个用双竖线隔开，例如“TAGA|| TAGB”。
+    private Set<String> tagsSet = new HashSet<>(); //标签集合
+    private Set<Integer> codeSet = new HashSet<>(); //消息过滤标志哈希码集合
+    private long subVersion = System.currentTimeMillis(); //订阅版本号。默认为当前时间戳
+    private String expressionType = ExpressionType.TAG; //消息过滤表达式类型
 
     @JSONField(serialize = false)
     private String filterClassSource;

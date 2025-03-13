@@ -1331,7 +1331,8 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return this.rebalanceImpl.getSubscriptionInner();
     }
 
-    /**第一种订阅方式：指定 topic 和 表达式(tag或者SQL92表达式都可以)；订阅完成后需要向所有的Broker发送心跳包*/
+    /**第一种订阅方式：指定 topic 和 表达式(tag或者SQL92表达式都可以)
+     * 【逻辑】将订阅信息添加到RebalanceImpl，以便进行消息队列负载均衡；订阅完成后需要向所有的Broker发送心跳包*/
     public void subscribe(String topic, String subExpression) throws MQClientException {
         try {
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(topic, subExpression);

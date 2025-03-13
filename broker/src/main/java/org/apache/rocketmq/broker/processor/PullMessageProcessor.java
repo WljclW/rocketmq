@@ -420,9 +420,12 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         SubscriptionData subscriptionData = null;
         ConsumerFilterData consumerFilterData = null;
         final boolean hasSubscriptionFlag = PullSysFlag.hasSubscriptionFlag(requestHeader.getSysFlag());
-        /**针对请求中是否包含定于数据来处理：
-         * if块：如果请求中包含订阅数据
-         * else：如果请求中不包含订阅数据*/
+        /**【功能】下面的if-else语句块完成的，根据requestHeader中的信息构建subscriptionData和consumerFilterData————这两个
+         *      在后面构建MessageFilter的时候会用到，而MessageFilter在“getMessage(MessageStore的方法)”方法的形参需要——从而
+         *      可以在Broker端进行初步的消息过滤，见org.apache.rocketmq.store.DefaultMessageStore#getMessage
+         * 处理的逻辑，针对请求中是否包含定于数据来处理：
+         *      if块：如果请求中包含订阅数据
+         *      else：如果请求中不包含订阅数据*/
         if (hasSubscriptionFlag) { /*if处理请求中包含订阅数据*/
             try {
                 /*构建订阅消息数据，并将这个订阅消息补偿到消费者组的信息中(即consumerGroupInfo)*/
@@ -516,7 +519,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             response.setRemark("The broker does not support consumer to filter message by " + subscriptionData.getExpressionType());
             return response;
         }
-        /*根据broker是不是支持"重试消息的过滤"，来构建mesageFilter*/
+        /*下面的if-else逻辑是 构建“消息过滤器”
+        【逻辑】：根据broker是不是支持"重试消息的过滤"，来构建mesageFilter*/
         MessageFilter messageFilter;
         if (this.brokerController.getBrokerConfig().isFilterSupportRetry()) {
             messageFilter = new ExpressionForRetryMessageFilter(subscriptionData, consumerFilterData,
@@ -525,6 +529,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
             messageFilter = new ExpressionMessageFilter(subscriptionData, consumerFilterData,
                 this.brokerController.getConsumerFilterManager());
         }
+        /**下面的大的if块主要功能：如果开启“冷数据流控”，需要做一些检查*/
         /*拿到MessageStore，如果需要"冷数据流控"，则进行....处理*/
         final MessageStore messageStore = brokerController.getMessageStore();
         if (this.brokerController.getMessageStore() instanceof DefaultMessageStore) {
@@ -558,14 +563,13 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 }
             }
         }
-        /***/
         //useResetOffsetFeature：从 Broker 配置中获取是否启用了服务端偏移量重置功能。
         final boolean useResetOffsetFeature = brokerController.getBrokerConfig().isUseServerSideResetOffset();
         String topic = requestHeader.getTopic();
         String group = requestHeader.getConsumerGroup();
         int queueId = requestHeader.getQueueId();
         Long resetOffset = brokerController.getConsumerOffsetManager().queryThenEraseResetOffset(topic, group, queueId);
-        /*分情况封装结果：
+        /**下面的if-else块，分情况封装结果：
         *   情况1：如果开启了"重置偏移量"功能 并且 重置偏移量有效，走if分支
         *   情况2：对于其他情况，走else分支*/
         GetMessageResult getMessageResult = null;

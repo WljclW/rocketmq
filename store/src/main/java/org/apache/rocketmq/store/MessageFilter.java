@@ -23,12 +23,13 @@ public interface MessageFilter {
     /**
      * match by tags code or filter bit map which is calculated when message received
      * and stored in consume queue ext.
+     * 根据存储在ConsumeQueue中的消息，看是否匹配
      *
      * @param tagsCode tagsCode
      * @param cqExtUnit extend unit of consume queue
      */
-    boolean isMatchedByConsumeQueue(final Long tagsCode,
-        final ConsumeQueueExt.CqExtUnit cqExtUnit);
+    boolean isMatchedByConsumeQueue(final Long tagsCode, /*消息标志的哈希码*/
+        final ConsumeQueueExt.CqExtUnit cqExtUnit /*消息队列的扩展属性*/);
 
     /**
      * match by message content which are stored in commit log.

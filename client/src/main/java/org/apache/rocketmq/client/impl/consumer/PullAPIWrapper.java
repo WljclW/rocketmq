@@ -74,6 +74,7 @@ public class PullAPIWrapper {
         this.unitMode = unitMode;
     }
 
+    /**rocketmq消费端的方法，用于处理从Broker端拉到的消息*/
     public PullResult processPullResult(final MessageQueue mq, final PullResult pullResult,
         final SubscriptionData subscriptionData) {
         PullResultExt pullResultExt = (PullResultExt) pullResult;
@@ -113,8 +114,10 @@ public class PullAPIWrapper {
                     log.error("Try to decode the inner batch failed for {}", pullResult.toString(), t);
                 }
             }
-            /*根据订阅数据过滤消息*/
+            /**说明：由于在broker端只是针对TAG的哈希值过了一次过滤，因此消费端拿到broker返回的结果后，需要进行TAG挨个匹配！！
+             * 下面的if块完成的就是这个功能*/
             List<MessageExt> msgListFilterAgain = msgList;
+            //TAGS集合不是空 并且 不是类过滤模式，遍历msgList中每一条消息的TAG看看是不是在订阅信息中
             if (!subscriptionData.getTagsSet().isEmpty() && !subscriptionData.isClassFilterMode()) {
                 msgListFilterAgain = new ArrayList<>(msgList.size());
                 for (MessageExt msg : msgList) {
@@ -151,7 +154,7 @@ public class PullAPIWrapper {
 
             pullResultExt.setMsgFoundList(msgListFilterAgain);
         }
-        /*清理二进制消息内容，并返回处理后的结果*/
+        /*响应码都不是FOUND，说明没有找到合适的消息。清理二进制消息内容，并返回处理后的结果*/
         pullResultExt.setMessageBinary(null);
 
         return pullResult;
@@ -182,7 +185,8 @@ public class PullAPIWrapper {
         }
     }
 
-    /**【总述】获取具体的brokerAddr 并且 构建请求头；最后调用this.mQClientFactory.getMQClientAPIImpl().pullMessage拉取消息*/
+    /**【总述】获取具体的brokerAddr 并且 构建请求头；最后调用this.mQClientFactory.getMQClientAPIImpl().pullMessage拉取消息。
+     * 这个方法的根本目的：获取brokerAddr 以及 构建请求头*/
     public PullResult pullKernelImpl(
         final MessageQueue mq, /*消息队列*/
         final String subExpression, /*订阅表达式，消息过滤表达式*/
