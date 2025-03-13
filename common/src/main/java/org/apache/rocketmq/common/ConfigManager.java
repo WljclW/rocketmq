@@ -25,14 +25,19 @@ import org.rocksdb.Statistics;
 import java.io.IOException;
 import java.util.Map;
 
+/**用于管理和维护配置信息。它提供了一种通用的方式来加载、保存和更新
+ * 配置，并支持将配置持久化到文件中或从文件中加载。*/
 public abstract class ConfigManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
     protected RocksDBConfigManager rocksDBConfigManager;
 
+    /**【作用】加载子类方法configFilePath()指定的文件，并调用decode方法解析(decode方法由子类重写)
+     * 【流程】从子类中拿到文件名(如果有非空内容)，则尝试加载*/
     public boolean load() {
         String fileName = null;
         try {
+            //执行子类重写的configFilePath()，拿到文件名
             fileName = this.configFilePath();
             String jsonString = MixAll.file2String(fileName);
 
@@ -77,6 +82,7 @@ public abstract class ConfigManager {
         this.persist();
     }
 
+    /**将当前的配置对象持久化到文件中。*/
     public synchronized void persist() {
         String jsonString = this.encode(true);
         if (jsonString != null) {

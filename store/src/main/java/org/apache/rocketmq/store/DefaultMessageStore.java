@@ -341,6 +341,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
+     * 【作用】消息存储系统(MessageStore)的加载逻辑
      * @throws IOException
      * 【涉及到】
      * 1. 检查上次是否是异常关闭
@@ -362,25 +363,28 @@ public class DefaultMessageStore implements MessageStore {
 
             // load Consume Queue
             result = result && this.consumeQueueStore.load();
-
+            /*如果启用了压缩功能，需要加载压缩服务*/
             if (messageStoreConfig.isEnableCompaction()) {
                 result = result && this.compactionService.load(lastExitOK);
             }
 
             if (result) {
-                this.storeCheckpoint =  //读取配置文件的路径 并 创建StoreCheckpoint对象
+                this.storeCheckpoint =  //读取配置文件的路径 并 创建StoreCheckpoint对象(记录磁盘的检查点信息)
                     new StoreCheckpoint(
                         StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
                 //读取 StoreCheckpoint文件中的masterFlushedOffset的值，并设置到CommitLog对象中
                 this.masterFlushedOffset = this.storeCheckpoint.getMasterFlushedOffset();
+                //设置确认的偏移量
                 setConfirmOffset(this.storeCheckpoint.getConfirmPhyOffset());
-
+                /*调用 indexService.load() 方法加载索引服务（Index Service），用于支持消息的快速检索。
+                调用 recover() 方法根据上次退出状态（正常或异常）进行数据恢复。
+                记录日志，显示恢复完成后的最大物理偏移量（maxPhyOffset）。
+                * */
                 result = this.indexService.load(lastExitOK);
                 this.recover(lastExitOK);
                 LOGGER.info("message store recover end, and the max phy offset = {}", this.getMaxPhyOffset());
             }
-
-
+            //获取当前存储系统的最大物理偏移量，并将其设置为 Broker 的初始最大偏移量。
             long maxOffset = this.getMaxPhyOffset();
             this.setBrokerInitMaxOffset(maxOffset);
             LOGGER.info("load over, and the max phy offset = {}", maxOffset);
@@ -388,7 +392,7 @@ public class DefaultMessageStore implements MessageStore {
             LOGGER.error("load exception", e);
             result = false;
         }
-
+        /*如果commitlog和consumerqueue任何一个加载失败，就关闭启动的服务*/
         if (!result) {
             this.allocateMappedFileService.shutdown();
         }
@@ -1897,7 +1901,10 @@ public class DefaultMessageStore implements MessageStore {
         this.consumeQueueStore.checkSelf();
     }
 
+    /**判断abort文件是否存在。
+     * 这个文件是标志上次是否正常关闭的标志，如果正常关闭该文件会在钩子函数中删除*/
     private boolean isTempFileExist() {
+        //得到临时文件名(abort文件)
         String fileName = StorePathConfigHelper.getAbortFile(this.messageStoreConfig.getStorePathRootDir());
         File file = new File(fileName);
         return file.exists();
