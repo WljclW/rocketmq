@@ -769,6 +769,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return null;
     }
 
+    /**neety客户端的远程调用。。主要作用是根据参数addr得到网络通过Channel，然后拿着Channel调用基类的方法进行远程调用*/
     @Override
     public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback)
         throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException,

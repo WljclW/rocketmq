@@ -503,6 +503,8 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**基类中同步远程调用的实现，同步调用也是有超时时间的，防止等待时间过长
+     * */
     public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request,
         final long timeoutMillis)
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
@@ -516,7 +518,10 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
-    /**【功能】发起一次远程调用，并在远程调用的前后执行注册的RPC钩子*/
+    /**【功能】发起一次远程调用，并在远程调用的前后执行注册的RPC钩子
+     * 【注意】1. 这个类是 的基类，封装了底层异步、同步、oneway的逻辑。。
+     *      2. invokeSyncImpl和invokeAsyncImpl分别是同步、异步的调用，底层使用的都是这个方法。区别在于invokeSyncImpl方法
+     *          需要返回RemotingCommand类型；但是invokeAsyncImpl返回的是void，通过回调来传结果*/
     public CompletableFuture<ResponseFuture> invokeImpl(final Channel channel, final RemotingCommand request,
         final long timeoutMillis) {
         String channelRemoteAddr = RemotingHelper.parseChannelRemoteAddr(channel);
@@ -613,6 +618,8 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /**【作用】异步调用的远程实现。。netty的客户端 和 服务端都是基于这个方法类实现 异步远程 调用的
+     * 结果为空时怎么处理、处理结果、出现异常时怎么处理*/
     public void invokeAsyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis,
         final InvokeCallback invokeCallback) {
         invokeImpl(channel, request, timeoutMillis)

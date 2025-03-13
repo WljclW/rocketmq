@@ -728,6 +728,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             return this.invokeSyncImpl(channel, request, timeoutMillis);
         }
 
+        /**
+         * 【注意】这个类其实有一个同名的方法invokeAsync,区别在于这个方法的形参都被final修饰了，如何理解？
+         * final 修饰符表示参数在方法内部不能被重新赋值。这是一种编程风格的选择，通常用于强调参数的不可变
+         * 性，避免在方法内部意外修改参数的值。
+         * */
         @Override
         public void invokeAsync(final Channel channel, final RemotingCommand request, final long timeoutMillis,
             final InvokeCallback invokeCallback) throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {

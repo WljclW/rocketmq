@@ -839,6 +839,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         final PullCallback pullCallback
     ) throws RemotingException, MQBrokerException, InterruptedException {
         RemotingCommand request;
+        /*pull message有两种版本，需要封装对应的请求码*/
         if (PullSysFlag.hasLitePullFlag(requestHeader.getSysFlag())) {
             request = RemotingCommand.createRequestCommand(RequestCode.LITE_PULL_MESSAGE, requestHeader);
         } else {

@@ -65,6 +65,10 @@ import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.LABEL
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.LABEL_RESPONSE_CODE;
 import static org.apache.rocketmq.remoting.metrics.RemotingMetricsConstant.LABEL_RESULT;
 
+/**
+ * 负责处理消费者 拉取消息 请求的结果。它的主要作用是将从存储层（messageStore）拉取到的消息结果进行进一步处理，并生
+ * 成最终的响应(这个响应是可以直接返回给客户端的)
+ * */
 public class DefaultPullMessageResultHandler implements PullMessageResultHandler {
 
     protected static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -76,7 +80,7 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
 
     /**【作用】RocketMQ的Broker中处理拉取消息结果的核心方法。它负责对从存储层（messageStore）拉取到的消息进
      * 行进一步处理，并生成最终的响应对象返回给客户端..重点：对从存储层拿到的消息进一步处理
-     * 一句话：负责根据(从messageStore拉取的)结果生成最终的(返回给客户端的)响应。*/
+     * 一句话概括：负责根据(从messageStore拉取的)结果生成最终的(返回给客户端的)响应。*/
     @Override
     public RemotingCommand handle(final GetMessageResult getMessageResult, /*从存储层（MessageStore）拿到的消息*/
         final RemotingCommand request, /*原始的客户端请求*/
@@ -135,7 +139,7 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
                     BrokerMetricsManager.messagesOutTotal.add(getMessageResult.getMessageCount(), attributes);
                     BrokerMetricsManager.throughputOutTotal.add(getMessageResult.getBufferTotalSize(), attributes);
                 }
-
+                //如果给定的channel不可写，则忽略该请求，并释放资源。
                 if (!channelIsWritable(channel, requestHeader)) {
                     getMessageResult.release();
                     //ignore pull request
@@ -234,6 +238,7 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
         return response;
     }
 
+    /**检查给定的channel是否可以写入*/
     private boolean channelIsWritable(Channel channel, PullMessageRequestHeader requestHeader) {
         if (this.brokerController.getBrokerConfig().isEnableNetWorkFlowControl()) {
             if (!channel.isWritable()) {
