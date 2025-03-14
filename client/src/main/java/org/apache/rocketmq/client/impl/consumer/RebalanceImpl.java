@@ -131,17 +131,18 @@ public abstract class RebalanceImpl {
         }
     }
 
+    /**【】根据processQueueTable构造出<String, Set<MessageQueue>>，方便下一步锁定Broker发送锁定消息队列请求*/
     private HashMap<String/* brokerName */, Set<MessageQueue>> buildProcessQueueTableByBrokerName() {
-        HashMap<String, Set<MessageQueue>> result = new HashMap<>();
+        HashMap<String /*BrokerName*/, Set<MessageQueue>> result = new HashMap<>();
 
         for (Map.Entry<MessageQueue, ProcessQueue> entry : this.processQueueTable.entrySet()) {
             MessageQueue mq = entry.getKey();
             ProcessQueue pq = entry.getValue();
-
+            //确保ProcessQueue是有效的
             if (pq.isDropped()) {
                 continue;
             }
-
+            //根据messageQueue获取brokerName
             String destBrokerName = this.mQClientFactory.getBrokerNameFromMessageQueue(mq);
             Set<MessageQueue> mqs = result.get(destBrokerName);
             if (null == mqs) {
@@ -209,6 +210,10 @@ public abstract class RebalanceImpl {
                     Set<MessageQueue> lockOKMQSet =
                         this.mQClientFactory.getMQClientAPIImpl().lockBatchMQ(findBrokerResult.getBrokerAddr(), requestBody, 1000);
 
+                    /*遍历所有的消息队列：
+                        情况1：将成功锁定的消息队列 对应的 处理队列processQueue设置为锁定状态，并更新时间戳；
+                        情况2：如果当前消费者不持该消息队列的锁，则将处理队列锁的状态设置为false，暂停该消息消
+                                费队列的消息拉取与消息消费。*/
                     for (MessageQueue mq : mqs) {
                         ProcessQueue processQueue = this.processQueueTable.get(mq);
                         if (processQueue != null) {

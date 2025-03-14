@@ -1245,6 +1245,7 @@ public class MQClientInstance {
     }
 
     /**
+     * 【功能】根据消息队列(MessageQueue)获取它对应的BrokerName
      * 为什么不是直接从MessageQueue中获取brokerName，而是先从topicEndPointsTable中获取brokerName？？？？？
      *      应该是因为topicEndPointsTable中的只具有实时性
      * */
