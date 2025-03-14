@@ -675,7 +675,8 @@ public class MappedFileQueue implements Swappable {
 
     /**
      * Finds a mapped file by offset...根据参数给定的偏移量找到对应的mappedFile
-     * 【思路】先拿到集合中的第一个mappedFile，再拿到最后一个mappedFile，计算出形参offset位置所在mappedFile在集合中的索引
+     * 【思路】先拿到集合中的第一个mappedFile，再拿到最后一个mappedFile，计算出形参offset位置所在mappedFile在集合中的索引————
+     *          充分使用二分查找
      *
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.
@@ -746,6 +747,7 @@ public class MappedFileQueue implements Swappable {
         return mappedFileFirst;
     }
 
+    /**【】根据一个全局偏移，找个此偏移所在的mappedFile*/
     public MappedFile findMappedFileByOffset(final long offset) {
         return findMappedFileByOffset(offset, false);
     }

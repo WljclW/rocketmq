@@ -62,15 +62,22 @@ import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_IS_
 import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_MESSAGE_TYPE;
 import static org.apache.rocketmq.broker.metrics.BrokerMetricsConstant.LABEL_TOPIC;
 
-/**用于支持定时消息（Scheduled Messages） 功能的核心组件。它的主要作用是管理定时消息的存储、调度和投递，确保定时消息能够在指
- * 定的时间被正确地发送到消费者。*/
+/**【总述】用于支持延迟消息（Scheduled Messages）功能的核心组件。它的主要作用是管理定时消息的存储、调度和投递，确保定时消息能够在指
+ * 定的时间被正确地发送到消费者。
+ * 【】
+ * 1. 定时消息会暂存在名为SCHEDULE_TOPIC_XXXX的topic中，并根据delayTimeLevel存入特定的queue，queueId =delayTimeLevel – 1，即
+ *      一个queue只存相同延迟的消息，保证具有相同发送延迟的消息能够顺序消费。broker会调度地消费SCHEDULE_TOPIC_XXXX，将消息写入真实
+ *      的topic。
+ * 2. rocketmq中很多线程池的服务都是继承于ServiceThread的(这些类会实现run方法，在这些service启动的时候，就会自动去执行run方法)，但
+ *      是ScheduleMessageService类不是
+ * */
 public class ScheduleMessageService extends ConfigManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     //第一次调度时延迟时间是1秒
     private static final long FIRST_DELAY_TIME = 1000L;
-    //每一个延迟级别调度一次后，延迟该时间间隔后再放入调度池
+    //每一个延迟级别调度一次后，延迟该时间间隔后再放入调度池，在DeliverDelayedMessageTimerTask中，几乎所有的不正常情况用的都是这个参数
     private static final long DELAY_FOR_A_WHILE = 100L;
-    //消息发送异常后延迟该时间后再继续参与调度
+    //延时消息发送异常后，延迟该字段时间后再继续参与调度。只会用到一个地方，是在DeliverDelayedMessageTimerTask.run方法
     private static final long DELAY_FOR_A_PERIOD = 10000L;
     private static final long WAIT_FOR_SHUTDOWN = 5000L;
     private static final long DELAY_FOR_A_SLEEP = 10L;
@@ -79,15 +86,19 @@ public class ScheduleMessageService extends ConfigManager {
     成delayLevelTable，转换后的数据结构类似{1:1000,2:5000,3:30000,...}*/
     private final ConcurrentSkipListMap<Integer /* level */, Long/* delay timeMillis */> delayLevelTable =
         new ConcurrentSkipListMap<>();
-    //延迟级别消息消费进度
+    /*键：延迟等级；值：消费进度
+    延迟级别消息消费进度*/
     private final ConcurrentMap<Integer /* level */, Long/* offset */> offsetTable =
         new ConcurrentHashMap<>(32);
     private final AtomicBoolean started = new AtomicBoolean(false);
     private ScheduledExecutorService deliverExecutorService;
     private int maxDelayLevel;
     private DataVersion dataVersion = new DataVersion();
+    /*是否支持延迟消息的异步传递*/
     private boolean enableAsyncDeliver = false;
+    /*支持延迟消息的异步传递*/
     private ScheduledExecutorService handleExecutorService;
+    /*执行持久化的服务，在构造器中进行初始化*/
     private final ScheduledExecutorService scheduledPersistService;
     private final Map<Integer /* level */, LinkedBlockingQueue<PutResultProcess>> deliverPendingTable =
         new ConcurrentHashMap<>(32);
@@ -129,6 +140,10 @@ public class ScheduleMessageService extends ConfigManager {
         }
     }
 
+    /**
+     * delayLevel: 延迟级别；storeTimestamp: 存储时间戳.
+     * 【作用】计算消息应该重新投递的时间戳，即下一次消息应该被投递的时间戳————延迟的时间+当时存储的时间
+     * */
     public long computeDeliverTimestamp(final int delayLevel, final long storeTimestamp) {
         Long time = this.delayLevelTable.get(delayLevel);
         if (time != null) {
@@ -139,14 +154,18 @@ public class ScheduleMessageService extends ConfigManager {
     }
 
     /**【】
-     * 【】1. ScheduleMessageService的start()方法启动后，会为每一个延迟级别创建一个调度
-     * 任务，每个延迟级别对应SCHEDULE_TOPIC_XXXX主题下的一个消息消费队列*/
+     * 【】1. load方法完成延时时间，偏移量的确定
+     *      2.创建两个延时调度线程池(区别是什么？？)，核心线程数等于延迟级别数，每一个延迟级别对应SCHEDULE_TOPIC_XXXX主题
+     *          下的一个消息消费队列
+     *      3.2中仅仅是创建了延迟任务的线程池，在for循环遍历delayLevelTable，通过schedule指定延迟任务(这个方法的注释表明
+     *          指定了延迟时间的一次执行任务，即延迟指定的时间后执行一次，就是执行方法参数中Runnable)*/
     public void start() {
         /*利用started.compareAndSet以及一个原子类型标志，保证只会被启动一次*/
         if (started.compareAndSet(false, true)) {
             this.load();
             /*创建一个定时任务线程池，用于调度定时信息的投递任务。。
-            * 通过“this.maxDelayLevel”可以知道，有多少个延迟级别，就有多少个核心线程*/
+            * 通过“this.maxDelayLevel”可以知道，有多少个延迟级别，就有多少个核心线程(核心线程即使空闲也不
+            * 会被回收，除非设置了allowCoreThreadTimeOut参数)*/
             this.deliverExecutorService = ThreadUtils.newScheduledThreadPool(this.maxDelayLevel, new ThreadFactoryImpl("ScheduleMessageTimerThread_"));
             if (this.enableAsyncDeliver) {
                 this.handleExecutorService = ThreadUtils.newScheduledThreadPool(this.maxDelayLevel, new ThreadFactoryImpl("ScheduleMessageExecutorHandleThread_"));
@@ -155,22 +174,24 @@ public class ScheduleMessageService extends ConfigManager {
             for (Map.Entry<Integer, Long> entry : this.delayLevelTable.entrySet()) {
                 Integer level = entry.getKey();
                 Long timeDelay = entry.getValue();
-                /**每个延迟级别对应一个消息消费队列,下面获取对应延迟级别的消费进度*/
+                /**每个延迟级别对应一个消息消费队列。下面获取对应延迟级别的消费进度*/
                 Long offset = this.offsetTable.get(level); //根据延迟级别获取消息队列的消费进度
                 if (null == offset) {
                     offset = 0L;
                 }
-                /*创建定时任务，每个定时任务第一次启动时，默认延迟1s后执行一次定时任务，
-                从第二次调度开始，才使用相应的延迟时间执行定时任务*/
+                /*创建定时任务，每个定时任务第一次启动时，默认延迟1s后执行一次定时任务，从第二次调度开始，才使用相应的延迟时间执行定时任务。
+                * 【详细描述】这里执行的就是HandlePutResultTask、DeliverDelayedMessageTimerTask这两个Runnable,第一次执行时延迟
+                *       FIRST_DELAY_TIME，然后往后每一次*/
                 if (timeDelay != null) {
                     if (this.enableAsyncDeliver) {
                         this.handleExecutorService.schedule(new HandlePutResultTask(level), FIRST_DELAY_TIME, TimeUnit.MILLISECONDS);
                     }
+                    //
                     this.deliverExecutorService.schedule(new DeliverDelayedMessageTimerTask(level, offset), FIRST_DELAY_TIME, TimeUnit.MILLISECONDS);
                 }
             }
-            /*持久化一次延迟队列的消息消费进度（延迟消息调进度），持久化频率可以通过
-            flushDelayOffsetInterval配置属性进行设置*/
+            /*持久化一次延迟队列的消息消费进度（延迟消息调进度），持久化频率可以通过flushDelayOffsetInterval配
+            置属性进行设置(默认值是10s)*/
             scheduledPersistService.scheduleAtFixedRate(() -> {
                 try {
                     ScheduleMessageService.this.persist();
@@ -309,6 +330,7 @@ public class ScheduleMessageService extends ConfigManager {
         }
     }
 
+    /**【】将offsetTable以及dataVersion序列化成json串*/
     @Override
     public String encode(final boolean prettyFormat) {
         DelayOffsetSerializeWrapper delayOffsetSerializeWrapper = new DelayOffsetSerializeWrapper();
@@ -318,7 +340,8 @@ public class ScheduleMessageService extends ConfigManager {
     }
 
     /**
-     * @description:
+     * 【功能】:通过"this.brokerController.getMessageStoreConfig().getMessageDelayLevel()"拿到定义的延时时间，计算
+     *      每一个延时等级对应的延迟时间，并把延迟等级——>延迟时间存储到delayLevelTable中。
      * @param :
      * @return boolean,表示延迟级别是否解析成功
      * @author: Zhou
@@ -409,6 +432,7 @@ public class ScheduleMessageService extends ConfigManager {
             this.offset = offset;
         }
 
+        /**DeliverDelayedMessageTimerTask的任务即该方法作用：只要ScheduleMessageService处于运行状态，就执行executeOnTimeUp()*/
         @Override
         public void run() {
             try {
@@ -422,10 +446,11 @@ public class ScheduleMessageService extends ConfigManager {
             }
         }
 
+        /**【疑问】当前的时间+消息应该被延迟的时间，不应该肯定大于“消息存储时的时间+延迟时间”吗？？*/
         private long correctDeliverTimestamp(final long now, final long deliverTimestamp) {
 
             long result = deliverTimestamp;
-
+            //当前时间 + 对应延迟级别的延迟时间
             long maxTimestamp = now + ScheduleMessageService.this.delayLevelTable.get(this.delayLevel);
             if (deliverTimestamp > maxTimestamp) {
                 result = now;
@@ -434,7 +459,8 @@ public class ScheduleMessageService extends ConfigManager {
             return result;
         }
 
-        /**定时调度任务的核心实现*/
+        /**【功能】定时调度任务的核心实现，run方法中执行这个方法，，实现延迟消息的重放到普通消息队列
+         * 【】1. 每一次return之前都会执行this.scheduleNextTimerTask，即安排了下一次调度的时间*/
         public void executeOnTimeUp() {
             /**step1：根据队列ID与延迟主题查找消息消费队列，如果未找到，说明当前不存在该延时级
              * 别的消息，则忽略本次任务，根据延时级别创建下一次调度任务*/
@@ -450,7 +476,7 @@ public class ScheduleMessageService extends ConfigManager {
             ReferredIterator<CqUnit> bufferCQ = cq.iterateFrom(this.offset);
             if (bufferCQ == null) {
                 long resetOffset;
-                //if-else都是偏移量无效的情况
+                //if-else if都是偏移量无效的情况,else偏移量有效需要备份到resetOffset
                 if ((resetOffset = cq.getMinOffsetInQueue()) > this.offset) {
                     log.error("schedule CQ offset invalid. offset={}, cqMinOffset={}, queueId={}",
                         this.offset, resetOffset, cq.getQueueId());
@@ -460,13 +486,18 @@ public class ScheduleMessageService extends ConfigManager {
                 } else {
                     resetOffset = this.offset;
                 }
-
+                /*安排下一次调度时间*/
                 this.scheduleNextTimerTask(resetOffset, DELAY_FOR_A_WHILE);
                 return;
             }
-
+            /**下面的代码：处理拿到的bufferCQ。具体来说：
+             * try中进行前置处理 并 重构出消息，然后对消息进行重放，重放到普通的消息队列
+             * catch用于捕获异常
+             * finally释放资源
+             * 最后属于重放成功，指定下一次调度时间*/
             long nextOffset = this.offset;
             try {
+                /*只要当前队列还有数据  并且  服务还在运行中*/
                 while (bufferCQ.hasNext() && isStarted()) {
                     CqUnit cqUnit = bufferCQ.next();
                     long offsetPy = cqUnit.getPos();
@@ -489,7 +520,7 @@ public class ScheduleMessageService extends ConfigManager {
                     nextOffset = currOffset + cqUnit.getBatchNum();
 
                     long countdown = deliverTimestamp - now;
-                    if (countdown > 0) {
+                    if (countdown > 0) { /*下一次调度的时间*/
                         this.scheduleNextTimerTask(currOffset, DELAY_FOR_A_WHILE);
                         ScheduleMessageService.this.updateOffset(this.delayLevel, currOffset);
                         return;
@@ -506,14 +537,14 @@ public class ScheduleMessageService extends ConfigManager {
                             msgInner.getTopic(), msgInner);
                         continue;
                     }
-
+                    /*重放消息：将到期的消息重放到普通的队列让消费者消费*/
                     boolean deliverSuc;
                     if (ScheduleMessageService.this.enableAsyncDeliver) {
                         deliverSuc = this.asyncDeliver(msgInner, msgExt.getMsgId(), currOffset, offsetPy, sizePy);
                     } else {
                         deliverSuc = this.syncDeliver(msgInner, msgExt.getMsgId(), currOffset, offsetPy, sizePy);
                     }
-
+                    /*重放失败？？重放失败后不应该将offset重置吗，为什么这里设置为nextOffset???*/
                     if (!deliverSuc) {
                         this.scheduleNextTimerTask(nextOffset, DELAY_FOR_A_WHILE);
                         return;
@@ -524,7 +555,7 @@ public class ScheduleMessageService extends ConfigManager {
             } finally {
                 bufferCQ.release();
             }
-
+            /*成功的时候将nextOffset作为下次的偏移*/
             this.scheduleNextTimerTask(nextOffset, DELAY_FOR_A_WHILE);
         }
 

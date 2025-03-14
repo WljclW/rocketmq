@@ -590,6 +590,7 @@ public interface MessageStore {
 
     /**
      * Get consume queue of the topic/queue. If consume queue not exist, will return null
+     * 通过topic 和 queueId 获取consumeQueue
      *
      * @param topic   Topic.
      * @param queueId Queue ID.

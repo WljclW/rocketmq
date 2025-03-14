@@ -60,7 +60,7 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
      * </pre>
      * ConsumeQueue's store unit. Size: CommitLog Physical Offset(8) + Body Size(4) + Tag HashCode(8) = 20 Bytes
      */
-    public static final int CQ_STORE_UNIT_SIZE = 20;
+    public static final int CQ_STORE_UNIT_SIZE = 20; //ConsumerQueue的存储单元，每一个是固定的20字节
     public static final int MSG_TAG_OFFSET_INDEX = 12;
     private static final Logger LOG_ERROR = LoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
@@ -856,7 +856,8 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         }
     }
 
-    //根据指定的索引(startIndex)去获取对应的ConsumeQueue条目，索引非实际的逻辑偏移
+    /**【】根据指定的索引(startIndex)去获取对应的ConsumeQueue条目
+     * @param startIndex 索引,指的是consumerQueue的索引，实际的偏移量还需要乘20(20是consumerQueue每一个消息标识的大小)*/
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
         long offset = startIndex * CQ_STORE_UNIT_SIZE;
@@ -864,6 +865,7 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         if (offset >= this.getMinLogicOffset()) {
             //offset有效时，先查找出mappedFile，然后从那个mappedFile中的指定位置(offset%mappedFileSize)拿数据
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
+            //mappedFile有效时，再从mappedFile中获取指定位置的数据。。全局偏移是offset，在这个mappedFile的位置就是offset%mappedFileSize
             if (mappedFile != null) {
                 return mappedFile.selectMappedBuffer((int) (offset % mappedFileSize));
             }
@@ -871,6 +873,10 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         return null;
     }
 
+    /**【】拿到一段内存缓冲区封装成的ConsumeQueueIterator
+     * 整体流程：1。首先根据startOffset计算出全局偏移量；2.根据全局偏移量计算出在哪一个mappedFile
+     *      3.拿到mappedFile，slice出一份缓冲区，这个缓冲区从要找的偏移量开始，到那个mappedFile结束
+     *      4.3中得到的缓冲区会封装SelectMappedBufferResult*/
     @Override
     public ReferredIterator<CqUnit> iterateFrom(long startOffset) {
         SelectMappedBufferResult sbr = getIndexBuffer(startOffset);
@@ -950,6 +956,8 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
             }
         }
 
+        /**【】检查内部持有的byteBuffer是不是还有下一个CqUnit
+         * 思路：sbr不是null，并且sbr.byteBuffer当前的指针是不是不越界——即pos<limit*/
         @Override
         public boolean hasNext() {
             if (sbr == null || sbr.getByteBuffer() == null) {
@@ -964,12 +972,14 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
             if (!hasNext()) {
                 return null;
             }
+            /*step1：queueOffset是计算出接下来这个消息在是 消息队列的第几条消息；并读取信息创建CqUnit*/
             long queueOffset = (sbr.getStartOffset() + sbr.getByteBuffer().position() - relativePos) / CQ_STORE_UNIT_SIZE;
             CqUnit cqUnit = new CqUnit(queueOffset,
-                sbr.getByteBuffer().getLong(),
-                sbr.getByteBuffer().getInt(),
-                sbr.getByteBuffer().getLong());
-
+                sbr.getByteBuffer().getLong(), /*commitlog中的物理偏移*/
+                sbr.getByteBuffer().getInt(), /*消息大小*/
+                sbr.getByteBuffer().getLong()); /*消息的哈希码*/
+            /*step2：如果是下面的情况，还需要补充一些额外信息*/
+            /**不清楚下面代码的具体逻辑是什么？？根源在于不懂ConsumeQueueExt.CqExtUnit()的作用是什么*/
             if (isExtAddr(cqUnit.getTagsCode())) {
                 ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
                 boolean extRet = getExt(cqUnit.getTagsCode(), cqExtUnit);

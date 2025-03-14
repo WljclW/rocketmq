@@ -549,10 +549,15 @@ public class DefaultMappedFile extends AbstractMappedFile {
         return null;
     }
 
+    /**【】从一个mappedFile文件中的偏移量拿到 SelectMappedBufferResult————它就是一种封装了，封装了当前mappedFile中
+     *      从偏移量pos开始，然后到当前mappedFile结束的数据缓冲区
+     * @param pos 从哪个偏移量开始读(这个偏移量是当前mappedFile内的偏移量)
+     * @return SelectMappedBufferResult 封装了提取的数据缓冲区 以及 相关的元信息*/
     @Override
     public SelectMappedBufferResult selectMappedBuffer(int pos) {
         // 获取这个MappedFile 里面的一个read position，其实就是这个MappedFile 的一个可读位置
         int readPosition = getReadPosition();
+        /*只用pos小于可读位置 并且 不小于0，则这个pos才是有效的,进入if块处理*/
         if (pos < readPosition && pos >= 0) {
             if (this.hold()) {
                 this.mappedByteBufferAccessCountSinceLastSwap++;
@@ -561,7 +566,10 @@ public class DefaultMappedFile extends AbstractMappedFile {
                 int size = readPosition - pos;
                 ByteBuffer byteBufferNew = byteBuffer.slice();
                 byteBufferNew.limit(size);
-                return new SelectMappedBufferResult(this.fileFromOffset + pos, byteBufferNew, size, this);
+                return new SelectMappedBufferResult(this.fileFromOffset + pos /*数据在全局文件的物理偏移*/,
+                        byteBufferNew /*提取的数据缓冲区*/,
+                        size/*数据的大小，此处指长度*/,
+                        this /*当前的mappedFile*/);
             }
         }
 

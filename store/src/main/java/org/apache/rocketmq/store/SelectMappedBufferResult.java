@@ -20,19 +20,22 @@ import java.nio.ByteBuffer;
 import org.apache.rocketmq.store.logfile.MappedFile;
 
 /**
- * 【总述】存储和管理 内存映射文件缓冲区 的结果
+ * 【总述】一种抽象，用于 存储和管理 内存映射文件缓冲区的结果
  * 类的作用：
  *      用于封装从内存映射文件中读取的数据缓冲区。。。。包含了对内存映射文件缓冲区的操作方法
  * */
 public class SelectMappedBufferResult {
-    /*读取数据的起始偏移量*/
+    /*读取数据的起始偏移量，是全局偏移量*/
     private final long startOffset;
     /*表示实际读取到的数据缓冲区，通常是通过内存映射文件（Memory-Mapped File）技术创建的 MappedByteBuffer;
-    * 【作用】提供对读取到数据的访问接口*/
+    * 【作用】提供对读取到数据的访问接口
+    * 【内容】比如全局偏移量startOffset对应的mappedFile是mappedFile1，则byteBuffer就是mappedFile1中从
+    *       startOffset(准确的说应该是startOffset % mappedFileSize————这个才是全局偏移在mappedFile的
+    *       相对偏移)到这个mappedFile结束的缓冲区片段*/
     private final ByteBuffer byteBuffer;
     /*读取到数据的大小，单位字节。同时也暗示了byteBuffer的有效长度*/
     private int size;
-    /*表示与当前读取结果关联的内存映射文件对象。
+    /*表示与当前读取结果关联的内存映射文件对象。(this.byteBuffer中的数据就是this.mappedFile的一部分数据)
     用途 : 用于管理底层的内存映射资源，确保在使用完缓冲区后能够正确释放资源。*/
     protected MappedFile mappedFile;
     /*标识当前读取到的结果是不是已经在缓存*/

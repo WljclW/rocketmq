@@ -1336,6 +1336,7 @@ public class CommitLog implements Swappable {
     }
 
     /**
+     * 【功能】根据offset和size调用getMessage在commitlog查找指定的消息，并返回存储时间
      * According to receive certain message or offset storage time if an error occurs, it returns -1
      */
     public long pickupStoreTimestamp(final long offset, final int size) {
@@ -1345,6 +1346,7 @@ public class CommitLog implements Swappable {
                 try {
                     int sysFlag = result.getByteBuffer().getInt(MessageDecoder.SYSFLAG_POSITION);
                     int bornhostLength = (sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0 ? 8 : 20;
+                    //根据固定偏移位置计算消息存储时间的位置，然后通过getLong方法获取存储时间
                     int msgStoreTimePos = 4 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 8 + bornhostLength;
                     return result.getByteBuffer().getLong(msgStoreTimePos);
                 } finally {

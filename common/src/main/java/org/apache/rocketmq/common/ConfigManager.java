@@ -82,7 +82,9 @@ public abstract class ConfigManager {
         this.persist();
     }
 
-    /**将当前的配置对象持久化到文件中。*/
+    /**【功能】将当前的配置对象持久化到文件中。。。。
+     * 【思考】
+     *      1.这个方法提供了一种持久化的方式，以后用到持久化时可以参考从这个方法开始的逻辑*/
     public synchronized void persist() {
         String jsonString = this.encode(true);
         if (jsonString != null) {

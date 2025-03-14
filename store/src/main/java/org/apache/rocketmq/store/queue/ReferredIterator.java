@@ -19,6 +19,7 @@ package org.apache.rocketmq.store.queue;
 
 import java.util.Iterator;
 
+/**【】继承于Iterator定义的一个内部接口。。多了释放引用的方法*/
 public interface ReferredIterator<T> extends Iterator<T> {
 
     /**
