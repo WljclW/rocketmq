@@ -188,7 +188,7 @@ public abstract class RebalanceImpl {
 
     public void lockAll() {
         HashMap<String, Set<MessageQueue>> brokerMqs = this.buildProcessQueueTableByBrokerName();
-
+        /*rocketmq中对于map的遍历，通常使用Iterator*/
         Iterator<Entry<String, Set<MessageQueue>>> it = brokerMqs.entrySet().iterator();
         while (it.hasNext()) {
             Entry<String, Set<MessageQueue>> entry = it.next();
@@ -207,23 +207,24 @@ public abstract class RebalanceImpl {
                 requestBody.setMqSet(mqs);
 
                 try {
+                    /*向Broker（主节点）发送锁定消息队列，该方法会返回成功被当前消费者锁定的消息消费队列*/
                     Set<MessageQueue> lockOKMQSet =
                         this.mQClientFactory.getMQClientAPIImpl().lockBatchMQ(findBrokerResult.getBrokerAddr(), requestBody, 1000);
 
                     /*遍历所有的消息队列：
-                        情况1：将成功锁定的消息队列 对应的 处理队列processQueue设置为锁定状态，并更新时间戳；
+                        情况1：将成功锁定的消息队列 对应的 处理队列processQueue设置为锁定状态，并更新加锁时间戳；
                         情况2：如果当前消费者不持该消息队列的锁，则将处理队列锁的状态设置为false，暂停该消息消
                                 费队列的消息拉取与消息消费。*/
                     for (MessageQueue mq : mqs) {
                         ProcessQueue processQueue = this.processQueueTable.get(mq);
                         if (processQueue != null) {
-                            if (lockOKMQSet.contains(mq)) {
+                            if (lockOKMQSet.contains(mq)) { //lockOKMQSet包含的话说明：这个消费者锁定了这个消息队列
                                 if (!processQueue.isLocked()) {
                                     log.info("the message queue locked OK, Group: {} {}", this.consumerGroup, mq);
                                 }
                                 processQueue.setLocked(true);
                                 processQueue.setLastLockTimestamp(System.currentTimeMillis());
-                            } else {
+                            } else { //lockOKMQSet不包含的话说明：这个消费者不持该消息队列的锁。因此不能接近processQueue
                                 processQueue.setLocked(false);
                                 log.warn("the message queue locked Failed, Group: {} {}", this.consumerGroup, mq);
                             }

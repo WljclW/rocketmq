@@ -145,6 +145,7 @@ public class NetworkUtil {
         }
     }
 
+    /**根据“主机：端口号”生成InetSocketAddress对象*/
     public static SocketAddress string2SocketAddress(final String addr) {
         int split = addr.lastIndexOf(":");
         String host = addr.substring(0, split);
