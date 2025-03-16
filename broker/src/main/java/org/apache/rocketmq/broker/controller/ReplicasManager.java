@@ -345,15 +345,30 @@ public class ReplicasManager {
         }
     }
 
+    /**[]:用于处理从节点（Slave）与主节点（Master）之间元数据同步的逻辑实现。它的核心功能是根
+     *      据 Broker 的角色（主节点或从节点）启动或停止定时任务，以实现从节点对主节点的元数据同步。
+     * Broker启动时会按照角色启动同步元数据任务*/
     private void handleSlaveSynchronize(final BrokerRole role) {
+        /*如果Broker节点的角色为从节点，会开启一个定时任务，每隔10s执行一次元数据同步任
+        务，同步任务的实现逻辑封装在SlaveSynchronize中*/
         if (role == BrokerRole.SLAVE) {
             if (this.slaveSyncFuture != null) {
                 this.slaveSyncFuture.cancel(false);
             }
-            this.brokerController.getSlaveSynchronize().setMasterAddr(this.masterAddress);
+            this.brokerController.getSlaveSynchronize().setMasterAddr(this.masterAddress); //以便从节点知道需要同步的目标。
+            /*定时任务的核心目的是定期从主节点同步元数据，确保从节点的数据与主节点保持一致。
+                定时任务的执行频率为每 3 秒一次，但实际的全量同步逻辑（syncAll()）只有在距离上次同步
+                超过 10 秒时才会执行。这种设计既保证了同步的及时性，又避免了过于频繁的全量同步带来的性
+                能开销。*/
             slaveSyncFuture = this.brokerController.getScheduledExecutorService().scheduleAtFixedRate(() -> {
                 try {
+                    /**至少每10秒才会进行syncAll()同步。syncAll和syncTimerCheckPoint的区别：
+                     *      syncAll() ：负责同步主节点的所有元数据信息，例如主题配置、消费组配置等。
+                     * 这是一个全量同步操作，通常开销较大，因此只有在必要时才会执行。
+                     *      syncTimerCheckPoint：负责同步计时器检查点（Timer Checkpoint），用于支持
+                     * RocketMQ 的延迟消息功能。计时器检查点对延迟敏感，因此需要更频繁地同步。*/
                     if (System.currentTimeMillis() - lastSyncTimeMs > 10 * 1000) {
+                        //syncAll()中是具体的同步逻辑
                         brokerController.getSlaveSynchronize().syncAll();
                         lastSyncTimeMs = System.currentTimeMillis();
                     }
@@ -364,7 +379,7 @@ public class ReplicasManager {
                 }
             }, 1000 * 3, 1000 * 3, TimeUnit.MILLISECONDS);
 
-        } else {
+        } else { /*如果broker切换为主节点走else分支。此时不需要执行从节点的同步任务因此取消同步任务；清空主节点地址*/
             if (this.slaveSyncFuture != null) {
                 this.slaveSyncFuture.cancel(false);
             }

@@ -1297,30 +1297,33 @@ public class MQClientInstance {
         return null;
     }
 
+    /**【】：根据BrokerName 以及 BrokerId 查找Broker的地址。
+     * (返回的并不一定就是brokerId对应的那个broker,也可能是这个集群中的另一个broker)*/
     public FindBrokerResult findBrokerAddressInSubscribe(
         final String brokerName,
         final long brokerId,
-        final boolean onlyThisBroker
+        final boolean onlyThisBroker /*是否必须返回与brokerId对应的服务器信息*/
     ) {
-        //下面几行是 前置检查 以及 初始状态变量的设置
+        //step1:下面几行是 前置检查 以及 初始状态变量的设置
         if (brokerName == null) {
             return null;
         }
         String brokerAddr = null; //存储找到的brokerAddr
         boolean slave = false;   //broker是否是slave
         boolean found = false; //是否找到了brokerAddr
-
+        /*step2：执行具体的查找步骤*/
+        //先是根据BrokerName从brokerAddrTable中拿到这个集群对应的所有的Broker信息
         HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);
         if (map != null && !map.isEmpty()) {
             brokerAddr = map.get(brokerId);
             slave = brokerId != MixAll.MASTER_ID;
             found = brokerAddr != null;
-
+            //如果没有找到 并且 是从服务器，则获取brokerId+1的brokerAddr
             if (!found && slave) { /*brokerAddr==null是真 并且 brokerId不是0*/
                 brokerAddr = map.get(brokerId + 1); //这个时候尝试获取 brokerId+1的brokerAddr
                 found = brokerAddr != null; //获取后更新found标志
             }
-
+            //如果还是没有找到 并且 不是必须返回与brokerId对应的服务器信息
             if (!found && !onlyThisBroker) { /*还是没有找到 并且 允许使用其他的broker*/
                 //会返回map中的第一个brokerAddr
                 Entry<Long, String> entry = map.entrySet().iterator().next();

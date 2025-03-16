@@ -974,12 +974,22 @@ public class DefaultMessageStore implements MessageStore {
                     long fallBehind = maxOffsetPy - maxPhyOffsetPulling;
                     brokerStatsManager.recordDiskFallBehindSize(group, topic, queueId, fallBehind);
                 }
-                //计算消费者拉取的消息与最新消息之间的差距
+                /*下面的单行代码目的：计算消费者*/
+                /*计算消费者拉取的消息与最新消息之间的差距
+                涉及到的3个变量
+                *maxOffsetPy：表示当前主服务器的最大物理偏移量；
+                *maxPhyOffsetPulling：表示当前消费者拉取到的消息的最大物理偏移量。
+                *计算出的diff含义：对于PullMessageService线程来说，当前未被拉取到消息消费端的消息长度*/
                 long diff = maxOffsetPy - maxPhyOffsetPulling;
-                //表示允许的最大内存使用
+                /*memory:表示允许的最大内存使用。超出这个大小，rocketmq会将旧的信息换回磁盘！！
+                * TOTAL_PHYSICAL_MEMORY_SIZE：所在服务器的总内存大小。
+                * getAccessMessageInMemoryMaxRatio()：表示rocketmq所允许使用的最大内存比例*/
                 long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
                     * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
-                //如果 diff > memory，则建议消费者从从节点拉取消息。
+                /*如果 diff > memory，则建议消费者从从节点拉取消息。
+                如果diff大于memory，表示当前需要拉取的消息已经超出了常驻内存的大小，表示主服务器繁
+                    忙，此时才建议从从服务器拉取消息
+                 */
                 getResult.setSuggestPullingFromSlave(diff > memory);
             }
         } else {

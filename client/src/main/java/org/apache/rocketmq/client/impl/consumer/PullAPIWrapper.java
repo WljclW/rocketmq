@@ -74,7 +74,7 @@ public class PullAPIWrapper {
         this.unitMode = unitMode;
     }
 
-    /**rocketmq消费端的方法，用于处理从Broker端拉到的消息*/
+    /**rocketmq消费端(即客户端)的方法，用于处理从Broker端拉到的消息*/
     public PullResult processPullResult(final MessageQueue mq, final PullResult pullResult,
         final SubscriptionData subscriptionData) {
         PullResultExt pullResultExt = (PullResultExt) pullResult;
@@ -160,6 +160,7 @@ public class PullAPIWrapper {
         return pullResult;
     }
 
+    /**[]:更新消息队列MessageQueue下一次建议从哪个Broker拉取信息*/
     public void updatePullFromWhichNode(final MessageQueue mq, final long brokerId) {
         AtomicLong suggest = this.pullFromWhichNodeTable.get(mq);
         if (null == suggest) {
@@ -301,12 +302,22 @@ public class PullAPIWrapper {
         );
     }
 
-    /**计算从哪一个broker节点拉消息*/
+    /**【】：返回从哪一个broker节点(即求解BrokerId)拉消息————根据消息队列获取brokerId
+     *      ——情况1：
+     *      ——情况2：从pullFromWhichNodeTable这个map获取。
+     *  1. pullFromWhichNodeTable中的信息是从哪里来的？
+     *      消息消费拉取线程PullMessageService根据PullRequest请求从主服务器拉取消息后，会
+     *      返回下一次建议拉取的brokerId，消息消费者线程在收到消息后，会根据主服务器的建议
+     *      拉取brokerId来更新pullFromWhichNodeTable，消息消费者线程更新pullFromWhichNodeTable*/
     public long recalculatePullFromWhichNode(final MessageQueue mq) {
+        /*情况1：*/
         if (this.isConnectBrokerByUser()) {
             return this.defaultBrokerId;
         }
-
+        /* 情况2：
+        * pullFromWhichNodeTable缓存表中获取该消息消费队列的brokerId。
+        *   如果找到，则返回;
+        *   否则返回brokerName的主节点——即这个broker的主节点ID，rocketmq中主节点的id是0*/
         AtomicLong suggest = this.pullFromWhichNodeTable.get(mq);
         if (suggest != null) {
             return suggest.get();

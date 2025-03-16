@@ -824,11 +824,14 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
     }
 
+    /**主要用于处理消费者提交的消费偏移量（Offset）。它的核心功能是将消费者汇报的消费进度保存到 Broker 的存储中，以确保在
+     * 消费者重启或故障时能够从正确的偏移量继续消费。*/
     protected void tryCommitOffset(boolean brokerAllowSuspend, PullMessageRequestHeader requestHeader,
         long nextOffset, String clientAddress) {
         this.brokerController.getConsumerOffsetManager().commitPullOffset(clientAddress,
             requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId(), nextOffset);
-
+        /*Broker收到消息客户端消息拉取请求后，如果拉取请求中有包含消费端的消息消费进度，则使用
+        该进度更新Broker端的消费进度，即提供了根据消费端覆盖服务端消费进度的机制*/
         boolean storeOffsetEnable = brokerAllowSuspend;
         final boolean hasCommitOffsetFlag = PullSysFlag.hasCommitOffsetFlag(requestHeader.getSysFlag());
         storeOffsetEnable = storeOffsetEnable && hasCommitOffsetFlag;

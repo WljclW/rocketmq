@@ -59,10 +59,10 @@ public class SlaveSynchronize {
     }
 
     public void syncAll() {
-        this.syncTopicConfig();
-        this.syncConsumerOffset();
-        this.syncDelayOffset();
-        this.syncSubscriptionGroupConfig();
+        this.syncTopicConfig(); //同步Topic信息
+        this.syncConsumerOffset(); //同步消费进度
+        this.syncDelayOffset(); //同步延迟队列消费进度
+        this.syncSubscriptionGroupConfig(); //同步消费组信息
         this.syncMessageRequestMode();
 
         if (brokerController.getMessageStoreConfig().isTimerWheelEnable()) {
@@ -122,6 +122,10 @@ public class SlaveSynchronize {
         }
     }
 
+    /**【】：消费组消费进度的同步
+     * 方法逻辑：如果主节点的地址不为空，则向主节点发送GET_ALL_CONSUMER_OFFSET命令——详细逻辑看
+     *      getAllConsumerOffset方法，查询主节点中所有存储的消息消费进度，然后直接覆盖从服务器
+     *      中存储的消费进度*/
     private void syncConsumerOffset() {
         String masterAddrBak = this.masterAddr;
         if (masterAddrBak != null && !masterAddrBak.equals(brokerController.getBrokerAddr())) {
