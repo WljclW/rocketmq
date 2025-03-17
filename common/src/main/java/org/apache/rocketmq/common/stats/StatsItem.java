@@ -25,18 +25,24 @@ import java.util.concurrent.atomic.LongAdder;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 
+/**具体统计数据的载体*/
 public class StatsItem {
+    //当前统计的数据值
     private final LongAdder value = new LongAdder();
-
+    //value值变化的次数
     private final LongAdder times = new LongAdder();
-
+    /*近1min内的调用快照信息，每10s采集一次，并且超过6个则淘汰最早入队的原生快照
+    信息，故其长度不会超过6*/
     private final LinkedList<CallSnapshot> csListMinute = new LinkedList<>();
-
+    /*近1h内的调用快照信息，每10min采集一次，同样不会超过6个元素*/
     private final LinkedList<CallSnapshot> csListHour = new LinkedList<>();
-
+    /*近一天的调用快照信息，每1h采集一次，该队列长度不会超过24，超过则会丢弃最早
+    入队的*/
     private final LinkedList<CallSnapshot> csListDay = new LinkedList<>();
-
+    /*统计项的名称，与StatsItemSet中的statsName相同*/
     private final String statsName;
+    /*统计项Key。如果statsName统计各topic的写入数量，则statsKey为每一个具体的topic名称.
+    * 简单理解：就是指统计项是针对谁的*/
     private final String statsKey;
     private final ScheduledExecutorService scheduledExecutorService;
 
@@ -152,6 +158,10 @@ public class StatsItem {
         }, Math.abs(UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis()) - 2000, 1000 * 60 * 60 * 24, TimeUnit.MILLISECONDS);
     }
 
+    /**根据当前的时间戳、变更次数、调用次数创建一个快照，将其存入csListMinute变量，如
+     * 果该容器中的元素超过7个，则将其头部元素移除，即确保csListMinute最多存储7个元素
+     * 因此整体的思路就是：在分钟级采样容器中存储最近1min的采样数据，每隔10s采集1次快
+     * 照，在计算TPS等统计指标时，只须用两个快照之差除以两个快照之间的时间*/
     public void samplingInSeconds() {
         synchronized (this.csListMinute) {
             if (this.csListMinute.size() == 0) {
@@ -231,11 +241,11 @@ public class StatsItem {
     }
 }
 
+/**统计快照*/
 class CallSnapshot {
-    private final long timestamp;
-    private final long times;
-
-    private final long value;
+    private final long timestamp; //生成快照时的时间戳
+    private final long times; //快照生成时value值变化的次数
+    private final long value; //快照生成时 统计量的值
 
     public CallSnapshot(long timestamp, long times, long value) {
         super();

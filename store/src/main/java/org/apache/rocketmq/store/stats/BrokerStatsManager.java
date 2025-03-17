@@ -40,6 +40,7 @@ import org.apache.rocketmq.common.utils.ThreadUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**Broker端的监控数据采集实现类*/
 public class BrokerStatsManager {
 
     @Deprecated public static final String QUEUE_PUT_NUMS = Stats.QUEUE_PUT_NUMS;
@@ -134,9 +135,12 @@ public class BrokerStatsManager {
     private ScheduledExecutorService scheduledExecutorService;
     private ScheduledExecutorService commercialExecutor;
     private ScheduledExecutorService accountExecutor;
-
+    /*服务端监控数据采集核心数据结构，用来存储Broker端的统计数据。statsTable的key为统计
+    * 指标，即统计维度，例如TOPIC_PUT_NUMS、TOPIC_PUT_SIZE等。其Value值为StatsItemSet，
+    * 即数据采集项的数据集合。以TOPIC_PUT_NUMS为例，StatsItemSet中需要按照topic进行数据
+    * 采集，即存储各个topic的统计数据*/
     private final HashMap<String, StatsItemSet> statsTable = new HashMap<>();
-    private final String clusterName;
+    private final String clusterName; //集群名称
     private final boolean enableQueueStat;
     private MomentStatsItemSet momentStatsItemSetFallSize;
     private MomentStatsItemSet momentStatsItemSetFallTime;
@@ -419,6 +423,14 @@ public class BrokerStatsManager {
         this.statsTable.get(Stats.TOPIC_PUT_NUMS).addValue(topic, 1, 1);
     }
 
+    /**
+     * @description:
+     * @param topic:
+     * @param num: 本次写入的消息条数
+     * @param times:默认传入1，表示消息incTopicPutNums被调用的次数，也体现了消息写入数量发生变化的次数
+     * @author: Zhou
+     * @date: 2025/3/17 23:18
+     */
     public void incTopicPutNums(final String topic, int num, int times) {
         this.statsTable.get(Stats.TOPIC_PUT_NUMS).addValue(topic, num, times);
     }

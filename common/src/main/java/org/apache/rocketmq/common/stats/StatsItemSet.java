@@ -26,6 +26,11 @@ import java.util.concurrent.TimeUnit;
 import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 
+/**【总述】：一类统计指标集合，其内部主要维护的数据结构为ConcurrentMap<String, StatsItem>statsItemTable。
+        以指标TOPIC_PUT_NUMS对应的StatsItemSet为例，StatsItemSet存储的是主题写入数量（消息发送
+        数量），内部维护的statsItemTable的key为主题的名称，StatsItem为该主题对应的统计信息
+ 【说明】
+    1. 方法类似，可以看addValue方法的注释来启发其他方法的理解*/
 public class StatsItemSet {
     private final ConcurrentMap<String/* key */, StatsItem> statsItemTable =
         new ConcurrentHashMap<>(128);
@@ -42,8 +47,12 @@ public class StatsItemSet {
         this.init();
     }
 
+    /**[]:启动6个定时任务
+     * rocketmq实现TPS计算的出处：就包含在StatsItemSet中。在构造init()方法的时候定义
+     * 了6个定时任务，用来对监控数据进行采样计算
+     * */
     public void init() {
-
+        /*分钟级别的采样，每10秒执行一次samplingInSeconds()*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -53,7 +62,7 @@ public class StatsItemSet {
                 }
             }
         }, 0, 10, TimeUnit.SECONDS);
-
+        /*小时级别的采样，每10分钟执行一次samplingInMinutes()*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -153,6 +162,13 @@ public class StatsItemSet {
         }
     }
 
+    /**[]:
+     * 详细思路：根据统计key，例如topic的名称，从ConcurrentMap<String,StatsItem>statsItemTable中获
+     * 取键statsKey对应的统计信息。比如：
+     * BrokerStatsManager#incTopicPutNums方法中会用到addValue方法，此时：statsKey对应的就是topic。
+     * topic的写入总数用StatsItem表示，如果statsItemTable中未包含该topic对应的StatsItem，则创建一个
+     * 新的对象，然后通过原子的方式新增Value与Times这两个属性的值。
+     * 经过上述的步骤就完成了topic写入数量的统计*/
     public void addValue(final String statsKey, final int incValue, final int incTimes) {
         StatsItem statsItem = this.getAndCreateStatsItem(statsKey);
         statsItem.getValue().add(incValue);
