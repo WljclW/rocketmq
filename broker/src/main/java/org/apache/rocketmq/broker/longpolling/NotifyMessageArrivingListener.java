@@ -36,6 +36,7 @@ public class NotifyMessageArrivingListener implements MessageArrivingListener {
     @Override
     public void arriving(String topic, int queueId, long logicOffset, long tagsCode,
                          long msgStoreTime, byte[] filterBitMap, Map<String, String> properties) {
+        // 通知长轮询请求处理服务，消息到达，唤醒挂起的请求
         this.pullRequestHoldService.notifyMessageArriving(topic, queueId, logicOffset, tagsCode,
             msgStoreTime, filterBitMap, properties);
         this.popMessageProcessor.notifyMessageArriving(topic, queueId);

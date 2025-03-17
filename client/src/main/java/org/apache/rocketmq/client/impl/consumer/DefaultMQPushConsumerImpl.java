@@ -482,7 +482,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             }
         };
         /**step6:计算commitOffsetValue。。。为啥只有clustering模式的时候采取内存读取偏移量(答：广播模式下消费进度由消费者
-         * 本地管理，不需要提交给Broker)
+         *      本地管理，不需要提交给Broker)
          * 【】：消费者在向Broker发送拉取消息请求时，会先将客户端存储的消费进度提交到Broker端。————broker服务端关于此值的
          *      处理逻辑看方法tryCommitOffset*/
         boolean commitOffsetEnable = false;

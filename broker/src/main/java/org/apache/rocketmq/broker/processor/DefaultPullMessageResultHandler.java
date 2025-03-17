@@ -80,7 +80,7 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
 
     /**【作用】RocketMQ的Broker中处理拉取消息结果的核心方法。它负责对从存储层（messageStore）拉取到的消息进
      * 行进一步处理，并生成最终的响应对象返回给客户端..重点：对从存储层拿到的消息进一步处理
-     * 一句话概括：负责根据(从messageStore拉取的)结果生成最终的(返回给客户端的)响应。*/
+     * 一句话概括：负责根据(从这个Broker的messageStore拉取的)结果生成最终的(返回给客户端的)响应。*/
     @Override
     public RemotingCommand handle(final GetMessageResult getMessageResult, /*从存储层（MessageStore）拿到的消息*/
         final RemotingCommand request, /*原始的客户端请求*/
@@ -109,7 +109,7 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
             return response;
         }
 
-        //rewrite the response for the static topic
+        //rewrite the response for the static topic。。。怎么感觉这里的逻辑有点像spring中的BeanFactory接口的作用
         final PullMessageResponseHeader responseHeader = (PullMessageResponseHeader) response.readCustomHeader();
         RemotingCommand rewriteResult = processor.rewriteResponseForStaticTopic(requestHeader, responseHeader, mappingContext, response.getCode());
         if (rewriteResult != null) {
@@ -118,10 +118,12 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
 
         processor.updateBroadcastPulledOffset(requestHeader.getTopic(), requestHeader.getConsumerGroup(),
             requestHeader.getQueueId(), requestHeader, channel, response, getMessageResult.getNextBeginOffset());
+        /*tryCommitOffset方法：根据topic以及消息队列(queueId)，更新消费者的拉取消息进度 以及 消费者的消费进度*/
         processor.tryCommitOffset(brokerAllowSuspend, requestHeader, getMessageResult.getNextBeginOffset(),
             clientAddress);
 
         switch (response.getCode()) {
+            /*如果一切顺利，就会完成最后的统计信息记录、写入堆外内存 或者 堆内存、最后将响应发出去*/
             case ResponseCode.SUCCESS:
                 /*更新一些统计信息：消费者组在指定topic获取消息的总数量、总大小，broker(集群)获取消息的总数量*/
                 this.brokerController.getBrokerStatsManager().incGroupGetNums(requestHeader.getConsumerGroup(), requestHeader.getTopic(),
@@ -181,13 +183,19 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
                     }
                     return null;
                 }
-            case ResponseCode.PULL_NOT_FOUND: /*没有找到对应的消息*/
+            /*PULL_NOT_FOUND：如果没有找到对应的消息，则会通过PullRequestHoldService()将请求挂起*/
+            case ResponseCode.PULL_NOT_FOUND:
                 final boolean hasSuspendFlag = PullSysFlag.hasSuspendFlag(requestHeader.getSysFlag());
                 final long suspendTimeoutMillisLong = hasSuspendFlag ? requestHeader.getSuspendTimeoutMillis() : 0;
-
+                /*涉及到了两个参数
+                * 如果是由 consumer 发出的 PULL 请求， brokerAllowSuspend 为 true；
+                  如果是 broker 发出的请求， brokerAllowSuspend 为 false(比如PullRequestHoldService.notifyMessageArriving会
+                        使用到executeRequestWhenWakeup，这个方法中在执行processReuqest时会将brokerAllowSuspend置为false)；
+                  hasSuspendFlag 由请求头控制（FLAG_SUSPEND），默认是 true*/
                 if (brokerAllowSuspend && hasSuspendFlag) {
                     /*获取最大的 被允许挂起 时间。if块表明即使没有开启长轮询，也允许被挂起1秒*/
                     long pollingTimeMills = suspendTimeoutMillisLong;
+                    //如果没有开启长轮询，使用短轮询
                     if (!this.brokerController.getBrokerConfig().isLongPollingEnable()) {
                         pollingTimeMills = this.brokerController.getBrokerConfig().getShortPollingTimeMills();
                     }
@@ -195,10 +203,10 @@ public class DefaultPullMessageResultHandler implements PullMessageResultHandler
                     String topic = requestHeader.getTopic();
                     long offset = requestHeader.getQueueOffset();
                     int queueId = requestHeader.getQueueId();
-                    //重新创建一个 拉取请求
+                    //创建一个org.apache.rocketmq.broker.longpolling.PullRequest对象(区别于消费者拉取消息时请求的PullRequest，是两个不同的类)
                     PullRequest pullRequest = new PullRequest(request, channel, pollingTimeMills,
                         this.brokerController.getMessageStore().now(), offset, subscriptionData, messageFilter);
-                    //将请求放入到pullRequestTable
+                    //将请求放入到“挂起拉取消息请求的队列”（pullRequestTable）
                     this.brokerController.getPullRequestHoldService().suspendPullRequest(topic, queueId, pullRequest);
                     return null;
                 }

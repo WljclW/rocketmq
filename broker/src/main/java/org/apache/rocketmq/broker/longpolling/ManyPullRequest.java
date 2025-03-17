@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ManyPullRequest {
+    /*存放很多PullRequest。这些拉取请求的共同点：topic和queueId是一样的（原因：使用pullRequestList的地方是
+        在PullRequestHoldService.pullRequestTable，放的时候是根据topic@queueId来放的）*/
     private final ArrayList<PullRequest> pullRequestList = new ArrayList<>();
 
     public synchronized void addPullRequest(final PullRequest pullRequest) {

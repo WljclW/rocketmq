@@ -2861,6 +2861,7 @@ public class DefaultMessageStore implements MessageStore {
 
     }
 
+    /**【】：主要作用是当新消息到达时，触发相关的监听器和通知机制，以便唤醒挂起的消费者拉取请求或更新多队列状态。*/
     @Override
     public void notifyMessageArriveIfNecessary(DispatchRequest dispatchRequest) {
         if (DefaultMessageStore.this.brokerConfig.isLongPollingEnable()
