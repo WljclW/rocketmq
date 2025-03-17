@@ -228,6 +228,8 @@ public class LocalFileOffsetStore implements OffsetStore {
         return cloneOffsetTable;
     }
 
+    /**[]：从指定的路径读取本地偏移量文件内容，并解析成OffsetSerializeWrapper对象返回
+     * */
     private OffsetSerializeWrapper readLocalOffset() throws MQClientException {
         String content = null;
         try {

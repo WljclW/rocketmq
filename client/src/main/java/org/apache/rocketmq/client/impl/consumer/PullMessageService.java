@@ -29,7 +29,7 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
- * 【总述】消息拉取服务线程，从Broker拉取消息供消费者消费。。
+ * 【总述】消息拉取服务线程，向Broker发请求拉取消息供消费者消费。。
  * 1. 基本上所有的方法都会在DefaultMQPushConsumerImpl类中被使用
  * 2. run方法是真正"执行拉取任务的方法"，根据拿取消息的模式会调用DefaultMQPushConsumerImpl的对应方法(popMessage或者pullMessage)*/
 public class PullMessageService extends ServiceThread {
@@ -139,7 +139,7 @@ public class PullMessageService extends ServiceThread {
     }
 
     /**
-     * 亮点：从阻塞队列获取的时候使用MessageRequest(体现面向接口编程)、从阻塞队列获取任务的take()
+     * 亮点：从阻塞队列获取的时候使用MessageRequest(体现面向接口编程)、从阻塞队列获取任务的take()————没有时会阻塞
      * */
     @Override
     public void run() {
@@ -148,7 +148,8 @@ public class PullMessageService extends ServiceThread {
         while (!this.isStopped()) {
             try {
                 /**从messageRequestQueue中获取一个messageRequest,根据MessageRequestMode来选取不同
-                 * 的方法请求消息..阻塞队列在获取的时候，如果是空的，进行等待*/
+                 * 的方法请求消息..阻塞队列在获取的时候，如果是空的，进行等待————这就说明了只要拿到了返回值
+                 * messageResult就一定不是空的*/
                 MessageRequest messageRequest = this.messageRequestQueue.take();
                 if (messageRequest.getMessageRequestMode() == MessageRequestMode.POP) {
                     this.popMessage((PopRequest) messageRequest);

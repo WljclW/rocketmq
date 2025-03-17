@@ -259,7 +259,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
          *      lastPullTimestamp为当前时间戳。如果当前消费者被挂起，则将拉取任务延迟1s再放入
          *      PullMessageService的拉取任务队列中，最后结束本次消息拉取
          * 确保ProcessQueue、DefaultMQPushConsumerImpl的状态正常;更新ProcessQueue的最后拉取时
-         *      间戳字段。。。对于中间的不正确现象抛出异常
+         *      间戳字段。。。对于中间的不正确现象通常执行this.executePullRequestLater(延迟一小会把这个
+         *      请求重新放回到PullMessageService#messageRequestQueue——拉取消息服务中的阻塞队列，然后
+         *      PullRequestService是再执行run方法，run方法会不断的尝试从阻塞队列拿MessageRequest进行
+         *      处理)
          * */
         final ProcessQueue processQueue = pullRequest.getProcessQueue();
         if (processQueue.isDropped()) {
@@ -283,7 +286,9 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_SUSPEND);
             return;
         }
-        /**step2:查看缓存的消息的数量、总大小、消费间隔，然后判断是不是需要流控;*/
+        /**step2:查看缓存的消息的数量、总大小、消费间隔，然后判断是不是需要流控。
+         *      如果达到流控的条件，则执行“this.executePullRequestLater”，延迟PULL_TIME_DELAY_MILLS_WHEN_CACHE_FLOW_CONTROL重新
+         *      放入到PullMessageService#messageRequestQueue——拉取消息服务中的阻塞队列*/
         long cachedMessageCount = processQueue.getMsgCount().get();
         long cachedMessageSizeInMiB = processQueue.getMsgSize().get() / (1024 * 1024);
         //缓存消息的数量超过阈值，则进行流控
@@ -490,7 +495,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         if (MessageModel.CLUSTERING == this.defaultMQPushConsumer.getMessageModel()) {
             commitOffsetValue = this.offsetStore.readOffset(pullRequest.getMessageQueue(), ReadOffsetType.READ_FROM_MEMORY);
             if (commitOffsetValue > 0) {
-                commitOffsetEnable = true;
+                commitOffsetEnable = true; //如果commitOffsetEnable是有效的则设置commitOffsetEnable为true
             }
         }
         /**step7:取出过滤表达式 subExpression；设置是不是类过滤模式*/
@@ -499,7 +504,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         SubscriptionData sd = this.rebalanceImpl.getSubscriptionInner().get(pullRequest.getMessageQueue().getTopic());
         if (sd != null) {
             /*为什么是两个条件的&&，为什么是这两个条件？？*/
-            /*isPostSubscriptionWhenPull()：是不是每一次pull时，发送自己的订阅信息。
+            /*isPostSubscriptionWhenPull()：是不是每一次pull时，更新自己的订阅信息。
             * isClassFilterMode()：是不是类过滤模式*/
             if (this.defaultMQPushConsumer.isPostSubscriptionWhenPull() && !sd.isClassFilterMode()) {
                 subExpression = sd.getSubString();
@@ -510,7 +515,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         /**step8:构建系统标志 sysFlag*/
         int sysFlag = PullSysFlag.buildSysFlag(
             commitOffsetEnable, // commitOffset
-            true, // suspend
+            true, /*suspend,是不是支持请求挂起。在消费者发送请求时都是true，只有在Broker端处理挂起的“拉取消息请求时”才会将suspend置为false*/
             subExpression != null, // subscription
             classFilter // class filter
         );
@@ -533,7 +538,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             );
         } catch (Exception e) {
             log.error("pullKernelImpl exception", e);
-            this.executePullRequestLater(pullRequest, pullTimeDelayMillsWhenException); //发生异常则稍后在拉取
+            this.executePullRequestLater(pullRequest, pullTimeDelayMillsWhenException); //发生异常则稍后再将PullRequest重新放回到阻塞队列，后续处理
         }
     }
 

@@ -453,7 +453,7 @@ public class MQClientInstance {
         return clientId;
     }
 
-    /**功能：是更新和维护路由缓存(包括消息生产者 和 消息消费者所有涉及到的topic)
+    /**功能：更新所有的路由缓存(包括消息生产者 和 消息消费者所有涉及到的topic)
      * 逻辑：收集"消费者订阅的所有topic"以及"生产者所有生产的topic"到set集合，遍历集合中的每一
      *      个topic，更新这个topic的路由信息
      * */
@@ -886,7 +886,7 @@ public class MQClientInstance {
     }
 
     /**
-     * 更新生产者和消费者的路由缓存信息。。。。。现阶段更新路由信息时，最终调用的都是这个方法，其他的重载方法最终也会指向这个方法
+     * 更新生产者和消费者的路由缓存信息的根方法。。。。。现阶段更新路由信息时，最终调用的都是这个方法，其他的重载方法最终也会指向这个方法
      * */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
@@ -1298,7 +1298,7 @@ public class MQClientInstance {
     }
 
     /**【】：根据BrokerName 以及 BrokerId 查找Broker的地址。
-     * (返回的并不一定就是brokerId对应的那个broker,也可能是这个集群中的另一个broker)*/
+     * (注意：返回的并不一定就是brokerId对应的那个broker,也可能是这个集群中的另一个broker)*/
     public FindBrokerResult findBrokerAddressInSubscribe(
         final String brokerName,
         final long brokerId,
