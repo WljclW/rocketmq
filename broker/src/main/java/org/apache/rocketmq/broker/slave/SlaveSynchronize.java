@@ -215,13 +215,20 @@ public class SlaveSynchronize {
         }
     }
 
+    /** []:RocketMQ 中用于同步定时消息检查点（TimerCheckpoint）的逻辑。它的主要作用是从主节点（Master Broker）获取
+     *      定时消息的检查点信息，并更新本地的检查点状态。*/
     public void syncTimerCheckPoint() {
-        String masterAddrBak = this.masterAddr;
+        String masterAddrBak = this.masterAddr; //在方法内部备份一下主broker的地址
         if (masterAddrBak != null) {
             try {
+                /*检查当前 Broker 是否启用了定时消息存储（TimerMessageStore），并且 当前节点是否不应该运行
+                    出队操作（isShouldRunningDequeue() 返回 false）*/
                 if (null != brokerController.getMessageStore().getTimerMessageStore() &&
                         !brokerController.getTimerMessageStore().isShouldRunningDequeue()) {
+                    /*调用 BrokerOuterAPI 的 getTimerCheckPoint 方法，从主节点（masterAddrBak）获取定时消息的检查点信息。*/
                     TimerCheckpoint checkpoint = this.brokerController.getBrokerOuterAPI().getTimerCheckPoint(masterAddrBak);
+                    /*如果得到的检查点checkpoint不是空，则利用拿到的checkpoint更新到本地的TimerCheckpoint中
+                    (当前的从broker服务器通过brokerController.getTimerCheckpoint()获取存储在本地的检查点)中*/
                     if (null != this.brokerController.getTimerCheckpoint()) {
                         this.brokerController.getTimerCheckpoint().setLastReadTimeMs(checkpoint.getLastReadTimeMs());
                         this.brokerController.getTimerCheckpoint().setMasterTimerQueueOffset(checkpoint.getMasterTimerQueueOffset());

@@ -21,6 +21,13 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.heartbeat.SubscriptionData;
 import org.apache.rocketmq.store.MessageFilter;
 
+/**[]:
+ * 【其他】
+ * 1. "org.apache.rocketmq.client.impl.consumer"包也有一个PullRequest类，两个是不一样的。
+ *      1.1 consumer.PullRequest类继承于org.apache.rocketmq.client.impl.consumer.MessageRequest，表示具体的消息
+ *      请求，用于客户端封装好，然后向服务端发起请求
+ *      1.2 这里的PullRequest主要用于长轮询或短轮询时，挂起消息请求时使用。。作为org.apache.rocketmq.broker.longpolling.ManyPullRequest
+ *      唯一字段pullRequestList的元素类型*/
 public class PullRequest {
     private final RemotingCommand requestCommand;
     private final Channel clientChannel;

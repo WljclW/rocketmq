@@ -650,7 +650,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
     }
 
     /**
-     * [作用]组成要响应给客户端的响应消息头部；设置response的响应码
+     * [作用]：组成要响应给客户端的响应消息头部；设置response的响应码
      * Composes the header of the response message to be sent back to the client
      * @param requestHeader - the header of the request message
      * @param getMessageResult - the result of the GetMessage request
@@ -753,6 +753,9 @@ public class PullMessageProcessor implements NettyRequestProcessor {
 
     }
 
+    /**[]：用于在消费者拉取消息之前执行钩子（Hook）逻辑的方法。具体来说：通过messageStore拿到消费者想要的信息后，组装响应头形
+     *      成最终的响应结果之前执行的方法
+     * 【】：它的主要作用是允许开发者通过自定义的钩子函数对消息拉取请求进行拦截、修改或记录日志等操作。*/
     protected void executeConsumeMessageHookBefore(RemotingCommand request, PullMessageRequestHeader requestHeader,
         GetMessageResult getMessageResult, boolean brokerAllowSuspend, int responseCode) {
         if (this.hasConsumeMessageHook()) {
@@ -824,8 +827,12 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
     }
 
-    /**主要用于处理消费者提交的消费偏移量（Offset）。它的核心功能是将消费者汇报的消费进度保存到 Broker 的存储中，以确保在
-     * 消费者重启或故障时能够从正确的偏移量继续消费。*/
+    /**[]:主要用于处理消费者提交的消费偏移量（Offset）。它的核心功能是将消费者汇报的消费进度保存到 Broker 的存储中，以确保在
+     * 消费者重启或故障时能够从正确的偏移量继续消费。
+     * 处理逻辑——
+     *    step1：利用commitPullOffset更新消费者(clientAddress)在某个主题的某个队列的拉取进度
+     *    step2：判断是不是需要更新消费进度。如果需要的话调用commitOffset方法更新 消费者在某个主题的某个队列的消费进度
+     * */
     protected void tryCommitOffset(boolean brokerAllowSuspend, PullMessageRequestHeader requestHeader,
         long nextOffset, String clientAddress) {
         this.brokerController.getConsumerOffsetManager().commitPullOffset(clientAddress,
@@ -845,6 +852,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         Runnable run = () -> {
             try {
                 boolean brokerAllowFlowCtrSuspend = !(request.getExtFields() != null && request.getExtFields().containsKey(ColdDataPullRequestHoldService.NO_SUSPEND_KEY));
+                /*这里执行processRequest的时候brokerAllowSuspend设置为false.表示不支持拉取线程挂起，即当根据偏移量无
+                法获取消息时，将不挂起线程等待新消息到来，而是直接返回告诉客户端本次消息拉取未找到消息。*/
                 final RemotingCommand response = PullMessageProcessor.this.processRequest(channel, request, false, brokerAllowFlowCtrSuspend);
 
                 if (response != null) {
@@ -886,6 +895,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 && ConsumeType.CONSUME_PASSIVELY.equals(consumerGroupInfo.getConsumeType());
     }
 
+    /**用于更新广播模式（Broadcasting）消费者的拉取进度（Pulled Offset）的逻辑。它的主要作用是根据消费者拉
+     * 取消息的请求信息，记录每个消费者在广播模式下的拉取进度，确保广播模式下每个消费者都能独立消费消息*/
     protected void updateBroadcastPulledOffset(String topic, String group, int queueId,
         PullMessageRequestHeader requestHeader, Channel channel, RemotingCommand response, long nextBeginOffset) {
 

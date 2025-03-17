@@ -219,7 +219,9 @@ public class PullAPIWrapper {
                 this.mQClientFactory.findBrokerAddressInSubscribe(this.mQClientFactory.getBrokerNameFromMessageQueue(mq),
                     this.recalculatePullFromWhichNode(mq), false);
         }
-        /**step2:如果找到了则构造请求信息，构造完成后调用netty的方法进行发送*/
+        /**step2:如果找到了则构造请求信息(主要是构造请求头)，构造完成后调用netty的方法进行发送。其实还涉及到一些细节：
+         *  1. 如果是SQL92表达式过滤，需要判断找到的broker是不是支持
+         *  2. 如果是类过滤模式，需要重新通过computePullFromWhichFilterServer获取更尽兴类过滤的服务器地址(String类型)*/
         /*如果找到了进入下面的if块进行处理；如果更新路由信息后还是找不到，直接到此方法的最后一行抛出异常*/
         if (findBrokerResult != null) {
             {
@@ -232,7 +234,7 @@ public class PullAPIWrapper {
                 }
             }
             int sysFlagInner = sysFlag;
-
+            /**疑问：为什么如果是 从Broker，则要将CommitOffsetFlag清除掉*/
             if (findBrokerResult.isSlave()) {
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }

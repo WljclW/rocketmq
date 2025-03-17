@@ -63,6 +63,9 @@ import static org.apache.rocketmq.remoting.protocol.ResponseCode.CONTROLLER_BROK
  * both master and slave will start this timed task. 1.regularly syncing metadata from controllers, and changing broker
  * roles and master if needed, both master and slave will start this timed task. 2.regularly expanding and Shrinking
  * syncStateSet, only master will start this timed task.
+ * Broker复制 的管理器，包括：定期同步controller元数据，更改controller领导地址，主服务器和从服务器都将启动此定时任务。
+ *      1.定期从controller同步元数据，并在需要时更改broker角色和主服务器，主服务器和从服务器都将启动此定时任务。
+ *      2.定期扩展和收缩同步状态，只有主将启动此定时任务。
  */
 public class ReplicasManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -349,8 +352,8 @@ public class ReplicasManager {
      *      据 Broker 的角色（主节点或从节点）启动或停止定时任务，以实现从节点对主节点的元数据同步。
      * Broker启动时会按照角色启动同步元数据任务*/
     private void handleSlaveSynchronize(final BrokerRole role) {
-        /*如果Broker节点的角色为从节点，会开启一个定时任务，每隔10s执行一次元数据同步任
-        务，同步任务的实现逻辑封装在SlaveSynchronize中*/
+        /*如果Broker节点的角色为从节点，会开启一个定时任务(初始延迟3秒，后续频率每3秒一次)，隔10s执行一次元数据同步任
+        务(不一定是10秒，可能超过十秒，下面的逻辑是判断超过10秒才进行全量同步)，同步任务的实现逻辑封装在SlaveSynchronize中*/
         if (role == BrokerRole.SLAVE) {
             if (this.slaveSyncFuture != null) {
                 this.slaveSyncFuture.cancel(false);

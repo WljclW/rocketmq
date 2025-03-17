@@ -43,7 +43,8 @@ public class ConsumerOffsetManager extends ConfigManager {
     public static final String TOPIC_GROUP_SEPARATOR = "@";
 
     private DataVersion dataVersion = new DataVersion();
-
+    /*offsetTable：用于记录消费者的消费进度。
+    * 键：topic@group；值：映射关系，消息队列ID——>消费者的消费偏移量*/
     protected ConcurrentMap<String/* topic@group */, ConcurrentMap<Integer, Long>> offsetTable =
         new ConcurrentHashMap<>(512);
 
@@ -199,6 +200,7 @@ public class ConsumerOffsetManager extends ConfigManager {
         this.commitOffset(clientHost, key, queueId, offset);
     }
 
+    /**更新消费者在 某个topic的某个消息队列 的消费进度*/
     private void commitOffset(final String clientHost, final String key, final int queueId, final long offset) {
         ConcurrentMap<Integer, Long> map = this.offsetTable.get(key);
         if (null == map) {
@@ -211,12 +213,14 @@ public class ConsumerOffsetManager extends ConfigManager {
                 LOG.warn("[NOTIFYME]update consumer offset less than store. clientHost={}, key={}, queueId={}, requestOffset={}, storeOffset={}", clientHost, key, queueId, offset, storeOffset);
             }
         }
+        //这个方法执行500次，才会进行一次数据版本(dataVersion)的更新
         if (versionChangeCounter.incrementAndGet() % brokerController.getBrokerConfig().getConsumerOffsetUpdateVersionStep() == 0) {
             long stateMachineVersion = brokerController.getMessageStore() != null ? brokerController.getMessageStore().getStateMachineVersion() : 0;
             dataVersion.nextVersion(stateMachineVersion);
         }
     }
 
+    /**更新消费者 在某个topic的某个消息队列 的拉取偏移量信息*/
     public void commitPullOffset(final String clientHost, final String group, final String topic, final int queueId,
         final long offset) {
         // topic@group

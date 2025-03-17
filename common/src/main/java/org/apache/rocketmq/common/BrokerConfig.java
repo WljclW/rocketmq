@@ -315,7 +315,8 @@ public class BrokerConfig extends BrokerIdentity {
     private boolean asyncSendEnable = true;
     //是否启用服务端(Broker)的偏移量重置功能
     private boolean useServerSideResetOffset = true;
-
+    /*consumerOffsetUpdateVersionStep：表示消费进度更新500次以后，才会触发数据版本的更新。
+    用于控制消费者消费进度（Consumer Offset）更新时触发版本号更新的频率。避免频繁地更新版本号，从而减少不必要的开销。*/
     private long consumerOffsetUpdateVersionStep = 500;
 
     private long delayOffsetUpdateVersionStep = 200;

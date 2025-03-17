@@ -830,7 +830,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         sendResult.setTraceOn(!Boolean.FALSE.toString().equals(traceOn));
         return sendResult;
     }
-    /**消息拉取的客户端最终的出口*/
+    /**消息拉取时客户端方面 最终的出口*/
     public PullResult pullMessage(
         final String addr,
         final PullMessageRequestHeader requestHeader,
