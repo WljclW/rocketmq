@@ -57,10 +57,19 @@ public class BatchUnregistrationService extends ServiceThread {
         return BatchUnregistrationService.class.getName();
     }
 
+    /**用于处理 Broker 注销请求的线程逻辑，通常运行在一个后台线程中。
+     * 它的主要作用是从注销队列（unregistrationQueue）中取出多个注销请求，并将这些请求批量处理以注销 Broker 的路由信息。*/
     @Override
     public void run() {
         while (!this.isStopped()) {
             try {
+                /*一个指的思考的问题：为什么这里是先从unregistrationQueue拿出一个，然后将剩下的元素
+                        提取到集合，再将拿出的那一个加进去？？为什么不是直接将所有的元素加进去？？
+                原因：take() 的保证————
+                        在每次循环开始时，take() 确保至少有一个请求被取出并处理。如果没有元素的话，线程会阻塞到这里
+                    drainTo 的不足————
+                        如果只使用 drainTo，在队列为空的情况下，可能没有任何请求被处理，导致线程“空转”
+                * */
                 final UnRegisterBrokerRequestHeader request = unregistrationQueue.take();
                 Set<UnRegisterBrokerRequestHeader> unregistrationRequests = new HashSet<>();
                 unregistrationQueue.drainTo(unregistrationRequests);

@@ -37,10 +37,12 @@ public class NamesrvConfig {
 
     /**
      * Indicates the nums of thread to handle client requests, like GET_ROUTEINTO_BY_TOPIC.
+     * 处理客户端请求(比如：get_route_by_topic)的处理线程池大小
      */
     private int clientRequestThreadPoolNums = 8;
     /**
      * Indicates the nums of thread to handle broker or operation requests, like REGISTER_BROKER.
+     * 处理Broker 或者 操作请求(比如：broker注册)的处理线程池大小
      */
     private int defaultThreadPoolNums = 16;
     /**
@@ -77,7 +79,7 @@ public class NamesrvConfig {
     private volatile boolean notifyMinBrokerIdChanged = false;
 
     /**
-     * Is startup the controller in this name-srv
+     * Is startup the controller in this name-srv。。。nameSrv在启动的时候可以嵌入Controller模块
      */
     private boolean enableControllerInNamesrv = false;
 

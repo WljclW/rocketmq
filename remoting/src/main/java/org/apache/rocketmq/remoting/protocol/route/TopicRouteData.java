@@ -31,7 +31,7 @@ import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.apache.rocketmq.remoting.protocol.statictopic.TopicQueueMappingInfo;
 
 public class TopicRouteData extends RemotingSerializable {
-    private String orderTopicConf;
+    private String orderTopicConf; //顺序消息的配置信息，来自kvConfig
     private List<QueueData> queueDatas;     //topic队列元数据
     private List<BrokerData> brokerDatas;   //topic分布的broker元数据(其实就是topic在哪些broker中存储)
     /*RocketMQ 提供了两种消息过滤方式：

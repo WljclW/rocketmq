@@ -40,6 +40,7 @@ public class Configuration {
     private Object storePathObject;
     private Field storePathField;
     private DataVersion dataVersion = new DataVersion();
+    /*在更新或写配置的时候需要先获取锁*/
     private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
     /**
      * All properties include configs in object and extend properties.
@@ -320,10 +321,11 @@ public class Configuration {
         return stringBuilder.toString();
     }
 
+    /**将from中所有的键值对，*/
     private void merge(Properties from, Properties to) {    //从from中拿去配置设置到to里面去
         for (Entry<Object, Object> next : from.entrySet()) {
             Object fromObj = next.getValue(), toObj = to.get(next.getKey());
-            if (toObj != null && !toObj.equals(fromObj)) {  //如果键值相等，就没必要打印了。【可能之前打印过了？？】
+            if (toObj != null && !toObj.equals(fromObj)) {  //如果to中有相同的键，就打印键值以及对应的新value 和 旧value
                 log.info("Replace, key: {}, value: {} -> {}", next.getKey(), toObj, fromObj);
             }
             to.put(next.getKey(), fromObj);

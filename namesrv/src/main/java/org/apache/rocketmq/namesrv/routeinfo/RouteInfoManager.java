@@ -65,13 +65,15 @@ import org.apache.rocketmq.remoting.protocol.route.QueueData;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 import org.apache.rocketmq.remoting.protocol.statictopic.TopicQueueMappingInfo;
 
+/**NameServer 的主要职责是维护集群的元数据（如 Broker 地址、主题分布等），而 RouteInfoManager 就是实现这些功能的核心类。*/
 public class RouteInfoManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;   //消息队列的路由信息，根据这个属性进行负载均衡
-    private final Map<String/* brokerName */, BrokerData> brokerAddrTable;  //broker名称到broker的基本信息，包括：名称、所属集群名、主备broker地址(该broker集群的所有broker实例)
-    private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;   //集群名称和broker名称的映射，用于快速查找broker
+    /*消息队列的路由信息，根据这个属性进行负载均衡。。键：topic名称；值：brokerName——>该brokerName中的QueueData信息*/
+    private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;
+    private final Map<String/* brokerName */, BrokerData> brokerAddrTable;  //broker名称到broker的基本信息，包括：名称->所属集群名、主备broker地址(该broker集群的所有broker实例)
+    private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable; //集群名称和broker名称的映射，用于快速查找broker
     private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;  //broker的状态信息，每次收到心跳响应时会更新此信息
     private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;   //broker上的filterserver列表，实现类模式消息过滤
     private final Map<String/* topic */, Map<String/*brokerName*/, TopicQueueMappingInfo>> topicQueueMappingInfoTable;
@@ -569,6 +571,7 @@ public class RouteInfoManager {
         unRegisterBroker(Sets.newHashSet(unRegisterBrokerRequest));
     }
 
+    /**[]：根据set集合(set集合中是一个个的Broker注销的请求)，注销集合中提到的Broker注销请求*/
     public void unRegisterBroker(Set<UnRegisterBrokerRequestHeader> unRegisterRequests) {
         try {
             Set<String> removedBroker = new HashSet<>();
@@ -590,7 +593,12 @@ public class RouteInfoManager {
                 );
                 //操作2：更新filterServerTable————删除指定的broker信息
                 this.filterServerTable.remove(brokerAddrInfo);
-                //操作3：更新brokerAddrTable————删除指定的broker信息
+                /*操作3：下面的if语句块的作用是更新brokerAddrTable————删除指定的broker信息
+                * 详细的来说：
+                *       遍历HashMap<String, BrokerData> brokerAddrTable，从BrokerData的HashMap<Long, String>
+                brokerAddrs中，找到具体的Broker，从BrokerData中将其移除。如果移除后在BrokerData中不再包含其他Broker，
+                * 则在brokerAddrTable中移除该brokerName对应的条目
+                * */
                 boolean removeBrokerName = false;
                 boolean isMinBrokerIdChanged = false;
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
@@ -616,7 +624,10 @@ public class RouteInfoManager {
                             brokerData.getBrokerAddrs(), brokerAddr, null));
                     }
                 }
-
+                /*操作4：更新clusterAddrTable————删除指定的broker信息
+                * 详细的来说：
+                *       根据BrokerName，从clusterAddrTable中找到Broker并将其从集群中移除。如果移除后，集群中不包含任
+                * 何Broker，则将该集群从clusterAddrTable中移除*/
                 if (removeBrokerName) {
                     Set<String> nameSet = this.clusterAddrTable.get(clusterName);
                     if (nameSet != null) {  //源码中在每一次对某东西做操作时，先确保该东西不是null
@@ -637,7 +648,8 @@ public class RouteInfoManager {
                     reducedBroker.add(brokerName);
                 }
             }
-
+            /*操作5：根据BrokerName，遍历所有主题的队列，如果队列中包含当前Broker的队列，则移除，如果topic只包含待移除Broker的队
+                列，从路由表中删除该topic*/
             cleanTopicByUnRegisterRequests(removedBroker, reducedBroker);
 
             if (!needNotifyBrokerMap.isEmpty() && namesrvConfig.isNotifyMinBrokerIdChanged()) {
@@ -801,6 +813,11 @@ public class RouteInfoManager {
         return null;
     }
 
+    /**【】：用于扫描(通过brokerLiveTable来扫描)并清理不活跃Broker的逻辑，主要目的是检测那些长时间未发送心跳
+     * 包的 Broker，并将其从 NameServer 的路由表中移除
+     *      具体来说：scanNotActiveBroker在NameServer中每10s执行一次。首先遍历brokerLiveInfo路由表（HashMap），检测
+     * BrokerLiveInfo的LastUpdateTimestamp上次收到心跳包的时间，如果超过120s，则认为该Broker已不可用，然后将它移除并关
+     * 闭连接，最后删除与该Broker相关的路由信息*/
     public void scanNotActiveBroker() {
         try {
             log.info("start scanNotActiveBroker");
@@ -841,6 +858,14 @@ public class RouteInfoManager {
         }
     }
 
+    /**[]：当netty的通道被销毁(断开连接 或者 异常)的时候执行的回调。
+     * 【方法的逻辑】：
+     *      1.找到与该通道关联的 Broker 信息 。
+     *      2.构造注销请求 （UnRegisterBrokerRequestHeader），并将其提交给 NameServer 的注销队列，以便从路由表
+     *          中移除该 Broker 的相关信息(在this.routeInfoManager.start()中就会不断的执行从阻塞队列unregistrationQueue
+     *          获取请求，去执行Broker的注销操作)。
+     * @param channel：某一个通道
+     * */
     public void onChannelDestroy(Channel channel) {
         UnRegisterBrokerRequestHeader unRegisterRequest = new UnRegisterBrokerRequestHeader();
         BrokerAddrInfo brokerAddrFound = null;
@@ -1187,11 +1212,13 @@ class BrokerAddrInfo {
     }
 }
 
+/**作用：记录Broker的存活信息。更准确的说是根据Broker发来的心跳包，根据收到的心跳包组装一个BrokerLiveInfo对象来标记这个
+ *      Broker的存活状态*/
 class BrokerLiveInfo {
-    private long lastUpdateTimestamp;
+    private long lastUpdateTimestamp; //上次收到这个Broker发来心跳包的时间
     private long heartbeatTimeoutMillis;
     private DataVersion dataVersion;
-    private Channel channel;
+    private Channel channel; //表示与该Broker的通信通道(即一个Channel对象)
     private String haServerAddr;
 
     public BrokerLiveInfo(long lastUpdateTimestamp, long heartbeatTimeoutMillis, DataVersion dataVersion,

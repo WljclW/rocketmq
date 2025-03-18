@@ -238,7 +238,7 @@ public class NamesrvStartup {
     }
 
     /**
-     * 重载的方法start。用于启动ControllerManager，逻辑上和start(final NamesrvController controller)是一样的，即————
+     * 重载的方法start。用于启动ControllerManager，逻辑上基本和start(final NamesrvController controller)是一样的，即————
      *      1.先是进行初始化方法的调用
      *      2.如果初始化是没有成功就直接返回
      *      3.到这里说明初始化成功了。这一步会注册jvm钩子函数实现优雅关闭

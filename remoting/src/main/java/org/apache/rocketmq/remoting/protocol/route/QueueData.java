@@ -20,6 +20,7 @@
  */
 package org.apache.rocketmq.remoting.protocol.route;
 
+/**作用：存储(记录) 某个Topic在某个Broker上的队列数量、权限等信息。*/
 public class QueueData implements Comparable<QueueData> {
     private String brokerName;  //broker的名字(同一个集群cluster中所有broker的brokerName是一样的)
     private int readQueueNums;  //读队列数量

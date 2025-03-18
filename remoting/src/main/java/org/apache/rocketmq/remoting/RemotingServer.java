@@ -35,10 +35,15 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
  *      隔离。
  * */
 public interface RemotingServer extends RemotingService {
-
+    /**用于为某个特定的请求码（requestCode）注册一个处理器（NettyRequestProcessor）。
+     * @param requestCode 请求编码,表示一种特定的请求类型。比如：GET_ROUTE_BY_TOPIC
+     * @param processor   请求处理器，用于处理特定请求类型的请求。通常是实现了 NettyRequestProcessor接口的类
+     * @param executor    请求处理器对应的线程池，表示请求的处理使用的线程池。
+     * */
     void registerProcessor(final int requestCode, final NettyRequestProcessor processor,
         final ExecutorService executor);
-
+    /**[]:用于注册一个默认的处理器，处理所有未明确注册的请求码。
+     * */
     void registerDefaultProcessor(final NettyRequestProcessor processor, final ExecutorService executor);
 
     int localListenPort();

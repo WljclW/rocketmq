@@ -32,14 +32,21 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * FileWatchService文件变更监听服务实现逻辑，内部维护了需要监听的文件列表、监听文件列表的hash消息摘要、监听器。当调用线程的
+ *      start()函数后，就会执行当前类的run(函数)，只要系统没有停止，就会无限循环切间隔形式.扫描文件又没有变更。如果有变更，
+ *      则将它维护到内存列表，并且调用消息监听器changed()回调函数。
+*/
 public class FileWatchService extends LifecycleAwareServiceThread {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
-
+    /*需要监听的文件——>该文件对应的哈希值*/
     private final Map<String, String> currentHash = new HashMap<>();
     private final Listener listener;
     private static final int WATCH_INTERVAL = 500;
     private final MessageDigest md = MessageDigest.getInstance("MD5");
 
+    /**[]:1.初始化listener
+     *  2.遍历形参的文件列表；计算每一个文件的摘要；并将 文件名——>摘要 添加到currentHash这个map中*/
     public FileWatchService(final String[] watchFiles,
         final Listener listener) throws Exception {
         this.listener = listener;
@@ -55,13 +62,19 @@ public class FileWatchService extends LifecycleAwareServiceThread {
         return "FileWatchService";
     }
 
+    /**[]:该服务启动后就是不断的执行这个runo()。最根处的地方其实是从父类LifecycleAwareServiceThread的run()方法执
+     *      行的，然后父类的方法调用到了子类具体实现的run0().——有点类似于模板方法。
+     * */
     @Override
     public void run0() {
         log.info(this.getServiceName() + " service started");
-
+        /*如果服务没有终止，就不出while。*/
         while (!this.isStopped()) {
             try {
+                /*首先，默认间隔500ms执行一次*/
                 this.waitForRunning(WATCH_INTERVAL);
+                /*遍历currentHash这个map，如果发现某个文件的摘要值和之前计算的不一致，则调用listener的onChanged()方法；
+                 * 并且更新currentHash这个map。*/
                 for (Map.Entry<String, String> entry : currentHash.entrySet()) {
                     String newHash = md5Digest(entry.getKey());
                     if (!newHash.equals(currentHash.get(entry.getKey()))) {

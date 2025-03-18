@@ -95,15 +95,15 @@ public class NamesrvController {
         this.brokerHousekeepingService = new BrokerHousekeepingService(this);
         this.routeInfoManager = new RouteInfoManager(namesrvConfig, this);
         this.configuration = new Configuration(LOGGER, this.namesrvConfig, this.nettyServerConfig);
-        this.configuration.setStorePathFromConfig(this.namesrvConfig, "configStorePath");
+        this.configuration.setStorePathFromConfig(this.namesrvConfig, "configStorePath"); //从namesrvConfig提取”configStorePath“对应的值，并设置到NettyServerConfig中
     }
 
     public boolean initialize() {   /**做一些初始化操作*/
         loadConfig();   //加载KV配置表...加载系统配置，这是系统运行所必需的配置信息
         initiateNetworkComponents();  //创建网络处理组件。包括：remotingClient和remotingServer
-        initiateThreadExecutors();
-        registerProcessor();
-        startScheduleService(); //开启三个定时任务
+        initiateThreadExecutors(); //初始化线程池。一个是clientRequestThreadPoolQueue；另一个是defaultThreadPoolQueue
+        registerProcessor();    //注册处理接收到请求的处理器。一个处理请求码为"GET_ROUTE_BY_TOPIC"的请求，一个是defaultProcessor
+        startScheduleService(); //开启三个定时任务。一个是定时扫描不活跃broker的路由信息，一个是定时扫描KV配置表，一个是定时打印线程池的水位日志
         initiateSslContext();   //
         initiateRpcHooks(); //【注意】这种是用户的扩展逻辑，不是jvm钩子函数
         return true;
@@ -115,10 +115,9 @@ public class NamesrvController {
 
     /**
      * 方法启动定时服务，执行以下三个任务：
-     * 每隔一段时间扫描不活跃的broker，并清理路由信息
-     * 每隔 10 分钟打印所有的KV配置信息
-     * 每隔 1 秒打印线程池的水位日志，即客户端请求线程池和默认线程池的队列大小和头部任务的慢
-     *      时间（从创建到执行的时间）
+     *  每隔一段时间扫描不活跃的broker，并清理路由信息
+     *  每隔 10 分钟打印所有的KV配置信息
+     *  每隔 1 秒打印线程池的水位日志，即客户端请求线程池和默认线程池的队列大小和头部任务的慢时间（从创建到执行的时间）
      * */
     private void startScheduleService() {
         //定期扫描不活跃的broker。默认是每隔5秒
@@ -127,7 +126,7 @@ public class NamesrvController {
         //定期打印KV配置表。默认是每隔10min打印一次
         this.scheduledExecutorService.scheduleAtFixedRate(NamesrvController.this.kvConfigManager::printAllPeriodically,
             1, 10, TimeUnit.MINUTES);
-        //默认每隔一秒打印一次WaterMark
+        //默认每隔一秒打印一次WaterMark(其实就是clientRequestThreadPoolQueue、defaultThreadPoolQueue者两个阻塞队列的状态)
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 NamesrvController.this.printWaterMark();
@@ -143,19 +142,23 @@ public class NamesrvController {
      * BrokerHousekeepingService对象用于处理broker的连接和断开事件。
      * */
     private void initiateNetworkComponents() {
+        /*this.brokerHousekeepingService是一个监听器，用于监听channel状态变化以便在有新连接、出现异常、通道销毁等执行用户自定义逻辑*/
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
         this.remotingClient = new NettyRemotingClient(this.nettyClientConfig);
     }
 
     /**
-     * 方法初始化两个线程池，一个是defaultExecutor，用于处理默认的远程请求；
+     * 创建两个阻塞队列，并初始化两个线程池，一个是defaultExecutor，用于处理默认的远程请求；
      * 另一个是clientRequestExecutor，用于处理客户端的路由信息请求。
+     * [这两个线程池的区别？]看下面的registerProcessor方法，registerProcessor线程池是特
+     *      定的处理器使用的，这种处理器只处理请求码是“GET_ROUTE_BY_TOPIC”的这类请求；另外
+     *      一个defaultExecutor线程池是默认处理器处理请求时使用的
      * 这两个线程池都使用了LinkedBlockingQueue作为任务队列，并且重写了newTaskFor方法，使
      *      用FutureTaskExt包装了Runnable任务。
      * */
     private void initiateThreadExecutors() {
         this.defaultThreadPoolQueue = new LinkedBlockingQueue<>(this.namesrvConfig.getDefaultThreadPoolQueueCapacity());
-        //用于处理默认的远程请求
+        //用于处理通用的远程请求(比如：心跳包，Broker注册)
         this.defaultExecutor = ThreadUtils.newThreadPoolExecutor(this.namesrvConfig.getDefaultThreadPoolNums(), this.namesrvConfig.getDefaultThreadPoolNums(), 1000 * 60, TimeUnit.MILLISECONDS, this.defaultThreadPoolQueue, new ThreadFactoryImpl("RemotingExecutorThread_"));
 
         this.clientRequestThreadPoolQueue = new LinkedBlockingQueue<>(this.namesrvConfig.getClientRequestThreadPoolQueueCapacity());
@@ -201,17 +204,28 @@ public class NamesrvController {
         }
     }
 
+    /**[]：作用是监控 clientRequestThreadPoolQueue 和 defaultThreadPoolQueue 两个线程池队列的当前元素大小 以及 队列中第一个
+     *      任务的延迟时间，并记录日志以便分析性能瓶颈或系统负载情况。
+     * 打印的参数说明————
+     *  this.clientRequestThreadPoolQueue.size()：获取clientRequestThreadPoolQueue线程池队列中当前元素的数量。
+     *  this.defaultThreadPoolQueue.size()：获取defaultThreadPoolQueue线程池队列中当前元素的数量。
+     *  headSlowTimeMills(this.clientRequestThreadPoolQueue)：获取clientRequestThreadPoolQueue线程池队列中第一个任务的延迟时间，
+     *  headSlowTimeMills(this.defaultThreadPoolQueue)：获取defaultThreadPoolQueue线程池队列中第一个任务的延迟时间。
+     * */
     private void printWaterMark() {
         WATER_MARK_LOG.info("[WATERMARK] ClientQueueSize:{} ClientQueueSlowTime:{} " + "DefaultQueueSize:{} DefaultQueueSlowTime:{}", this.clientRequestThreadPoolQueue.size(), headSlowTimeMills(this.clientRequestThreadPoolQueue), this.defaultThreadPoolQueue.size(), headSlowTimeMills(this.defaultThreadPoolQueue));
     }
 
+    /**用于计算线程池队列中头部任务（即队列中最先被提交的任务）的等待时间*/
     private long headSlowTimeMills(BlockingQueue<Runnable> q) {
         long slowTimeMills = 0;
+        //拿到队列中的第一个任务
         final Runnable firstRunnable = q.peek();
 
         if (firstRunnable instanceof FutureTaskExt) {
             final Runnable inner = ((FutureTaskExt<?>) firstRunnable).getRunnable();
             if (inner instanceof RequestTask) {
+                //计算距离请求创建过了多久
                 slowTimeMills = System.currentTimeMillis() - ((RequestTask) inner).getCreateTimestamp();
             }
         }
@@ -224,9 +238,9 @@ public class NamesrvController {
     }
 
     /**
+     * []:注册处理器
      * 方法根据 namesrvConfig.isClusterTest() 的值，选择使用ClusterTestRequestProcessor或
      *      者DefaultRequestProcessor作为默认处理器
-     *
      * ClusterTestRequestProcessor是一个用于集群测试的处理器，它会在请求前后添加一些环境信息，比如产
      *      品环境名称、请求时间等
      * DefaultRequestProcessor是一个用于正常运行的处理器，它会根据请求的类型，调用不同的方法来处理，比
@@ -248,7 +262,7 @@ public class NamesrvController {
         }
     }
 
-    //方法注册RPC钩子，即在remotingServer处理请求之前或之后执行一些自定义的逻辑
+    /**方法注册RPC钩子，即在remotingServer处理请求之前或之后执行一些自定义的逻辑*/
     private void initiateRpcHooks() {
         this.remotingServer.registerRPCHook(new ZoneRouteRPCHook());  //ZoneRouteRPCHook目的是实现分区隔离
     }

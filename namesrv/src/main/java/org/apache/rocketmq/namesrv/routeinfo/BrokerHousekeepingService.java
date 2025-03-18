@@ -20,6 +20,9 @@ import io.netty.channel.Channel;
 import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.ChannelEventListener;
 
+/**[]:用于管理 Broker 的生命周期事件（如连接建立、断开等）。它是 ChannelEventListener 的一个实现类——专门用于监听和处
+ *      理与 Broker 通道相关的事件！！！！通过 BrokerHousekeepingService，NameServer能够动态维护集群的路由信息，并在
+ *      Broker离线或异常时及时更新路由表(Broker的离线服务即BatchUnregistrationService)。*/
 public class BrokerHousekeepingService implements ChannelEventListener {
 
     private final NamesrvController namesrvController;
