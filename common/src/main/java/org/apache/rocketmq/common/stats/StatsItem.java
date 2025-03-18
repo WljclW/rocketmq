@@ -55,17 +55,28 @@ public class StatsItem {
         this.logger = logger;
     }
 
+    /**
+     * @Description : 根据采样得到的数据计算统计指标。举个例子：
+     *  在1min内，消息发送者使用了RocketMQ的批量消息，一次发送10条，共调用批量接口发送了6次消息，那上面各个值是怎么计算的呢？
+     *      1）sum：60。
+     *      2）tps：60/60(s) = 1tps，用sum除以时间即可。
+     *      3）avgpt：用sum除以count，最终计算结果为10，表示一次调用改变的平均数值。
+     * @param csList:一个快照的list(采样存放的容器)。
+     * */
     private static StatsSnapshot computeStatsData(final LinkedList<CallSnapshot> csList) {
         StatsSnapshot statsSnapshot = new StatsSnapshot();
         synchronized (csList) {
             double tps = 0;
+            //表示单位时间内从一个快照值到另外一个快照值发生变化的速率
             double avgpt = 0;
             long sum = 0;
             long timesDiff = 0;
             if (!csList.isEmpty()) {
                 CallSnapshot first = csList.getFirst();
                 CallSnapshot last = csList.getLast();
+                /*sum的计算逻辑”最后一个统计量-第一个统计量“*/
                 sum = last.getValue() - first.getValue();
+                /*tps的计算逻辑“sum/时间差”。单位需要换算成秒，因此分子乘了1000*/
                 tps = (sum * 1000.0d) / (last.getTimestamp() - first.getTimestamp());
 
                 timesDiff = last.getTimes() - first.getTimes();
@@ -158,10 +169,17 @@ public class StatsItem {
         }, Math.abs(UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis()) - 2000, 1000 * 60 * 60 * 24, TimeUnit.MILLISECONDS);
     }
 
-    /**根据当前的时间戳、变更次数、调用次数创建一个快照，将其存入csListMinute变量，如
-     * 果该容器中的元素超过7个，则将其头部元素移除，即确保csListMinute最多存储7个元素
-     * 因此整体的思路就是：在分钟级采样容器中存储最近1min的采样数据，每隔10s采集1次快
-     * 照，在计算TPS等统计指标时，只须用两个快照之差除以两个快照之间的时间*/
+    /**【】：samplingInSeconds、samplingInMinutes、samplingInHours这几个方法都是每隔一段时间生
+     *      成一个快照，放入到LinkedList<CallSnapshot>类型的字段中
+     * 方法的执行逻辑：
+     * 根据当前的时间戳、变更次数、调用次数创建一个快照，将其存入csListMinute变量，如果该容器中的元素
+     *  超过7个，则将其头部元素移除，即确保csListMinute最多存储7个元素因此整体的思路就是：在分钟级采
+     *  样容器中存储最近1min的采样数据，每隔10s采集1次快照。这7个元素中，第一个元素是一分钟前记录的数
+     *  据，后面的6个是最近一分钟内的统计数据
+     * 下面的samplingInMinutes方法执行逻辑基本相同，只是时间间隔不同;samplingInHour方法执行逻辑
+     *  也一样
+     * 如何计算tps：
+     *      用两个快照数据的差值 除以 两个快照之间的时间间隔*/
     public void samplingInSeconds() {
         synchronized (this.csListMinute) {
             if (this.csListMinute.size() == 0) {
@@ -201,6 +219,8 @@ public class StatsItem {
         }
     }
 
+    /**[]：该方法每分钟执行1次，将计算出来的监控指标(计算指标的逻辑是在computeStatsData方法)以日志文件的形式输出
+     *  在RocketMQ的日志文件中，其路径默认为${user.home}/logs/rocketmqlogs/stats.log。*/
     public void printAtMinutes() {
         StatsSnapshot ss = computeStatsData(this.csListMinute);
         logger.info(String.format("[%s] [%s] Stats In One Minute, ", this.statsName, this.statsKey) + statPrintDetail(ss));

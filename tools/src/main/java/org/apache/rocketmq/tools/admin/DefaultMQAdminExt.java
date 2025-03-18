@@ -73,6 +73,7 @@ import org.apache.rocketmq.tools.admin.api.BrokerOperatorResult;
 import org.apache.rocketmq.tools.admin.api.MessageTrack;
 import org.apache.rocketmq.tools.admin.common.AdminToolResult;
 
+/**[]：在RocketMQ中所有与运维管理相关的方法都定义在该类中。*/
 public class DefaultMQAdminExt extends ClientConfig implements MQAdminExt {
     private final DefaultMQAdminExtImpl defaultMQAdminExtImpl;
     private String adminExtGroup = "admin_ext_group";
@@ -268,6 +269,7 @@ public class DefaultMQAdminExt extends ClientConfig implements MQAdminExt {
         return defaultMQAdminExtImpl.examineTopicStatsConcurrent(topic);
     }
 
+    /**得到所有的topic*/
     @Override
     public TopicList fetchAllTopicList() throws RemotingException, MQClientException, InterruptedException {
         return this.defaultMQAdminExtImpl.fetchAllTopicList();
@@ -614,6 +616,10 @@ public class DefaultMQAdminExt extends ClientConfig implements MQAdminExt {
         this.defaultMQAdminExtImpl.cloneGroupOffset(srcGroup, destGroup, topic, isOffline);
     }
 
+    /**[]：见名知意，查看Broker的统计数据。
+     * @param brokerAddr: Broker的地址 以及 端口号
+     * @param statsName: 监控指标的类型，比如：TOPIC_PUT_NUMS——主题的写入次数
+     * @param statsKey: 具体的统计的key，比如：如果统计是TOPIC_PUT_NUMS，statsKey就是topicName*/
     @Override
     public BrokerStatsData viewBrokerStatsData(String brokerAddr, String statsName,
         String statsKey) throws RemotingConnectException,

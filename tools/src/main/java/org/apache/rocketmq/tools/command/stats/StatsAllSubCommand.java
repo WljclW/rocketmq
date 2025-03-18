@@ -37,6 +37,11 @@ import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
 import org.apache.rocketmq.tools.command.SubCommand;
 import org.apache.rocketmq.tools.command.SubCommandException;
 
+/**[]:RocketMQ 提供的一个命令行工具类，用于统计和分析 RocketMQ 集群的整体运行状态。它是 mqadmin 工具的一部
+ *      分，允许用户通过命令行获取集群、主题（Topic）、消费者组（Consumer Group）等的详细统计信息。
+ * [其他说明]
+ *    1. 这个类在执行时，其实主要的是利用到了DefaultMQAdminExt类提供的多个方法。因此可以看出：运维相关的命令
+ *      可以使用DefaultMQAdminExt类提供的多个方法，将它们组合使用，实现特定的需求*/
 public class StatsAllSubCommand implements SubCommand {
     public static void printTopicDetail(final DefaultMQAdminExt admin, final String topic, final boolean activeTopic)
         throws RemotingException, MQClientException, InterruptedException, MQBrokerException {
@@ -162,13 +167,13 @@ public class StatsAllSubCommand implements SubCommand {
 
     @Override
     public void execute(CommandLine commandLine, Options options, RPCHook rpcHook) throws SubCommandException {
+        /**step1:构建defaultMQAdminExt对象，将对象的名字设置为当前的时间戳。。。rocketmq原生支持的命令都是基于这个对象*/
         DefaultMQAdminExt defaultMQAdminExt = new DefaultMQAdminExt(rpcHook);
-
         defaultMQAdminExt.setInstanceName(Long.toString(System.currentTimeMillis()));
 
         try {
             defaultMQAdminExt.start();
-
+            /**step2：获取所有的topic*/
             TopicList topicList = defaultMQAdminExt.fetchAllTopicList();
 
             System.out.printf("%-64s  %-64s %12s %11s %11s %14s %14s%n",
@@ -183,7 +188,8 @@ public class StatsAllSubCommand implements SubCommand {
 
             boolean activeTopic = commandLine.hasOption('a');
             String selectTopic = commandLine.getOptionValue('t');
-
+            /**step3：遍历topic的路由信息，向所有的Broker查看关于该topic的统计信息，具体由DefaultMQAdminExt的
+             viewBrokerStatsData()方法实现*/
             for (String topic : topicList.getTopicList()) {
                 if (topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX) || topic.startsWith(MixAll.DLQ_GROUP_TOPIC_PREFIX)) {
                     continue;

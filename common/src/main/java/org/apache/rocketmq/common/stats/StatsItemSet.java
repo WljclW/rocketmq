@@ -30,8 +30,10 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
         以指标TOPIC_PUT_NUMS对应的StatsItemSet为例，StatsItemSet存储的是主题写入数量（消息发送
         数量），内部维护的statsItemTable的key为主题的名称，StatsItem为该主题对应的统计信息
  【说明】
-    1. 方法类似，可以看addValue方法的注释来启发其他方法的理解*/
+    1. 记录的方法类似，可以看addValue方法的注释来启发其他方法的理解*/
 public class StatsItemSet {
+    /*statsItemTable就是一类指标的集合。
+    * 键：比如某个topic名字；值：StatsItem封装的具体的项*/
     private final ConcurrentMap<String/* key */, StatsItem> statsItemTable =
         new ConcurrentHashMap<>(128);
 
@@ -72,7 +74,7 @@ public class StatsItemSet {
                 }
             }
         }, 0, 10, TimeUnit.MINUTES);
-
+        /*天级别的采样，每一个小时执行一次*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -163,11 +165,11 @@ public class StatsItemSet {
     }
 
     /**[]:
-     * 详细思路：根据统计key，例如topic的名称，从ConcurrentMap<String,StatsItem>statsItemTable中获
-     * 取键statsKey对应的统计信息。比如：
-     * BrokerStatsManager#incTopicPutNums方法中会用到addValue方法，此时：statsKey对应的就是topic。
-     * topic的写入总数用StatsItem表示，如果statsItemTable中未包含该topic对应的StatsItem，则创建一个
-     * 新的对象，然后通过原子的方式新增Value与Times这两个属性的值。
+     * 详细思路：根据统计key(形参statsKe指定)，例如topic的名称，从ConcurrentMap<String,StatsItem>statsItemTable中获
+     *      取键statsKey对应的统计信息(由方法getAndCreateStatsItem完成这个逻辑)。比如：
+     * BrokerStatsManager#incTopicPutNums方法中会用到addValue方法，此时：statsKey对应的就是topic。topic的写入总数
+     *      用StatsItem表示，如果statsItemTable中未包含该topic对应的StatsItem，则创建一个新的对象，然后通过原子的方式
+     *      新增Value与Times这两个属性的值。
      * 经过上述的步骤就完成了topic写入数量的统计*/
     public void addValue(final String statsKey, final int incValue, final int incTimes) {
         StatsItem statsItem = this.getAndCreateStatsItem(statsKey);

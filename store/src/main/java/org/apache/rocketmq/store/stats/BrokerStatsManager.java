@@ -40,7 +40,9 @@ import org.apache.rocketmq.common.utils.ThreadUtils;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
-/**Broker端的监控数据采集实现类*/
+/**【】：Broker端的监控数据采集实现类
+ * 【】：
+ *    1.最重要的参数是statsTable，存放了统计数据的集合*/
 public class BrokerStatsManager {
 
     @Deprecated public static final String QUEUE_PUT_NUMS = Stats.QUEUE_PUT_NUMS;
