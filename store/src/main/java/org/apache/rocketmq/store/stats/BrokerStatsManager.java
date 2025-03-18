@@ -426,7 +426,6 @@ public class BrokerStatsManager {
     }
 
     /**
-     * @description:.。。
      * @param topic:
      * @param num: 本次写入的消息条数
      * @param times:默认传入1，表示消息incTopicPutNums被调用的次数，也体现了消息写入数量发生变化的次数

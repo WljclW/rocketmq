@@ -710,25 +710,35 @@ public class RouteInfoManager {
         return Collections.min(brokerData.getBrokerAddrs().keySet()) > 0;
     }
 
+    /**[]：用于根据主题（Topic）从路由表中提取路由信息（TopicRouteData）
+     * */
     public TopicRouteData pickupTopicRouteData(final String topic) {
+        /*初始化一个TopicRouteData作为返回结果*/
         TopicRouteData topicRouteData = new TopicRouteData();
         boolean foundQueueData = false;
         boolean foundBrokerData = false;
         List<BrokerData> brokerDataList = new LinkedList<>();
         topicRouteData.setBrokerDatas(brokerDataList);
-
         HashMap<String, List<String>> filterServerMap = new HashMap<>();
         topicRouteData.setFilterServerTable(filterServerMap);
 
         try {
             this.lock.readLock().lockInterruptibly();
-            Map<String, QueueData> queueDataMap = this.topicQueueTable.get(topic);  // 从topicQueueTable中获取topic对应的QueueData
+            /*从 topicQueueTable 中获取指定主题的队列分布信息（queueDataMap）*/
+            Map<String, QueueData> queueDataMap = this.topicQueueTable.get(topic);
             if (queueDataMap != null) {
+                /*如果 queueDataMap 不为空，将队列数据（QueueData）添加到 TopicRouteData 中，
+                    并设置 foundQueueData 为 true。*/
                 topicRouteData.setQueueDatas(new ArrayList<>(queueDataMap.values()));
                 foundQueueData = true;
-
+                /*提取所有队列数据中涉及的 Broker 名称集合（brokerNameSet），以便后续查找对应
+                    的 Broker 数据。*/
                 Set<String> brokerNameSet = new HashSet<>(queueDataMap.keySet());
-
+                /*遍历 brokerNameSet，从 brokerAddrTable 中查找每个 Broker 的地址信息（BrokerData）。
+                    如果找到对应的 BrokerData，将其克隆后添加到 brokerDataList 中，并设置 foundBrokerData
+                        为 true。
+                    如果存在过滤服务器信息（filterServerTable），则提取对应的过滤服务器列表，并存储到
+                        filterServerMap 中。*/
                 for (String brokerName : brokerNameSet) {
                     BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                     if (null == brokerData) {
@@ -756,11 +766,11 @@ public class RouteInfoManager {
         }
 
         log.debug("pickupTopicRouteData {} {}", topic, topicRouteData);
-
+        /*如果同时找到了队列数据和 Broker 数据，则继续处理；否则返回 null。*/
         if (foundBrokerData && foundQueueData) {
 
             topicRouteData.setTopicQueueMappingByBroker(this.topicQueueMappingInfoTable.get(topic));
-
+            //如果未启用 Acting Master 功能（isSupportActingMaster()），直接返回路由信息。
             if (!namesrvConfig.isSupportActingMaster()) {
                 return topicRouteData;
             }
@@ -774,7 +784,9 @@ public class RouteInfoManager {
             }
 
             boolean needActingMaster = false;
-
+            /*检查是否存在没有主节点的 Broker：
+                如果某个 Broker 没有主节点（即 brokerAddrs 中不包含 MASTER_ID），则需要启
+                    用 Acting Master。*/
             for (final BrokerData brokerData : topicRouteData.getBrokerDatas()) {
                 if (brokerData.getBrokerAddrs().size() != 0
                     && !brokerData.getBrokerAddrs().containsKey(MixAll.MASTER_ID)) {
@@ -782,11 +794,14 @@ public class RouteInfoManager {
                     break;
                 }
             }
-
+            //如果不需要 Acting Master，直接返回路由信息。
             if (!needActingMaster) {
                 return topicRouteData;
             }
-
+            /*遍历所有 Broker 数据，检查是否需要设置 Acting Master：
+                如果某个 Broker 没有主节点，并且启用了 Acting Master 功能，则选择最小的 Broker ID
+                    作为 Acting Master。将 Acting Master 的地址替换为 MASTER_ID。
+                这种设计确保即使主节点不可用，系统仍然能够通过 Acting Master 继续提供服务。*/
             for (final BrokerData brokerData : topicRouteData.getBrokerDatas()) {
                 final HashMap<Long, String> brokerAddrs = brokerData.getBrokerAddrs();
                 if (brokerAddrs.size() == 0 || brokerAddrs.containsKey(MixAll.MASTER_ID) || !brokerData.isEnableActingMaster()) {
