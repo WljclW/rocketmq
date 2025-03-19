@@ -230,6 +230,7 @@ public class DefaultMessageStore implements MessageStore {
         this.aliveReplicasNum = messageStoreConfig.getTotalReplicas();
         this.brokerStatsManager = brokerStatsManager;
         this.topicConfigTable = topicConfigTable;
+        /*初始化mappedFile分配服务*/
         this.allocateMappedFileService = new AllocateMappedFileService(this);
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);

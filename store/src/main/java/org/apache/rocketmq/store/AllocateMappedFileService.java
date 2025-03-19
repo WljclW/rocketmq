@@ -141,7 +141,7 @@ public class AllocateMappedFileService extends ServiceThread {
 
     public void run() {
         log.info(this.getServiceName() + " service started");
-
+        /*如果服务没有停止，循环做 文件映射 操作*/
         while (!this.isStopped() && this.mmapOperation()) {
 
         }

@@ -233,7 +233,7 @@ public class BrokerController {
         Broker端————
         remotingServer可以处理客户端所有请求，如：生产者发送消息的请求，消费者拉取消息的请求。
         fastRemotingServer功能基本与remotingServer相同，唯一不同的是不可以处理消费者拉取消息的请求。
-        Broker在向NameServer注册时，只会上报remotingServer监听的listenPort端口。
+            Broker在向NameServer注册时，只会上报remotingServer监听的listenPort端口。
         客户端————
         默认情况下，生产者发送消息是请求fastRemotingServer，我们也可以通过配置让其请求remotingServer；消
         费者拉取消息只能请求remotingServer。*/
@@ -471,7 +471,7 @@ public class BrokerController {
     protected void initializeRemotingServer() throws CloneNotSupportedException {
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
         NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
-
+        //设置监听的端口号为10911-2
         int listeningPort = nettyServerConfig.getListenPort() - 2;
         if (listeningPort < 0) {
             listeningPort = 0;
@@ -483,11 +483,12 @@ public class BrokerController {
 
     /**
      * Initialize resources including remoting server and thread executors.
+     * 初始化各种线程池
      */
     protected void initializeResources() {
         this.scheduledExecutorService = ThreadUtils.newScheduledThreadPool(1,
             new ThreadFactoryImpl("BrokerControllerScheduledThread", true, getBrokerIdentity()));
-
+        /*创建生产者生产消息的服务*/
         this.sendMessageExecutor = ThreadUtils.newThreadPoolExecutor(
             this.brokerConfig.getSendMessageThreadPoolNums(),
             this.brokerConfig.getSendMessageThreadPoolNums(),
@@ -495,7 +496,7 @@ public class BrokerController {
             TimeUnit.MILLISECONDS,
             this.sendThreadPoolQueue,
             new ThreadFactoryImpl("SendMessageThread_", getBrokerIdentity()));
-
+        /*创建消费者消费消息的服务*/
         this.pullMessageExecutor = ThreadUtils.newThreadPoolExecutor(
             this.brokerConfig.getPullMessageThreadPoolNums(),
             this.brokerConfig.getPullMessageThreadPoolNums(),
@@ -603,6 +604,7 @@ public class BrokerController {
     protected void initializeBrokerScheduledTasks() {
         final long initialDelay = UtilAll.computeNextMorningTimeMillis() - System.currentTimeMillis();
         final long period = TimeUnit.DAYS.toMillis(1);
+        /*每隔一天记录一次，Broker的统计信息(在record()进行记录，包括：收到消息数量、消息消费数量)*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -613,7 +615,7 @@ public class BrokerController {
                 }
             }
         }, initialDelay, period, TimeUnit.MILLISECONDS);
-
+        /*每隔5秒，将消费者的消费偏移量持久化到磁盘*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -625,7 +627,7 @@ public class BrokerController {
                 }
             }
         }, 1000 * 10, this.brokerConfig.getFlushConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
-
+        /*每隔10秒，持久化一次消费者过滤信息、顺序消息信息*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -639,7 +641,7 @@ public class BrokerController {
                 }
             }
         }, 1000 * 10, 1000 * 10, TimeUnit.MILLISECONDS);
-
+        /*每隔3秒，执行Broker保护机制——即消费者组消费太慢时，就阻止这个消费者组继续消费*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -650,7 +652,7 @@ public class BrokerController {
                 }
             }
         }, 3, 3, TimeUnit.MINUTES);
-
+        /*每隔一秒，打印一次阻塞队列的水位信息(各种阻塞队列中当前元素的数量、头部任务的延迟时间)*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -674,8 +676,9 @@ public class BrokerController {
                 }
             }
         }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
-
+        /*如果是传统的主从同步模式，则执行下面if块的逻辑*/
         if (!messageStoreConfig.isEnableDLegerCommitLog() && !messageStoreConfig.isDuplicationEnable() && !brokerConfig.isEnableControllerMode()) {
+            /**情况1：如果是从Broker*/
             if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
                 if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= HA_ADDRESS_MIN_LENGTH) {
                     this.messageStore.updateHaMasterAddress(this.messageStoreConfig.getHaMasterAddress());
@@ -683,12 +686,13 @@ public class BrokerController {
                 } else {
                     this.updateMasterHAServerAddrPeriodically = true;
                 }
-
+                /*如果是从服务器，每隔3s进行一次同步任务*/
                 this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                     @Override
                     public void run() {
                         try {
+                            //如果距离上次同步时间超过60秒，则执行全量同步
                             if (System.currentTimeMillis() - lastSyncTimeMs > 60 * 1000) {
                                 BrokerController.this.getSlaveSynchronize().syncAll();
                                 lastSyncTimeMs = System.currentTimeMillis();
@@ -705,6 +709,7 @@ public class BrokerController {
                 }, 1000 * 10, 3 * 1000, TimeUnit.MILLISECONDS);
 
             } else {
+                /*如果是主服务器，每隔60秒打印主从服务器之间的差异*/
                 this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                     @Override
@@ -868,9 +873,9 @@ public class BrokerController {
 
             initializeRemotingServer();
 
-            initializeResources();
+            initializeResources(); //初始化后面处理请求会用到的各种线程池
 
-            registerProcessor();
+            registerProcessor(); //注册处理器(注册时指定该处理器对应的requestCode、处理时使用的线程池)
 
             initializeScheduledTasks();
 
@@ -1047,14 +1052,15 @@ public class BrokerController {
         }
     }
 
-    /**完成Processors的注册。。。后续Broker就会根据请求码的不同，来调用处理器进行请求的处理*/
+    /**完成Processors的注册。。。后续Broker就会根据客户端(生产者、消费者)发来请求的请求码，来调用对应的处理器进行请求的处理。
+     * 并且，根据不同的处理器，会使用不同的线程池(这些线程池的初始化是在当前类的initializeResources()方法)*/
     public void registerProcessor() {
         /*
          * SendMessageProcessor
          */
         sendMessageProcessor.registerSendMessageHook(sendMessageHookList);
         sendMessageProcessor.registerConsumeMessageHook(consumeMessageHookList);
-
+        //注册生产者发来 生产消息请求 的处理器
         this.remotingServer.registerProcessor(RequestCode.SEND_MESSAGE, sendMessageProcessor, this.sendMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.SEND_MESSAGE_V2, sendMessageProcessor, this.sendMessageExecutor);
         this.remotingServer.registerProcessor(RequestCode.SEND_BATCH_MESSAGE, sendMessageProcessor, this.sendMessageExecutor);
@@ -1175,10 +1181,14 @@ public class BrokerController {
         this.brokerStats = brokerStats;
     }
 
+    /**为了保护Broker的状态正常，如果某个消费者组消费太慢，就阻止这个消费者组继续消费*/
     public void protectBroker() {
+        /*如果开启了”消费太慢时阻止继续消费“配置*/
         if (this.brokerConfig.isDisableConsumeIfConsumerReadSlowly()) {
+            /*遍历消费者组的积压统计信息*/
             for (Map.Entry<String, MomentStatsItem> next : this.brokerStatsManager.getMomentStatsItemSetFallSize().getStatsItemTable().entrySet()) {
                 final long fallBehindBytes = next.getValue().getValue().get();
+                /*如果积压时间过长，则阻止这个消费者组继续消费消息*/
                 if (fallBehindBytes > this.brokerConfig.getConsumerFallbehindThreshold()) {
                     final String[] split = next.getValue().getStatsKey().split("@");
                     final String group = split[2];
