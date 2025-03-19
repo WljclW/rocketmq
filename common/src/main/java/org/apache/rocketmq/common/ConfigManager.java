@@ -33,7 +33,8 @@ public abstract class ConfigManager {
     protected RocksDBConfigManager rocksDBConfigManager;
 
     /**【作用】加载子类方法configFilePath()指定的文件，并调用decode方法解析(decode方法由子类重写)
-     * 【流程】从子类中拿到文件名(如果有非空内容)，则尝试加载*/
+     * 【流程】类似于模板方法，父类这里制定了加载的流程，但是具体的文件名等信息是子类通过重写父类的
+     *      某些方法提供。。从子类中拿到文件名(如果有非空内容)，则尝试加载*/
     public boolean load() {
         String fileName = null;
         try {

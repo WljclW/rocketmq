@@ -528,6 +528,8 @@ public class MessageStoreConfig {
         this.mappedFileSizeCommitLog = mappedFileSizeCommitLog;
     }
 
+    /**用于控制是否启用基于 RocksDB 的存储引擎。RocksDB 是一个高性能的嵌入式键值存储引擎，
+     * RocketMQ 可以选择使用它来替代默认的消息存储引擎（如基于文件系统的存储）*/
     public boolean isEnableRocksDBStore() {
         return StoreType.DEFAULT_ROCKSDB.getStoreType().equalsIgnoreCase(this.storeType);
     }

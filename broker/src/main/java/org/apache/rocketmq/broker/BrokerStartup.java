@@ -79,14 +79,21 @@ public class BrokerStartup {
         }
     }
 
+    /**[]：设置MQ版本号；解析命令行参数 以及 配置文件(会封装到4个对象)，创建BrokerController。
+     * */
     public static BrokerController buildBrokerController(String[] args) throws Exception {
+        //MQ版本号
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
-
+        /*Broker启动时，需要使用的四个配置类(用于封装用户的配置信息)
+        * BrokerConfig：Broker的相关配置
+        * NettyServerConfig：netty服务端的相关配置。封装了作为堆外提供消息读写操作的MQ服务器信息
+        * NettyClientConfig：作为namesrv客户端的相关配置
+        * MessageStoreConfig：消息存储相关配置*/
         final BrokerConfig brokerConfig = new BrokerConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
         final NettyClientConfig nettyClientConfig = new NettyClientConfig();
         final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
-        nettyServerConfig.setListenPort(10911);
+        nettyServerConfig.setListenPort(10911); //设置netty服务端的监听端口
         messageStoreConfig.setHaListenPort(0);
 
         Options options = ServerUtil.buildCommandlineOptions(new Options());
@@ -95,8 +102,10 @@ public class BrokerStartup {
         if (null == commandLine) {
             System.exit(-1);
         }
-
+        /**从此开始到方法结束前两行，做的事：解析命令行 以及 配置文件，将所得配置信息封装到
+         * brokerConfig、nettyServerConfig、nettyClientConfig、messageStoreConfig*/
         Properties properties = null;
+        /*处理启动Broker时，命令中的-c参数*/
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
@@ -105,7 +114,6 @@ public class BrokerStartup {
                 properties = CONFIG_FILE_HELPER.loadConfig();
             }
         }
-
         if (properties != null) {
             properties2SystemEnv(properties);
             MixAll.properties2Object(properties, brokerConfig);
@@ -113,7 +121,7 @@ public class BrokerStartup {
             MixAll.properties2Object(properties, nettyClientConfig);
             MixAll.properties2Object(properties, messageStoreConfig);
         }
-
+        //处理其他命令，注入到BrokerConfig中，比如：-n命令
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
         if (null == brokerConfig.getRocketmqHome()) {
             System.out.printf("Please set the %s variable in your environment " +
@@ -135,7 +143,7 @@ public class BrokerStartup {
                 System.exit(-3);
             }
         }
-
+        /*如果Broker的角色时从，设置“消息占用内存的最大比率”比默认值再小10%*/
         if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
             int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
             messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
@@ -167,7 +175,7 @@ public class BrokerStartup {
             System.out.printf("The config enableControllerMode and enableDLegerCommitLog cannot both be true.%n");
             System.exit(-4);
         }
-
+        //高可用端口，10912
         if (messageStoreConfig.getHaListenPort() <= 0) {
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
         }
@@ -203,11 +211,11 @@ public class BrokerStartup {
         MixAll.printObjectProperties(log, nettyServerConfig);
         MixAll.printObjectProperties(log, nettyClientConfig);
         MixAll.printObjectProperties(log, messageStoreConfig);
-
+        /**根据四个配置类，创建BrokerController*/
         final BrokerController controller = new BrokerController(
             brokerConfig, nettyServerConfig, nettyClientConfig, messageStoreConfig);
 
-        // Remember all configs to prevent discard
+        // Remember all configs to prevent discard。。配置信息缓存到Broker本地内存
         controller.getConfiguration().registerConfig(properties);
 
         return controller;
@@ -236,8 +244,9 @@ public class BrokerStartup {
 
     public static BrokerController createBrokerController(String[] args) {
         try {
+            /*buildBrokerController方法完成命令行、配置文件的解析，new一个BrokerController对象*/
             BrokerController controller = buildBrokerController(args);
-            boolean initResult = controller.initialize(); //会完成处理器的注册
+            boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);
