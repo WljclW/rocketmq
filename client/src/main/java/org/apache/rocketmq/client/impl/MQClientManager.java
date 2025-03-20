@@ -28,7 +28,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
  * 【总述】负责MQClientInstance(producer和consumer的底层类，他们在rocketmq中都属于客户端)的创建和管理，ProducerAccumulator的创建和管理。
- * 整个 JVM 实例中只存在一个MQClientManager实例。维护一个MQClientInstance缓存表ConcurrentMap<String,MQClientInstance> factoryTable
+ * 一个 JVM 实例中只存在一个MQClientManager实例。维护一个MQClientInstance缓存表ConcurrentMap<String,MQClientInstance> factoryTable
  *      即：同一个clientId只会创建一个MQClientInstance实例。
  * MQClientInstance是客户端各种类型的Consumer和Producer的底层类。这个类首先从NameServer获取并保存各种配置信息，比如
  *      Topic的Route信息。同时MQClientInstance还会通过MQClientAPIImpl类实现消息的收发，也就是从Broker获取消息或者发
@@ -63,15 +63,15 @@ public class MQClientManager {
         return getOrCreateMQClientInstance(clientConfig, null);
     }
     /**
-     * 【作用】创建或者获取当前jvm里面的clientId对应的MQClientInstance实例
+     * 【作用】创建 或者 获取 当前属于参数clientConfig的MQClientInstance实例
      * 1. 整个 JVM 实例中只存在一个MQClientManager实例，维护一个 MQClientlnstance 缓存表
      *      ConcurrentMap<String， MQClientinstance＞ factoryTable = new ConcurrentHashMap<String， MQClientlnstance＞（），
      *      也就是同一个 clientId 只会创建一个MQClientinstance。(cluster模式下，同一个jvm中生产者消费者的clientId是不一样的，因为
      *      clientId中包含了"org.apache.rocketmq.client.ClientConfig#instanceName"，但是在DefaultMQPushConsumerImpl#start()方
      *      法中，会完成对这个属性的修改为pid+纳秒数，防止同一个jvm的多个重名为默认值"DEFAULT")
-     * 2. clientId为客户端IP+instance+unitname（可选），如果在同一台物理服务器部署两个应用程序，应用程序的clientId岂不是相同，这样是不是会造成混乱？
-     *      为了避免出现这个问题，如果instance为默认值DEFAULT，RocketMQ会自动将instance设置为进程ID，这样就避免了不同进程相
-            互影响，但同一个JVM中相同clientId的消费者和生产者在启动时获取的MQClientInstane实例都是同一个
+     * 2. clientId为客户端IP+instance+unitname（可选），如果在同一台物理服务器部署两个应用程序，应用程序的clientId岂不是相同，这样
+     *      是不是会造成混乱？为了避免出现这个问题，如果instance为默认值DEFAULT，RocketMQ会自动将instance设置为进程ID，这样就避免了
+     *      不同进程相互影响
      * */
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();   // 根据客户端配置生成唯一的客户端ID
@@ -94,8 +94,11 @@ public class MQClientManager {
 
         return instance;    //返回客户端实例
     }
+
+    /**返回ClientConfig对象对应的ProduceAccumulator对象，或者创建一个属于自己的。*/
     public ProduceAccumulator getOrCreateProduceAccumulator(final ClientConfig clientConfig) {
         String clientId = clientConfig.buildMQClientId();
+        /*先获取，没有的话再创建。创建后在放的时候如果发现已经有了，就返回已有的*/
         ProduceAccumulator accumulator = this.accumulatorTable.get(clientId);
         if (null == accumulator) {
             accumulator = new ProduceAccumulator(clientId);

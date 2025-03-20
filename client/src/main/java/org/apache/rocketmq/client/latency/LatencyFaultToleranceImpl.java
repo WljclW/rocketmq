@@ -56,6 +56,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         this.serviceDetector = serviceDetector;
     }
 
+    /**用于检测 Broker 可用性的逻辑实现。它通过定期检查每个 Broker 的状态，判断其是否可达，并更新其可用性标志*/
     public void detectByOneRound() {
         for (Map.Entry<String, FaultItem> item : this.faultItemTable.entrySet()) {
             FaultItem brokerItem = item.getValue();

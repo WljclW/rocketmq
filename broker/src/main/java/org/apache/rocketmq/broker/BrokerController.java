@@ -307,6 +307,7 @@ public class BrokerController {
         this(brokerConfig, null, null, messageStoreConfig);
     }
 
+    /**创建BrokerController对象，BrokerController其实是Broker启动过程中最重要的东西。用于设置各种管理器、线程池、监听器和服务。*/
     public BrokerController(
         final BrokerConfig brokerConfig,
         final NettyServerConfig nettyServerConfig,
@@ -318,10 +319,14 @@ public class BrokerController {
         this.nettyServerConfig = nettyServerConfig;
         this.nettyClientConfig = nettyClientConfig;
         this.messageStoreConfig = messageStoreConfig;
+        /*根据ip以及端口设置storeHost字段、给字段brokerStatsManager赋值、给字段broadcastOffsetManager赋值*/
         this.setStoreHost(new InetSocketAddress(this.getBrokerConfig().getBrokerIP1(), getListenPort()));
+        //管理Broker的统计信息(rocketmq中记录统计信息的类通常是xxxstatsManager)
         this.brokerStatsManager = messageStoreConfig.isEnableLmq() ? new LmqBrokerStatsManager(this.brokerConfig.getBrokerClusterName(), this.brokerConfig.isEnableDetailStat()) : new BrokerStatsManager(this.brokerConfig.getBrokerClusterName(), this.brokerConfig.isEnableDetailStat());
+        //管理广播模式下的偏移量
         this.broadcastOffsetManager = new BroadcastOffsetManager(this);
-        /*topicConfigManager:管理Topic和Topic相关的配置关系，会读取store/config/topics.json文件.
+        /* 创建三个属性，这三个属性的具体类型取决于isEnableRocksDBStore()属性 以及 isEnableLmq()
+        * topicConfigManager:管理Topic和Topic相关的配置关系(比如主题对应的队列数量、权限等)，会读取store/config/topics.json文件.
         * subscriptionGroupManager:订阅关系管理类
         * consumerOffsetManager：管理Consumer消费进度；会读取store/config/consumerOffset.json文件，其内部维护
         *       了一个Map结构offsetTable*/
@@ -338,7 +343,7 @@ public class BrokerController {
         /*处理Consumer拉取消息请求的类..针对请求码是RequestCode.PULL_MESSAGE的请求*/
         this.pullMessageProcessor = new PullMessageProcessor(this);
         this.peekMessageProcessor = new PeekMessageProcessor(this);
-        /*Consumer使用Push方式的长轮询机制拉取请求时，请求可以被挂起，当有消息到达时进行推送处理的服务*/
+        /*Consumer使用Push方式的长轮询机制拉取请求时，请求可以被挂起！！同时当有消息到达时进行推送处理的服务*/
         this.pullRequestHoldService = messageStoreConfig.isEnableLmq() ? new LmqPullRequestHoldService(this) : new PullRequestHoldService(this);
         this.popMessageProcessor = new PopMessageProcessor(this);
         this.notificationProcessor = new NotificationProcessor(this);
@@ -351,6 +356,7 @@ public class BrokerController {
         this.messageArrivingListener = new NotifyMessageArrivingListener(this.pullRequestHoldService, this.popMessageProcessor, this.notificationProcessor);
         // 消费者ID变化监听器
         this.consumerIdsChangeListener = new DefaultConsumerIdsChangeListener(this);
+        //消费者管理类
         this.consumerManager = new ConsumerManager(this.consumerIdsChangeListener, this.brokerStatsManager, this.brokerConfig);
         // 生产者管理类， 按照Topic进行分类
         this.producerManager = new ProducerManager(this.brokerStatsManager);
@@ -358,15 +364,17 @@ public class BrokerController {
         this.consumerFilterManager = new ConsumerFilterManager(this);
         this.consumerOrderInfoManager = new ConsumerOrderInfoManager(this);
         this.popInflightMessageCounter = new PopInflightMessageCounter(this);
-        // 心跳连接处理类， 用于清除不活动的链接。
+        // 心跳连接处理类， 用于清除不活动的链接(”链接“就理解为某一个channel——即是链接在程序中的抽象)。
         this.clientHousekeepingService = new ClientHousekeepingService(this);
         // Console控制台获取Broker信息使用
         this.broker2Client = new Broker2Client(this);
         this.scheduleMessageService = new ScheduleMessageService(this);
+        //处理消费者需要消费冷数据时挂起请求 的服务
         this.coldDataPullRequestHoldService = new ColdDataPullRequestHoldService(this);
+        //访问冷数据时的流控服务
         this.coldDataCgCtrService = new ColdDataCgCtrService(this);
 
-        if (nettyClientConfig != null) {
+        if (nettyClientConfig != null) { //如果配置了netty客户端
             /*Broker对外访问的API*/
             this.brokerOuterAPI = new BrokerOuterAPI(nettyClientConfig);
         }
@@ -376,7 +384,7 @@ public class BrokerController {
         /*Broker主从同步进度管理类*/
         this.slaveSynchronize = new SlaveSynchronize(this);
         this.endTransactionProcessor = new EndTransactionProcessor(this);
-        /*各种线程池的阻塞队列*/
+        /*为不同类型的请求，创建各种线程池的阻塞队列*/
         //①发送消息线程池队列
         this.sendThreadPoolQueue = new LinkedBlockingQueue<>(this.brokerConfig.getSendThreadPoolQueueCapacity());
         this.putThreadPoolQueue = new LinkedBlockingQueue<>(this.brokerConfig.getPutThreadPoolQueueCapacity());
@@ -1578,10 +1586,10 @@ public class BrokerController {
         return this.brokerConfig.getBrokerIP1() + ":" + this.nettyServerConfig.getListenPort();
     }
 
+    /**启动基础服务。基本上会将构造器中初始化的各种服务都启动起来*/
     protected void startBasicService() throws Exception {
         /**
-         * 开启messageStore服务：作用是将消息写入到CommitLog文件
-         * rocketmq有一个默认的实现————DefaultMessageStore
+         * 开启messageStore服务：作用是将消息写入到CommitLog文件rocketmq有一个默认的实现————DefaultMessageStore
          * */
         if (this.messageStore != null) {
             this.messageStore.start();
@@ -1684,9 +1692,10 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
-
+        /**???  */
         this.shouldStartTime = System.currentTimeMillis() + messageStoreConfig.getDisappearTimeAfterStart();
-
+        /*如果启用了多副本模式（TotalReplicas > 1）且允许 Slave 充当 Master，则将 Broker 标记为隔离状态（isIsolated = true）。
+            说明：隔离状态的 Broker 不会向 NameServer 注册，也不会参与正常的路由分发。*/
         if (messageStoreConfig.getTotalReplicas() > 1 && this.brokerConfig.isEnableSlaveActingMaster()) {
             isIsolated = true;
         }
@@ -1696,7 +1705,7 @@ public class BrokerController {
         }
 
         startBasicService();
-
+        /*如果 Broker 未被隔离且未启用 Dledger 或消息复制，则尝试注册到 NameServer。*/
         if (!isIsolated && !this.messageStoreConfig.isEnableDLegerCommitLog() && !this.messageStoreConfig.isDuplicationEnable()) {
             changeSpecialServiceStatus(this.brokerConfig.getBrokerId() == MixAll.MASTER_ID);
             this.registerBrokerAll(true, false, true);
@@ -1710,7 +1719,7 @@ public class BrokerController {
                         BrokerController.LOG.info("Register to namesrv after {}", shouldStartTime);
                         return;
                     }
-                    if (isIsolated) {
+                    if (isIsolated) { /**如果是被隔离的，跳过。为什么？？*/
                         BrokerController.LOG.info("Skip register for broker is isolated");
                         return;
                     }
@@ -1720,7 +1729,7 @@ public class BrokerController {
                 }
             }
         }, 1000 * 10, Math.max(10000, Math.min(brokerConfig.getRegisterNameServerPeriod(), 60000)), TimeUnit.MILLISECONDS));
-
+        /*如果启用了slave充当master的模式，则定期发送心跳包 并 同步成员组的信息*/
         if (this.brokerConfig.isEnableSlaveActingMaster()) {
             scheduleSendHeartbeat();
 
@@ -1743,7 +1752,7 @@ public class BrokerController {
         if (brokerConfig.isSkipPreOnline()) {
             startServiceWithoutCondition();
         }
-
+        /*刷新元数据。确保和namesrv的保持一致*/
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {

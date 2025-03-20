@@ -108,7 +108,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final ArrayList<SendMessageHook> sendMessageHookList = new ArrayList<>();
     private final ArrayList<EndTransactionHook> endTransactionHookList = new ArrayList<>();
     private final RPCHook rpcHook;
+    /*RocketMQ 中用于管理异步消息发送任务的线程池队列。*/
     private final BlockingQueue<Runnable> asyncSenderThreadPoolQueue;
+    /*RocketMQ 中用于处理异步消息发送任务的线程池。它是生产者异步发送模式的核心组件，负责
+        从 asyncSenderThreadPoolQueue 中取出任务并执行消息发送操作。*/
     private final ExecutorService defaultAsyncSenderExecutor;
     protected BlockingQueue<Runnable> checkRequestQueue;
     protected ExecutorService checkExecutor;
@@ -134,7 +137,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
         this.defaultMQProducer = defaultMQProducer; //保证了这个DefaultMQProducerImpl类对象也会持有DefaultMQProducer对象
         this.rpcHook = rpcHook;
-
+        /*创建异步发送的线程池*/
         this.asyncSenderThreadPoolQueue = new LinkedBlockingQueue<>(50000);
         this.defaultAsyncSenderExecutor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
@@ -143,13 +146,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             TimeUnit.MILLISECONDS,
             this.asyncSenderThreadPoolQueue,
             new ThreadFactoryImpl("AsyncSenderExecutor_"));
+        /*BackpressureForAsyncMode模式下，异步消息同时发送的最小并行度是10。。并且用Semaphore类型的信号量控制*/
         if (defaultMQProducer.getBackPressureForAsyncSendNum() > 10) {
             semaphoreAsyncSendNum = new Semaphore(Math.max(defaultMQProducer.getBackPressureForAsyncSendNum(), 10), true);
         } else {
             semaphoreAsyncSendNum = new Semaphore(10, true);
             log.info("semaphoreAsyncSendNum can not be smaller than 10.");
         }
-
+        /*设置异步发送时，同时发送消息的最大总大小，最小是1M.。也是用Semaphore控制*/
         if (defaultMQProducer.getBackPressureForAsyncSendSize() > 1024 * 1024) {
             semaphoreAsyncSendSize = new Semaphore(Math.max(defaultMQProducer.getBackPressureForAsyncSendSize(), 1024 * 1024), true);
         } else {
@@ -249,17 +253,18 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * 2.使用到了状态模式的设计思想。。去背在于没有将状态模式封装到专门的类中
      * */
     public void start(final boolean startFactory) throws MQClientException {
-        //根据当前服务端状态的不同执行不同的逻辑。。初始值见上面的默认初始化————private ServiceState serviceState = ServiceState.CREATE_JUST;
+        /*根据当前服务端状态的不同执行不同的逻辑。。初始值见上面的默认初始化————
+            private ServiceState serviceState = ServiceState.CREATE_JUST;*/
         switch (this.serviceState) {
-            case CREATE_JUST:   //是一个中间状态
+            case CREATE_JUST:   //是一个中间状态(创建完成但非运行态)
                 this.serviceState = ServiceState.START_FAILED;
 
-                this.checkConfig(); //检查配置文件。。主要是检查 producerGroup(生产者组名) 的命名是否合法
-
+                this.checkConfig(); //检查设置的producerGroup(生产者组名)是否合法
+                /*如果生产者组不是CLIENT_INNER_PRODUCER并且instanceName是DEFAULT的话，修改instanceName为”pid#纳秒数“*/
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
-                    this.defaultMQProducer.changeInstanceNameToPID();   // 如果生产者组不是CLIENT_INNER_PRODUCER
+                    this.defaultMQProducer.changeInstanceNameToPID();
                 }
-                // 获取 或 创建MQ客户端工厂实例。mQClientFactory其实是MQClientInstance的对象
+                /*获取 或 创建MQ客户端工厂实例。mQClientFactory其实是MQClientInstance的对象*/
                 this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
                 // 尝试在MQ客户端工厂中注册生产者组。。向MQClientInstance注册服务，将
                 // 当前生产者加入MQClientInstance管理，方便后续调用网络请求、进行心跳检测等。

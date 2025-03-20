@@ -17,6 +17,7 @@
 package org.apache.rocketmq.client.latency;
 
 /**
+ * 检测远端的服务是否正常
  * Detect whether the remote service state is normal.
  */
 public interface ServiceDetector {

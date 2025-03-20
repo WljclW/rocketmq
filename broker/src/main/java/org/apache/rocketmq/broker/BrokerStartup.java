@@ -79,7 +79,8 @@ public class BrokerStartup {
         }
     }
 
-    /**[]：设置MQ版本号；解析命令行参数 以及 配置文件(会封装到4个对象)，利用封装的4个配置对象创建BrokerController。
+    /**[]：设置MQ版本号；解析命令行参数 以及 配置文件(会封装到4个对象)，利用封装的4个配置对象创建BrokerController。4个配置对象分
+     *      别是brokerConfig、nettyServerConfig、nettyClientConfig、messageStoreConfig
      * */
     public static BrokerController buildBrokerController(String[] args) throws Exception {
         //MQ版本号

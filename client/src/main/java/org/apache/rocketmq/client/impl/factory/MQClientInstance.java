@@ -1154,7 +1154,7 @@ public class MQClientInstance {
         }
     }
 
-    //将produceGroup(生产者组名)和producer实现类DefaultMQProducerImpl注册到producerTable中
+    /**将produceGroup(生产者组名)和producer实现类DefaultMQProducerImpl注册到producerTable中*/
     public synchronized boolean registerProducer(final String group, final DefaultMQProducerImpl producer) {
         if (null == group || null == producer) {
             return false;

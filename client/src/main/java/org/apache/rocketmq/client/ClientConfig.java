@@ -31,7 +31,9 @@ import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 import org.apache.rocketmq.remoting.protocol.RequestType;
 
 /**
- * Client Common configuration....配置客户端的通用配置，内部提供默认的消费者 和 生产者 都是它的子类
+ * Client Common configuration....
+ * 配置客户端的通用配置，内部提供默认的消费者 和 生产者 都是它的子类.
+ * 每一个该类或其子类的对象都会根据buildMQClientId方法构建clientid————区分不同实例的根据
  */
 public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
@@ -43,7 +45,8 @@ public class ClientConfig {
     public static final String HEART_BEAT_V2 = "com.rocketmq.heartbeat.v2";
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
     private String clientIP = NetworkUtil.getLocalAddress();
-    private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");  //构建clientid的时候使用
+    /*构建clientid的时候使用，如果是cluster模式，如果这个值是默认值，就会将这个值重置为”pid+纳秒数“*/
+    private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     @Deprecated
     protected String namespace;
@@ -99,7 +102,11 @@ public class ClientConfig {
     //enableHeartbeatChannelEventListener决定是否在客户端中注册一个专门的事件监听器，用于监听与 Broker 的心跳通道相关的事件。
     private boolean enableHeartbeatChannelEventListener = true; /*是否启用 心跳事件通道监听器*/
 
-    //根据client的ip、instanceName、unitName构建mqClientId..完整的名称：IP地址@InstanceName@unitName@0
+    /**根据client的ip、instanceName、unitName构建mqClientId..完整的名称：IP地址@InstanceName@unitName@0。。
+     * 【说明】
+     *      1. 单纯这么看，如果同一个机器的不同生产者，是可能重名的。
+     *          其实并不会。生产者启动时必须会调用到DefaultMQProducerImpl#start(boolean)，在这个方法中有一步
+     *          表明：如果生产者组不是”MixAll.CLIENT_INNER_PRODUCER_GROUP“，就会修改instanceName属性*/
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClientIP());
@@ -135,7 +142,8 @@ public class ClientConfig {
         this.instanceName = instanceName;
     }
 
-    public void changeInstanceNameToPID() { //修改实例名为PID(jps命令可查) +"#"+ 当前的纳秒值
+    /**[]：修改实例名为PID(jps命令可查) +"#"+ 当前的纳秒值*/
+    public void changeInstanceNameToPID() {
         if (this.instanceName.equals("DEFAULT")) {
             this.instanceName = UtilAll.getPid() + "#" + System.nanoTime();
         }
@@ -371,6 +379,10 @@ public class ClientConfig {
         this.decodeDecompressBody = decodeDecompressBody;
     }
 
+    /**
+     * []：获取命名空间的方法
+     * 命名空间在 RocketMQ 中通常用于多租户场景，允许不同的租户在同一个集群中隔离资源（如 Topic 和 Group）
+     * */
     @Deprecated
     public String getNamespace() {
         if (namespaceInitialized) {

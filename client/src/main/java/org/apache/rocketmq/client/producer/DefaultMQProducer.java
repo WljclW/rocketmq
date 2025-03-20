@@ -67,10 +67,13 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Wrapping internal implementations for virtually all methods presented in this class.
-     * 其实是一个内部实现类，封装了各种发送消息的方法，保证了能通过这个类拿到实现类的各个属性
+     * 其实是一个内部实现类，封装了各种发送消息的方法。。保证了能通过这个类拿到实现类的各个属性
+     * 【原注翻译】为这类提供的所有方法，封装了底层的实现
      */
     protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
     private final Logger logger = LoggerFactory.getLogger(DefaultMQProducer.class);
+    /*retryResponseCodes：RocketMQ 中用于配置消息发送失败时需要重试的响应码集合的一个属性。它允许开发者自定义哪
+        些特定的 Broker 响应码会触发消息重试机制*/
     private final Set<Integer> retryResponseCodes = new CopyOnWriteArraySet<>(Arrays.asList(
         ResponseCode.TOPIC_NOT_EXIST,
         ResponseCode.SERVICE_NOT_AVAILABLE,
@@ -102,21 +105,25 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private String createTopicKey = TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC;
 
     /**
+     * 每创建一个topic时默认的队列数量
      * Number of queues to create per default topic.
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
+     * 发送消息的超时时间
      * Timeout for sending messages.
      */
     private int sendMsgTimeout = 3000;
 
     /**
+     * 消息体的压缩阈值，超过4k的消息体会被压缩
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
     /**
+     * 同步消息发送的重试次数
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      * <p>
      * This may potentially cause message duplication which is up to application developers to resolve.
@@ -124,6 +131,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private int retryTimesWhenSendFailed = 2;
 
     /**
+     * 异步消息发送失败后的重试次数
      * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode. </p>
      * <p>
      * This may potentially cause message duplication which is up to application developers to resolve.
@@ -132,11 +140,12 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Indicate whether to retry another broker on sending failure internally...
-     * 消息发送失败时，选择两一个broker进行发送，是不是不等待broker的响应存储ok，直接返回
+     * 用于控制当消息发送失败时，是否尝试将消息发送到另一个可用的 Broker
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
     /**
+     * 消息体的最大的大小：默认4M
      * Maximum allowed message body size in bytes.
      */
     private int maxMessageSize = 1024 * 1024 * 4; // 4M
@@ -162,12 +171,14 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private boolean enableBackpressureForAsyncMode = false;
 
     /**
+     * BackpressureForAsyncMode模式下，限制最多同时在发送的异步消息数量
      * on BackpressureForAsyncMode, limit maximum number of on-going sending async messages
      * default is 10000
      */
     private int backPressureForAsyncSendNum = 10000;
 
     /**
+     * BackpressureForAsyncMode模式下，限制同时在发送的异步消息总大小
      * on BackpressureForAsyncMode, limit maximum message size of on-going sending async messages
      * default is 100M
      */
@@ -348,6 +359,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
+     * 启动生产者实例。内部会执行很多初始化来准备这个实例，因此在发送或者查询消息时务必调用这个方法
      * Start this producer instance. </p>
      *
      * <strong> Much internal initializing procedures are carried out to make this instance prepared, thus, it's a must
@@ -357,10 +369,12 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      */
     @Override
     public void start() throws MQClientException {
-        // 设置生产者所属的组，并设置命名空间。。会对创建时声明的生产者组做修正(但namespace属性显示被弃用)
+        /*设置生产者所属的组，并设置命名空间。。会对创建时声明的生产者组做修正(但namespace属性显示被弃用)*/
         this.setProducerGroup(withNamespace(this.producerGroup));
-        //真正干活的是下面的方法：defaultMQProducerImpl.start()。由于两个类相互引用，因此是可以调用。。。。。并且这里的调用关系
-        //类似于静态代理的例子，见SSM项目
+        /*真正干活的是下面的方法：defaultMQProducerImpl.start()。由于两个类相互引用，因此是可以调用。。。。。
+        并且这里的调用关系类似于静态代理的例子，见SSM项目
+        [说明]更深层次的理解是DefaultMQProducerImpl类才是实际上干活的方法，封装了各种内部干活的实现；当前类仅仅是
+                暴露给用户用于设置一些自定义配置，然后方法内调用的其实是DefaultMQProducerImpl的方法来实现需求*/
         this.defaultMQProducerImpl.start();
         if (this.produceAccumulator != null) {
             this.produceAccumulator.start();
@@ -389,8 +403,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
-     * Fetch message queues of topic <code>topic</code>, to which we may send/publish messages.
      * 查找该主题下所有的消息队列
+     * Fetch message queues of topic <code>topic</code>, to which we may send/publish messages.
+     *
      * @param topic Topic to fetch.
      * @return List of message queues readily to send messages to
      * @throws MQClientException if there is any client error.
@@ -967,6 +982,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
+     * 查找某个消息队列最大的偏移量
      * Query maximum offset of the given message queue.
      * <p>
      * This method will be removed in a certain version after April 5, 2020, so please do not use this method.
@@ -1012,6 +1028,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
+     * 根据消息偏移量查找消息
      * Query message of the given offset message ID.
      * <p>
      * This method will be removed in a certain version after April 5, 2020, so please do not use this method.
@@ -1031,15 +1048,16 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
+     * 根据条件查询消息
      * Query message by key.
      * <p>
      * This method will be removed in a certain version after April 5, 2020, so please do not use this method.
      *
      * @param topic  message topic
      * @param key    message key index word
-     * @param maxNum max message number
-     * @param begin  from when
-     * @param end    to when
+     * @param maxNum max message number，本次最多取出的消息数量
+     * @param begin  from when，开始时间
+     * @param end    to when，结束时间
      * @return QueryResult instance contains matched messages.
      * @throws MQClientException    if there is any client error.
      * @throws InterruptedException if the thread is interrupted.

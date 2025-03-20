@@ -40,7 +40,7 @@ public class Validators {
     public static final int TOPIC_MAX_LENGTH = 127;
 
     /**
-     * Validate group。检查组名是不是空、是不是长度高出、是不是组名包含非法字符
+     * Validate group。检查组名是不是空、是不是长度超出限制、是不是组名包含非法字符
      */
     public static void checkGroup(String group) throws MQClientException {
         if (UtilAll.isBlank(group)) {
