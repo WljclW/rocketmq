@@ -225,15 +225,19 @@ public class MQClientInstance {
                 @Override
                 public void onChannelIdle(String remoteAddr, Channel channel) {
                 }
-
+                /*用于处理通道激活事件
+                * 当客户端与某个远程地址（remoteAddr）的连接变为活跃状态时，该方法会被触发。它的主要功能是
+                *   根据激活的通道地址，找到对应的 Broker 信息，并向其发送心跳包。如果心跳发送成功，则立即
+                *   触发负载均衡（Rebalance）。*/
                 @Override
                 public void onChannelActive(String remoteAddr, Channel channel) {
                     for (Map.Entry<String, HashMap<Long, String>> addressEntry : brokerAddrTable.entrySet()) {
                         for (Map.Entry<Long, String> entry : addressEntry.getValue().entrySet()) {
                             String addr = entry.getValue();
-                            if (addr.equals(remoteAddr)) {
-                                long id = entry.getKey();
-                                String brokerName = addressEntry.getKey();
+                            if (addr.equals(remoteAddr)) { //如果遍历的这个addr和激活通道的remoteAddr相同
+                                long id = entry.getKey(); //拿到这个地址对应的Broker的id
+                                String brokerName = addressEntry.getKey(); //获取这个map对应的键——BrokerName
+                                /*向这个broker发送心跳包*/
                                 if (sendHeartbeatToBroker(id, brokerName, addr)) {
                                     rebalanceImmediately();
                                 }
@@ -1285,6 +1289,7 @@ public class MQClientInstance {
         return null;
     }
 
+    /**根据 BrokerName从brokerAddrTable中获取该Broker集群的主节点地址*/
     public String findBrokerAddressInPublish(final String brokerName) {
         if (brokerName == null) {
             return null;

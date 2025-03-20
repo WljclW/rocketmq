@@ -16,7 +16,8 @@
  */
 package org.apache.rocketmq.common.namesrv;
 
-
+/**用于管理和解析 NameServer 的地址信息。它的主要功能是从配置文
+ * 件或环境变量中获取 NameServer 的地址，并支持动态更新和解析*/
 public interface TopAddressing {
 
     String fetchNSAddr();

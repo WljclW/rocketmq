@@ -31,6 +31,9 @@ import org.apache.rocketmq.common.utils.HttpTinyClient;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
+/**
+ * DefaultTopAddressing 提供了动态解析 NameServer 地址的能力，支持从 WebService 或其他来源获取最新的地址。
+ * 这种设计适用于分布式环境中的动态部署场景。*/
 public class DefaultTopAddressing implements TopAddressing {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);

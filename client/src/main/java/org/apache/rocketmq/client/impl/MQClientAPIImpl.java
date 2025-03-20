@@ -233,9 +233,11 @@ import static org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode.SUCC
 
 /**
  *  【总述】主要负责和rocketmq的服务端(如namesrv和broker)进行通信，向rocketmq的使用和开发人员隐藏了底层逻辑的复杂性。
- *  RocketMQ 客户端中用于与消息队列服务进行通信的核心实现类之一。它负责执行实际的消息发送、消费、管理等操作，并与 RocketMQ 服务端进行
- *  交互。这个类属于 RocketMQ 客户端中的 内部实现类，并且它通常不直接暴露给用户！！而是通过 MQProducer, MQConsumer, MQAdmin 等更高
- *  层次的 API 使用。
+ *  RocketMQ 客户端中用于与消息队列服务进行通信的核心实现类之一。它负责执行实际的消息发送、消费、管理等操作，并与 RocketMQ
+ *  服务端进行交互。这个类属于 RocketMQ 客户端中的 内部实现类，并且它通常不直接暴露给用户！！而是通过 MQProducer, MQConsumer, MQAdmin
+ *  等更高层次的 API 使用。
+ *  负责与 Broker 和 NameServer 进行通信。它是生产者（Producer）和消费者（Consumer）的底层接口，提供了消息发
+ *  送、拉取、心跳、订阅管理等核心功能。
  *  */
 /**
  * MQClientAPIImpl 是 RocketMQ 客户端与服务端（Broker 和 NameServer）通信的桥梁，主要作用包括：
@@ -273,30 +275,40 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         final ClientRemotingProcessor clientRemotingProcessor,
         RPCHook rpcHook, final ClientConfig clientConfig, final ChannelEventListener channelEventListener) {
         this.clientConfig = clientConfig;
+        /*用于动态解析 NameServer 地址。
+        * MixAll.getWSAddr() 返回一个默认的 WebService 地址，用于动态获取 NameServer 地址。*/
         topAddressing = new DefaultTopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
+        /*调用 registerChangeCallBack(this) 注册回调函数，当 NameServer 地址发生变化时，会通
+        知 MQClientAPIImpl 更新地址。*/
         topAddressing.registerChangeCallBack(this);
+        /*创建一个 NettyRemotingClient 实例，用于与服务端进行网络通信。*/
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, channelEventListener);
+        /*用于处理来自服务端的远程请求（如事务状态检查、消费者组通知等）。*/
         this.clientRemotingProcessor = clientRemotingProcessor;
-
+        /*NamespaceRpcHook ：处理命名空间相关的逻辑。*/
         this.remotingClient.registerRPCHook(new NamespaceRpcHook(clientConfig));
         // Inject stream rpc hook first to make reserve field signature
         if (clientConfig.isEnableStreamRequestType()) {
             this.remotingClient.registerRPCHook(new StreamTypeRPCHook());
         }
+        /*rpcHook ：用户自定义的 RPC 钩子。*/
         this.remotingClient.registerRPCHook(rpcHook);
+        /*DynamicalExtFieldRPCHook ：动态扩展字段的处理逻辑。*/
         this.remotingClient.registerRPCHook(new DynamicalExtFieldRPCHook());
+        /*下面是针对请求注册处理器*/
+        //CHECK_TRANSACTION_STATE ：事务状态检查请求。
         this.remotingClient.registerProcessor(RequestCode.CHECK_TRANSACTION_STATE, this.clientRemotingProcessor, null);
-
+        //NOTIFY_CONSUMER_IDS_CHANGED ：通知消费者组 ID 发生变化。
         this.remotingClient.registerProcessor(RequestCode.NOTIFY_CONSUMER_IDS_CHANGED, this.clientRemotingProcessor, null);
-
+        //RESET_CONSUMER_CLIENT_OFFSET ：重置消费者的消费进度。
         this.remotingClient.registerProcessor(RequestCode.RESET_CONSUMER_CLIENT_OFFSET, this.clientRemotingProcessor, null);
-
+        //GET_CONSUMER_STATUS_FROM_CLIENT ：获取消费者的运行状态。
         this.remotingClient.registerProcessor(RequestCode.GET_CONSUMER_STATUS_FROM_CLIENT, this.clientRemotingProcessor, null);
-
+        //GET_CONSUMER_RUNNING_INFO ：获取消费者的运行信息。
         this.remotingClient.registerProcessor(RequestCode.GET_CONSUMER_RUNNING_INFO, this.clientRemotingProcessor, null);
-
+        //CONSUME_MESSAGE_DIRECTLY ：直接消费消息。
         this.remotingClient.registerProcessor(RequestCode.CONSUME_MESSAGE_DIRECTLY, this.clientRemotingProcessor, null);
-
+        //PUSH_REPLY_MESSAGE_TO_CLIENT ：推送回复消息到客户端。
         this.remotingClient.registerProcessor(RequestCode.PUSH_REPLY_MESSAGE_TO_CLIENT, this.clientRemotingProcessor, null);
     }
 

@@ -99,7 +99,9 @@ public class ClientConfig {
     private boolean sendLatencyEnable = Boolean.parseBoolean(System.getProperty(SEND_LATENCY_ENABLE, "false"));
     private boolean startDetectorEnable = Boolean.parseBoolean(System.getProperty(START_DETECTOR_ENABLE, "false"));
 
-    //enableHeartbeatChannelEventListener决定是否在客户端中注册一个专门的事件监听器，用于监听与 Broker 的心跳通道相关的事件。
+    /*enableHeartbeatChannelEventListener决定是否在客户端中注册一个专门的事件监听器，用于监听
+    与 Broker 的心跳通道相关的事件。
+    主要用于增强客户端与 Broker 之间的连接管理能力，特别是在网络不稳定或 Broker 故障的情况下。*/
     private boolean enableHeartbeatChannelEventListener = true; /*是否启用 心跳事件通道监听器*/
 
     /**根据client的ip、instanceName、unitName构建mqClientId..完整的名称：IP地址@InstanceName@unitName@0。。
