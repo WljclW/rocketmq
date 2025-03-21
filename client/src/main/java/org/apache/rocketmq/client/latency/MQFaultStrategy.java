@@ -30,6 +30,8 @@ import org.apache.rocketmq.common.message.MessageQueue;
  * */
 public class MQFaultStrategy {
     private LatencyFaultTolerance<String> latencyFaultTolerance;
+    /*是否启用 发送延迟故障规避策略 的一个布尔字段。它的主要作用是决定生产者在选择Broker时，是否需要考
+    虑 Broker 的历史发送延迟情况，以避免将消息发送到性能较差或不可靠的 Broker。*/
     private volatile boolean sendLatencyFaultEnable;
     private volatile boolean startDetectorEnable;
     /**
@@ -58,6 +60,7 @@ public class MQFaultStrategy {
         }
     }
 
+    /**定义了一个 ThreadLocal 变量 threadBrokerFilter，用于为每个线程提供独立的 BrokerFilter 实例。*/
     private ThreadLocal<BrokerFilter> threadBrokerFilter = new ThreadLocal<BrokerFilter>() {
         @Override protected BrokerFilter initialValue() {
             return new BrokerFilter();

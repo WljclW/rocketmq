@@ -111,6 +111,7 @@ public class MessageClientIDSetter {
         return value & 0x0000FFFF;
     }
 
+    /**生成全局唯一ID*/
     public static String createUniqID() {
         char[] sb = new char[LEN * 2];
         System.arraycopy(FIX_STRING, 0, sb, 0, FIX_STRING.length);

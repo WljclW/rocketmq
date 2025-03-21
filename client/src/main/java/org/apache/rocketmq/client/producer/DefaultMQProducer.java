@@ -476,6 +476,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     @Override //同步发送消息，超过参数指定的超时时间，则抛出异常
     public SendResult send(Message msg,
         long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        /*会使用nameSpace重新封装一下topic。不过nameSpace的方法注释说明以后将被弃用*/
         msg.setTopic(withNamespace(msg.getTopic()));
         return this.defaultMQProducerImpl.send(msg, timeout);
     }

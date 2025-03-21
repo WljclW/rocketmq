@@ -25,7 +25,7 @@ import java.io.Serializable;
 public class MessageQueue implements Comparable<MessageQueue>, Serializable {
     private static final long serialVersionUID = 6191200464116433425L;
     private String topic;  //该消息队列所属的主题名称
-    private String brokerName; //该消息队列所属的broker名称
+    private String brokerName; //该消息队列所属的broker集群名称
     private int queueId;  //该消息队列在所属broker上的唯一标识。(一个broker可以有多个消息队列，根据此属性进行区分)
 
     public MessageQueue() {

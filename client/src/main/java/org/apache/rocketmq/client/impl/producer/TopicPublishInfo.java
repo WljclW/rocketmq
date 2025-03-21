@@ -25,6 +25,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.protocol.route.QueueData;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
+/**某一个topic的具体的路由信息封装类。。因此这个类的所有属性都是归属于某一个topic的*/
 public class TopicPublishInfo {
     private boolean orderTopic = false;     //是否是顺序消息
     private boolean haveTopicRouterInfo = false;
@@ -153,7 +154,9 @@ public class TopicPublishInfo {
     }
 
     /**
-     * 根据 MQFaultStrategy#selectOneMessageQueue(TopicPublishInfo, java.lang.String, boolean) 的逻辑可以知道：
+     * 【总述】根据sendWhichQueue返回一个消息队列
+     * 【说明】
+     * 1. MQFaultStrategy#selectOneMessageQueue(TopicPublishInfo, java.lang.String, boolean) 的逻辑可以知道：
      *      下面的方法是一个兜底的逻辑
      * */
     public MessageQueue selectOneMessageQueue() {

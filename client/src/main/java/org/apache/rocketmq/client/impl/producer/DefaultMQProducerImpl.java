@@ -708,6 +708,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.mqFaultStrategy.updateFaultItem(brokerName, currentLatency, isolation, reachable);
     }
 
+    /**判断namesrvList是不是空 或者 没有元素，如果确实是，则抛出异常*/
     private void validateNameServerSetting() throws MQClientException {
         List<String> nsList = this.getMqClientFactory().getMQClientAPIImpl().getNameServerAddressList();
         if (null == nsList || nsList.isEmpty()) {
@@ -727,14 +728,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
-        //step1：对于消息的检查、生产者状态的检查、开始时间的记录
+        /*step1：对于消息的检查、生产者状态的检查；记录一些信息：开始时间、随机初始化invokeId*/
         this.makeSureStateOK(); //确保生产者处于运行态
         Validators.checkMessage(msg, this.defaultMQProducer); //检查消息符合规范
-        final long invokeID = random.nextLong();
+        final long invokeID = random.nextLong(); //看本方法的代码这个ivokeId仅用于打印日志
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
-        //step2：查找topic的路由信息。这样才知道需要发给哪一个broker
+        /*step2：查找topic的路由信息。这样才知道需要发给哪一个broker*/
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         //step3：如果路由信息存在，并且路由信息有效，则进行消息发送(设置重试次数、选择队列、记录brokerName、调用sendKernelImpl发消息、更新故障信息、异常处理)。
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
@@ -742,15 +743,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             MessageQueue mq = null;
             Exception exception = null;
             SendResult sendResult = null;
+            //最多可以发几次
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
-            int times = 0;
-            String[] brokersSent = new String[timesTotal]; //用于存放每一次发送消息选中消息队列的 所属的brokerName
+            int times = 0; //当前发送第几次的标志
+            String[] brokersSent = new String[timesTotal]; //用于存放每一次发送消息时选中消息队列的 所属的brokerName(这样这次发送失败下次就可以重新选一个Broker集群)
             boolean resetIndex = false;
             for (; times < timesTotal; times++) {
-                String lastBrokerName = null == mq ? null : mq.getBrokerName();
-                if (times > 0) {
-                    resetIndex = true; //在消息重试时，重置一下索引。。直接的体现：TopicPublishInfo的sendWhichQueue字段重新赋值为一个随机正整数
+                String lastBrokerName = null == mq ? null : mq.getBrokerName(); //记录上一次发送消息选择的时哪一个Broker集群
+                if (times > 0) { //在消息重试时，重置一下索引。。直接的体现：TopicPublishInfo的sendWhichQueue字段重新赋值为一个随机正整数
+                    resetIndex = true;
                 }
+                /*选择一个消息队列时涉及到两种策略：首先优先使用MQFaultStrategy.selectOneMessageQueue方法来选择存储topic消息的某
+                    一个消息队列；如果前一个方法没有找到，则会用TopicPublishInfo.selectOneMessageQueue()这个方法来兜底，这个方法
+                    就是根据内部的计数器选择一个消息队列*/
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName, resetIndex);
                 if (mqSelected != null) {
                     mq = mqSelected;
@@ -758,7 +763,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     try {
                         beginTimestampPrev = System.currentTimeMillis();
                         if (times > 0) {
-                            //Reset topic with namespace during resend.
+                            //Reset topic with namespace during resend...照这里的逻辑，多发送几次岂不是会被nameSpace多包装几次？？
                             msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
                         }
                         long costTime = beginTimestampPrev - beginTimestampFirst;
@@ -766,9 +771,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             callTimeout = true;
                             break;
                         }
-
+                        /**这里才是真正干发送消息的事*/
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
-                        endTimestamp = System.currentTimeMillis();  //这里的时间记录的是发送成功已经拿到返回结果的时间
+                        /*这里的时间记录的是发送成功已经拿到返回结果的时间*/
+                        endTimestamp = System.currentTimeMillis();
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false, true);
                         switch (communicationMode) {
                             case ASYNC:
@@ -838,7 +844,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     break;
                 }
             }
-
+            /*for循环发送消息到此结束*/
             if (sendResult != null) {
                 return sendResult;
             }
@@ -876,14 +882,16 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /**
-     * tryToFindTopicPublishlnfo 是查找主题的路由信息的方法。
+     * tryToFindTopicPublishlnfo 是查找主题的路由信息。
      *      如果生产者中缓存了 topic 的路由信息，且该路由信息中包含了消息队列，则直接返回该路由信息;
      *      如果没有缓存或没有包含消息队列， 则向NameServer查询该topic 的路由信息。 如果最终未找到路由
      *  信息，则抛出异常：无法找到主题相关路由信息异常
      * */
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);  //获取主题的消息
-        if (null == topicPublishInfo || !topicPublishInfo.ok()) {   // 如果主题发布信息为空或状态不正常，则尝试更新
+        /*如果TopicPublishInfo是null 或者 它的消息队列集合是空的，就通过updateTopicRouteInfoFromNameServer
+        * 更新这个topic的路由信息，再次获取*/
+        if (null == topicPublishInfo || !topicPublishInfo.ok()) {
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic); // 更新topic的路由信息
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
@@ -922,7 +930,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginStartTime = System.currentTimeMillis();
         /**
          * 根据 MessageQueue获取 Broker的网络地址。 如果 MQClientlnstance的 brokerAddrTable未缓存该 Broker 的信息，则从
-         *      NameServer 主动更新一下 topic 的路由信息。
+         *      NameServer主动更新一下 topic 的路由信息(看方法updateTopicRouteInfoFromNameServer)。
          *      （1）如果路由更新后还是找不到 Broker信息，则抛出 MQClientException，提
          *      示 Broker不存在 。
          *      （2）经过上面的过程如果找到了Broker，就会在if块中进行消息的组装和发送。
@@ -934,11 +942,11 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             brokerName = this.mQClientFactory.getBrokerNameFromMessageQueue(mq);
             brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(brokerName);
         }
-
+        /**拿到brokerAddr后，执行下面的逻辑进行消息的组装和发送*/
         SendMessageContext context = null;
         if (brokerAddr != null) {
             brokerAddr = MixAll.brokerVIPChannel(this.defaultMQProducer.isSendMessageWithVIPChannel(), brokerAddr);
-
+            /*记录消息体的原始内容，在finally块中会使用到。用于对消息的还原*/
             byte[] prevBody = msg.getBody();
             try {
                 //for MessageBatch,ID has been set in the generating process
@@ -1128,7 +1136,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 msg.setTopic(NamespaceUtil.withoutNamespace(msg.getTopic(), this.defaultMQProducer.getNamespace()));
             }
         }
-        //发送消息时会拿到"目标消息队列"对应的broker的地址！！如果不存在会向namesrv请求更新，如果请求后还是找不到，则抛出下面异常————broker 不存在
+        /*发送消息时会拿到"目标消息队列"对应的broker的地址！！如果不存在会向namesrv请求更新，如果更新后还是
+        找不到对应的brokerAddr，则抛出下面异常————broker 不存在*/
         throw new MQClientException("The broker[" + brokerName + "] not exist", null);
     }
 

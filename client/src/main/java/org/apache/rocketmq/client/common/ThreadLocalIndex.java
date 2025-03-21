@@ -33,7 +33,7 @@ public class ThreadLocalIndex {
         return index & POSITIVE_MASK;
     }
 
-    //生成一个随机证书并且取其绝对值
+    //生成一个随机值并且取其绝对值，用于重置一个选择消息队列的初始值
     public void reset() {
         int index = Math.abs(random.nextInt(Integer.MAX_VALUE));
         this.threadLocalIndex.set(index);

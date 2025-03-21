@@ -85,7 +85,7 @@ public class Producer {
                 /*
                  * Call send message to deliver message to one of brokers.
                  * 根据"send"的不同方法，可能有返回值，也可能没有返回值。
-                 * 是同步发送的时候通常有返回值；sendOneway方法没有返回值(不关注返回值，只管发送)；是异步发送
+                 * 是同步发送的时候通常有返回值；sendOneway方法没有返回值(不关注返回值，只管发送)；异步发送
                  *      的时候通常要设置回调。
                  */
                 SendResult sendResult = producer.send(msg, 20 * 1000);

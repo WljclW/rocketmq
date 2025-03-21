@@ -59,15 +59,17 @@ public class Validators {
         }
     }
 
+    /**检查消息的合法性*/
     public static void checkMessage(Message msg, DefaultMQProducer defaultMQProducer) throws MQClientException {
+        /*1.确保msg不能是null*/
         if (null == msg) {
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL, "the message is null");
         }
-        // topic
+        /*2.topic的检查：topic是不是合法、topic是不是在”不能发送消息的topic“的集合*/
         Validators.checkTopic(msg.getTopic());
         Validators.isNotAllowedSendTopic(msg.getTopic());
 
-        // body
+        /*3.body的检查：确保消息体不能是null、消息体的长度在合理范围*/
         if (null == msg.getBody()) {
             throw new MQClientException(ResponseCode.MESSAGE_ILLEGAL, "the message body is null");
         }

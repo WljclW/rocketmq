@@ -899,6 +899,8 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {   //isDefault为true时使用默认主题查找路由
+                        /*使用getDefaultTopicRouteInfoFromNameServer查找默认路由，不需要指定topic；而下面的getTopicRouteInfoFromNameServer
+                        * 查找的是某个topic的路由信息，需要通过第一个参数指定topic值*/
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(clientConfig.getMqClientApiTimeout());
                         if (topicRouteData != null) {
                             for (QueueData data : topicRouteData.getQueueDatas()) {

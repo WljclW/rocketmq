@@ -166,7 +166,8 @@ public class MixAll {
 
     /**
      * 可以通过参数"com.rocketmq.sendMessageWithVIPChannel"设置是不是启用vip通道，启用的话会执行下面的方法：
-     *      方法的作用就是将brokerAddr的端口减2，主机ip不变，拼接为新的brokerAdder然后返回
+     *      方法的作用就是将brokerAddr的端口减2，主机ip不变，拼接为新的brokerAdder然后返回。。
+     * rocketmq中broker的默认端口是10911；如果isChange为true时，执行下面的方法，则端口将变为10909。。
      * */
     public static String brokerVIPChannel(final boolean isChange, final String brokerAddr) {
         if (isChange) {

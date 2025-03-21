@@ -42,7 +42,7 @@ public class TopicValidator {
     private static final Set<String> SYSTEM_TOPIC_SET = new HashSet<>();
 
     /**
-     * Topics'set which client can not send msg!
+     * Topics'set which client can not send msg!!!生产者不能向这个集合中的topic发送消息
      */
     private static final Set<String> NOT_ALLOWED_SEND_TOPIC_SET = new HashSet<>();
 
