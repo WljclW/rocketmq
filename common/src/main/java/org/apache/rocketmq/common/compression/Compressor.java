@@ -24,12 +24,12 @@ public interface Compressor {
     /**
      * Compress message by different compressor.
      *
-     * @param src bytes ready to compress
+     * @param src bytes ready to compress..."ready to compress"表示被压缩的数据
      * @param level compression level used to balance compression rate and time consumption
-     * @return compressed byte data
+     * @return compressed byte data..."compressed"表示压缩后的
      * @throws IOException
      */
-    byte[] compress(byte[] src, int level) throws IOException;
+    byte[] compress(byte[] src /*需要压缩的消息*/, int level) throws IOException;
 
     /**
      * Decompress message by different compressor.

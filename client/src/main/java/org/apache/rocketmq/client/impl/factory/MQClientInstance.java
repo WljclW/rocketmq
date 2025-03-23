@@ -118,13 +118,13 @@ public class MQClientInstance {
     /**
      * The container of the producer in the current client. The key is the name of producerGroup.
      * 【作用】用于(缓)存当前客户机中的producer
-     * 用于缓存group和生产者的对应关系
+     * 键：group；值：生产者
      */
     private final ConcurrentMap<String, MQProducerInner> producerTable = new ConcurrentHashMap<>();
 
     /**
      * The container of the consumer in the current client. The key is the name of consumerGroup.
-     * 【作用】用于(缓)存当前客户机中的consumer————用于缓存consumer group和消费者的对应关系
+     * 【作用】用于(缓)存当前客户机中所有的consumer————用于缓存consumer group——>消费者的对应关系
      */
     private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
 
@@ -153,7 +153,7 @@ public class MQClientInstance {
      * The container which stores the brokerClusterInfo. The key of the map is the brokerCluster name.
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
-     * 对集群中broker地址的缓存。。broker集群名————>该集群所有的broker实例(broker的id———>broker实例的地址)。。
+     * 对集群中broker地址的缓存。。broker集群名(BrokerName)————>该集群所有的broker实例(broker的id———>broker实例的地址)。。
      * 一个集群中所有broker的名字是一样的
      */
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
@@ -890,7 +890,11 @@ public class MQClientInstance {
     }
 
     /**
-     * 更新生产者和消费者的路由缓存信息的根方法。。。。。现阶段更新路由信息时，最终调用的都是这个方法，其他的重载方法最终也会指向这个方法
+     * 更新生产者和消费者的路由缓存信息的根方法。。。。。现阶段更新路由信息时，最终调用的都是这个方法，其他
+     *      的重载方法最终也会指向这个方法
+     *  【说明】使用更新路由是的方法都是updateTopicRouteInfoFromNameServer，该方法有多个重载方法，区别
+     *      在于isDefault属性是true的时候会从namesrv查询默认路由的信息；否则的话就是查询topic对应的路由
+     *     信息
      * */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
@@ -909,21 +913,27 @@ public class MQClientInstance {
                                 data.setWriteQueueNums(queueNums);
                             }
                         }
-                    } else { //isDefault为false时使用参数topic查找路由
+                    } else { //isDefault为false时使用参数topic查找这个topic的路由信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, clientConfig.getMqClientApiTimeout());
                     }
                     if (topicRouteData != null) { //进入这里的if语句块表示请求到了路由信息
                         //1.topicRouteData是新数据，看和老数据对比是不是改变了。
                         TopicRouteData old = this.topicRouteTable.get(topic);
-                        boolean changed = topicRouteData.topicRouteDataChanged(old); //对比数据更新"是否改变"标识
+                        boolean changed = topicRouteData.topicRouteDataChanged(old); //对比数据，更新"是否改变"标识
+                        /*如果没有改变，则判断是不是生产者、消费者有需要更新该topic的路由信息。。如果
+                        * 存在的话会重新把change改为true*/
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
-
-                        if (changed) {  //会更新：brokerAddrTable、topicEndPointsTable、topicPublishInfo(与生产者和消费者相关)、topicRouteTable
-
+                        /*到这里change为true说明需要更新。会更新：
+                            brokerAddrTable——根据TopicRouteData.brokerDatas更新Broker的存储信息
+                            topicEndPointsTable——
+                            topicPublishInfo(与生产者和消费者相关)——
+                            topicRouteTable——根据topic以及最新的topicRouteData更新路由信息缓存*/
+                        if (changed) {
+                            //更新broker的缓存信息即brokerAddrTable的内容
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) { //更新brokerAddrTable
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
@@ -1050,19 +1060,21 @@ public class MQClientInstance {
         return false;
     }
 
-    //检查是否有生产者 或者 消费者 需要更新参数topic的路由信息
+    /**判断某个主题（topic）是否需要更新路由信息。
+     * 执行逻辑：遍历生产者和消费者的注册表，检查是否有生产者或消费者需要更新指定主题的路由信息。*/
     private boolean isNeedUpdateTopicRouteInfo(final String topic) {
         boolean result = false;
         Iterator<Entry<String, MQProducerInner>> producerIterator = this.producerTable.entrySet().iterator();
         while (producerIterator.hasNext() && !result) {
             Entry<String, MQProducerInner> entry = producerIterator.next();
             MQProducerInner impl = entry.getValue();
+            /*拿着具体的消费者impl，执行isPublishTopicNeedUpdate方法看看需不需要更新该主题的路由信息*/
             if (impl != null) {
                 result = impl.isPublishTopicNeedUpdate(topic);
             }
         }
-
-        if (result) {   //如果有生产者需要更新，直接返回
+        //如果在生产者表中发现需要更新路由信息的情况，直接返回 true，无需继续检查消费者表。
+        if (result) {
             return true;
         }
 

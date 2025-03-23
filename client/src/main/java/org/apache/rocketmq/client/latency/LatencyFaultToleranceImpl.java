@@ -31,9 +31,10 @@ import org.apache.rocketmq.client.common.ThreadLocalIndex;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
-/**rocketmq提供的延迟容错机制的一种实现*/
+/**rocketmq提供的延迟容错机制的一种实现。主要目的是针对Broker状态的管理*/
 public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> {
     private final static Logger log = LoggerFactory.getLogger(MQFaultStrategy.class);
+    /*BrokerName——>该broker集群的不可用时间*/
     private final ConcurrentHashMap<String, FaultItem> faultItemTable = new ConcurrentHashMap<String, FaultItem>(16);
     private int detectTimeout = 200;
     private int detectInterval = 2000;
@@ -56,12 +57,18 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         this.serviceDetector = serviceDetector;
     }
 
-    /**用于检测 Broker 可用性的逻辑实现。它通过定期检查每个 Broker 的状态，判断其是否可达，并更新其可用性标志*/
+    /**[]：对一组 Broker(就是faultItemTable中的条目)进行一轮可达性检测
+     * 它通过定期检查每个Broker的状态，判断其是否可达，并更新其可用性标志*/
     public void detectByOneRound() {
         for (Map.Entry<String, FaultItem> item : this.faultItemTable.entrySet()) {
             FaultItem brokerItem = item.getValue();
+            /*如果"当前时间"已经超过了"下次应该被检测时间(brokerItem.checkStamp属性指定)"，则表示这一
+            个brokerItem需要检测一下，进入if块内部执行检测逻辑*/
             if (System.currentTimeMillis() - brokerItem.checkStamp >= 0) {
+                //更新这个brokerItem下一次需要被检测的时间戳
                 brokerItem.checkStamp = System.currentTimeMillis() + this.detectInterval;
+                /*在DefaultMQProducerImpl的构造器中会创建LatencyFaultToleranceImpl，此时传递给构造
+                器的resolver逻辑是：根据BrokerName返回id=0节点的brokerAddr*/
                 String brokerAddr = resolver.resolve(brokerItem.getName());
                 if (brokerAddr == null) {
                     faultItemTable.remove(item.getKey());
@@ -70,7 +77,9 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
                 if (null == serviceDetector) {
                     continue;
                 }
+                /*调用 serviceDetector 的 detect 方法，检测指定地址（brokerAddr）的 Broker 是否可达。*/
                 boolean serviceOK = serviceDetector.detect(brokerAddr, detectTimeout);
+                //如果Broker可达，则更新brokerItem的可达性标志为true。。
                 if (serviceOK && !brokerItem.reachableFlag) {
                     log.info(brokerItem.name + " is reachable now, then it can be used.");
                     brokerItem.reachableFlag = true;
@@ -99,14 +108,19 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     }
 
     /**
-     * 其实主要就是给startTimestamp赋值为当前时间+computeNotAvailableDuration(isolation ? 30000 : currentLatency);
-     *      的结果，给isAvailable()所用。。也就是说只有notAvailableDuration == 0的时候，isAvailable()才会
-     *      返回true。
+     * []：用于更新name所指定的Broker集群故障项（FaultItem）
+     * @param name：Broker集群名称
+     * @param currentLatency :发送这个消息的延迟时间
+     * @param notAvailableDuration : 根据两个数组计算出的 Broker不可用的持续时间
+     * @param reachable : Broker的可达性
+     * 实现逻辑：主要功能是根据 Broker 的延迟、不可用持续时间和可达性状态，动态
+     *      更新 faultItemTable 中对应条目的信息。
      * */
     @Override
     public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration,
                                 final boolean reachable) {
         FaultItem old = this.faultItemTable.get(name);
+        /*如果之前没有，则向faultItemTable添加一项*/
         if (null == old) {
             final FaultItem faultItem = new FaultItem(name);
             faultItem.setCurrentLatency(currentLatency);
@@ -114,8 +128,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             faultItem.setReachable(reachable);
             old = this.faultItemTable.putIfAbsent(name, faultItem);
         }
-
-        if (null != old) {  //如果存在brokerName这个条目，就需要更新该条目的属性
+        /*如果之前存在brokerName这个条目，就需要更新该条目的属性*/
+        if (null != old) {
             old.setCurrentLatency(currentLatency);
             old.updateNotAvailableDuration(notAvailableDuration);
             old.setReachable(reachable);
@@ -126,6 +140,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
     }
 
+    /**【】：返回name这个broker集群是不是可用*/
     @Override
     public boolean isAvailable(final String name) {
         final FaultItem faultItem = this.faultItemTable.get(name);
@@ -135,6 +150,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         return true;
     }
 
+    /**疑问：和isAvailable的区别？？*/
     public boolean isReachable(final String name) {
         final FaultItem faultItem = this.faultItemTable.get(name);
         if (faultItem != null) {
@@ -155,6 +171,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     public void setStartDetectorEnable(boolean startDetectorEnable) {
         this.startDetectorEnable = startDetectorEnable;
     }
+
+    /**[]：随机返回一个可达(reachable)的BrokerName*/
     @Override
     public String pickOneAtLeast() {
         final Enumeration<FaultItem> elements = this.faultItemTable.elements();
@@ -194,18 +212,20 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
     public class FaultItem implements Comparable<FaultItem> {
         private final String name;  //brokerName
-        private volatile long currentLatency;  //
-        private volatile long startTimestamp;
-        private volatile long checkStamp;
-        private volatile boolean reachableFlag;
+        private volatile long currentLatency;  //最近一次的延迟时间
+        private volatile long startTimestamp; //预测出来的可以使用的开始时间(会根据每一次延迟预测不可用时间)
+        private volatile long checkStamp; //表示这个brokerName下一次需要被检查可达性的时间戳
+        private volatile boolean reachableFlag; //表示当前的BrokerName(Broker集群)是否可达
 
         public FaultItem(final String name) {
             this.name = name;
         }
 
         /**
+         * 【】：rocketmq会根据每次延迟预测不可用时间，这里就是根据预测的不可用时间更新这个broker集群从什么时候
+         *      开始变得可用
          * 给startTimestamp赋值为:当前时间+computeNotAvailableDuration(isolation ? 10000 : currentLatency);的结
-         *      果，给isAvailable()所用
+         *      果，这个startTimestamp参数在isAvailable()逻辑会用到
          * */
         public void updateNotAvailableDuration(long notAvailableDuration) {
             if (notAvailableDuration > 0 && System.currentTimeMillis() + notAvailableDuration > this.startTimestamp) {

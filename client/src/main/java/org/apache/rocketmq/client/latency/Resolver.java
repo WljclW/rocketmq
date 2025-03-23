@@ -16,6 +16,10 @@
  */
 package org.apache.rocketmq.client.latency;
 
+/**
+ * Resolver接口的作用本质上应该表述为：给出一个BrokerName，解析出一个Broker的地址。具体的实现逻辑
+ *      则由方法resolve的编码实现
+ * */
 public interface Resolver {
 
     String resolve(String name);

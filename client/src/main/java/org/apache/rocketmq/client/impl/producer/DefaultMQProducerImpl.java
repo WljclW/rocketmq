@@ -103,6 +103,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final Logger log = LoggerFactory.getLogger(DefaultMQProducerImpl.class);
     private final Random random = new Random();
     private final DefaultMQProducer defaultMQProducer;
+    /*生产者客户端的核心数据结构之一，用于存储主题（Topic）的发布信息*/
     private final ConcurrentMap<String/* topic */, TopicPublishInfo> topicPublishInfoTable =
         new ConcurrentHashMap<>();
     private final ArrayList<SendMessageHook> sendMessageHookList = new ArrayList<>();
@@ -121,7 +122,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private MQFaultStrategy mqFaultStrategy;
     private ExecutorService asyncSenderExecutor;
 
-    // compression related
+    // compression related。compressLevel：压缩等级，默认5；compressType：压缩类型，默认ZLIB；compressor：初始化的压缩器
     private int compressLevel = Integer.parseInt(System.getProperty(MixAll.MESSAGE_COMPRESS_LEVEL, "5"));
     private CompressionType compressType = CompressionType.of(System.getProperty(MixAll.MESSAGE_COMPRESS_TYPE, "ZLIB"));
     private final Compressor compressor = CompressorFactory.getCompressor(compressType);
@@ -146,7 +147,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             TimeUnit.MILLISECONDS,
             this.asyncSenderThreadPoolQueue,
             new ThreadFactoryImpl("AsyncSenderExecutor_"));
-        /*BackpressureForAsyncMode模式下，异步消息同时发送的最小并行度是10。。并且用Semaphore类型的信号量控制*/
+        /*BackpressureForAsyncMode模式下，异步消息同时发送的最小并行度是10。。用Semaphore类型的信号量控制*/
         if (defaultMQProducer.getBackPressureForAsyncSendNum() > 10) {
             semaphoreAsyncSendNum = new Semaphore(Math.max(defaultMQProducer.getBackPressureForAsyncSendNum(), 10), true);
         } else {
@@ -161,15 +162,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             log.info("semaphoreAsyncSendSize can not be smaller than 1M.");
         }
 
+        /*这里检测可达性的逻辑：通过向目标服务器发送请求，尝试获取某个消息队列的最
+            大偏移量（maxOffset），以此判断服务是否可用。*/
         ServiceDetector serviceDetector = new ServiceDetector() {
             @Override
-            public boolean detect(String endpoint, long timeoutMillis) {
+            public boolean detect(String endpoint/*目标服务器的地址*/, long timeoutMillis) {
                 Optional<String> candidateTopic = pickTopic();
                 if (!candidateTopic.isPresent()) {
                     return false;
                 }
                 try {
-                    MessageQueue mq = new MessageQueue(candidateTopic.get(), null, 0);
+                    /*创建一个消息队列；并向指定的服务端点（endpoint）发送请求，获取该消息队列的最大偏移量。*/
+                    MessageQueue mq = new MessageQueue(candidateTopic.get() /*获取topic*/, null, 0);
+                    //向目标服务器（endpoint）发送请求，获取指定消息队列的最大偏移量。
                     mQClientFactory.getMQClientAPIImpl()
                             .getMaxOffset(endpoint, mq, timeoutMillis);
                     return true;
@@ -180,12 +185,21 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         };
 
         this.mqFaultStrategy = new MQFaultStrategy(defaultMQProducer.cloneClientConfig(), new Resolver() {
+            /*rosolve作用：根据BrokerName，获取该Broker的发布地址(主节点地址)*/
             @Override
             public String resolve(String name) {
                 return DefaultMQProducerImpl.this.mQClientFactory.findBrokerAddressInPublish(name);
             }
         }, serviceDetector);
     }
+
+    /**【】：从topicPublishInfoTable选择一个topic，封装为Optional对象返回
+     * 【关于Optional】是 Google Guava 库中的一个类，用于表示可能为null的值。它的主要作用是避免直接操
+     *      作null值，从而减少空指针异常（NullPointerException）的风险，并提供一种更安全、更优雅的方
+     *      式来处理可能为空的值
+     *  Optional 提供了一种包装机制：
+     *      如果某个值存在，则用Optional包装它。
+     *      如果某个值不存在，则使用一个特殊的Optional实例（Optional.absent()）来表示。*/
     private Optional<String> pickTopic() {
         if (topicPublishInfoTable.isEmpty()) {
             return Optional.absent();
@@ -302,7 +316,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();    //向所有的broker发送心跳包，以维持连接
 
-        RequestFutureHolder.getInstance().startScheduledTask(this); // 启动定时任务，如心跳检测等
+        RequestFutureHolder.getInstance().startScheduledTask(this); //启动定时任务，如心跳检测等
 
     }
 
@@ -775,6 +789,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
                         /*这里的时间记录的是发送成功已经拿到返回结果的时间*/
                         endTimestamp = System.currentTimeMillis();
+                        /*根据本次的发消息情况，更新这个Broker集群的不可用时间*/
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false, true);
                         switch (communicationMode) {
                             case ASYNC:
@@ -782,6 +797,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             case ONEWAY:
                                 return null;
                             case SYNC:
+                                /**疑问：下面的判断合理吗？？这种代码不是有可能没有发送够次数直接返回吗？？*/
                                 if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
                                     if (this.defaultMQProducer.isRetryAnotherBrokerWhenNotStoreOK()) {
                                         continue;
@@ -843,8 +859,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 } else {
                     break;
                 }
-            }
-            /*for循环发送消息到此结束*/
+            } //for循环发送消息到此结束
+
             if (sendResult != null) {
                 return sendResult;
             }
@@ -882,10 +898,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /**
-     * tryToFindTopicPublishlnfo 是查找主题的路由信息。
+     * tryToFindTopicPublishlnfo是查找主题的路由信息。
      *      如果生产者中缓存了 topic 的路由信息，且该路由信息中包含了消息队列，则直接返回该路由信息;
      *      如果没有缓存或没有包含消息队列， 则向NameServer查询该topic 的路由信息。 如果最终未找到路由
      *  信息，则抛出异常：无法找到主题相关路由信息异常
+     *  【说明】使用更新路由是的方法都是updateTopicRouteInfoFromNameServer，该方法有多个重载方法，区别
+     *      在于isDefault属性是true的时候会从namesrv查询默认路由的信息；否则的话就是查询topic对应的路由
+     *      信息
      * */
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);  //获取主题的消息
@@ -906,10 +925,11 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
     }
 
-    /*
-    【总述】方法的逻辑：构建消息头SendMessageRequestHeader、消息上下文SendMessageContext，调
+    /**
+    【总述】消息发送 API 核心入口 : DefaultMQProducerimpl#sendKernelImpl
+    方法的逻辑：构建消息头SendMessageRequestHeader、消息上下文SendMessageContext，调
                用MQClientAPIImpl#sendMessage()，将消息发送给队列所在的 Broker。
-          后续的逻辑就是进行序列化然后发送
+               后续的逻辑就是进行序列化然后发送
      * @description:
      * @param msg: 待发送的消息
      * @param mq: 消息将发送到该消息队列上
@@ -921,7 +941,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * @author: Zhou
      * @date: 2024/11/16 18:54
      */
-    private SendResult sendKernelImpl(final Message msg,    /**消息发送 API 核心入口 : DefaultMQProducerimpl#sendKernelImpl*/
+    private SendResult sendKernelImpl(final Message msg,
         final MessageQueue mq,
         final CommunicationMode communicationMode,
         final SendCallback sendCallback,
@@ -929,8 +949,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         long beginStartTime = System.currentTimeMillis();
         /**
-         * 根据 MessageQueue获取 Broker的网络地址。 如果 MQClientlnstance的 brokerAddrTable未缓存该 Broker 的信息，则从
-         *      NameServer主动更新一下 topic 的路由信息(看方法updateTopicRouteInfoFromNameServer)。
+         * 前面的方法会选出一个MessageQueue(大背景)。根据MessageQueue获取Broker的网络地址。如果MQClientlnstance
+         *      的 brokerAddrTable未缓存该Broker的信息，则从NameServer主动更新一下 topic 的路由信息(看方
+         *      法updateTopicRouteInfoFromNameServer)。
          *      （1）如果路由更新后还是找不到 Broker信息，则抛出 MQClientException，提
          *      示 Broker不存在 。
          *      （2）经过上面的过程如果找到了Broker，就会在if块中进行消息的组装和发送。
@@ -945,6 +966,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         /**拿到brokerAddr后，执行下面的逻辑进行消息的组装和发送*/
         SendMessageContext context = null;
         if (brokerAddr != null) {
+            /*判断是否使用VIP通道，VIPchannel端口号-2*/
             brokerAddr = MixAll.brokerVIPChannel(this.defaultMQProducer.isSendMessageWithVIPChannel(), brokerAddr);
             /*记录消息体的原始内容，在finally块中会使用到。用于对消息的还原*/
             byte[] prevBody = msg.getBody();
@@ -963,6 +985,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
                 if (this.tryToCompressMessage(msg)) { //【！！】如果消息需要压缩，在这一步，消息体就变了，变成了压缩后的内容
+                    //进入到if块说明消息体进行了压缩，需要设置压缩标志
                     sysFlag |= MessageSysFlag.COMPRESSED_FLAG;
                     sysFlag |= compressType.getCompressionFlag();
                     msgBodyCompressed = true;
@@ -972,7 +995,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 if (Boolean.parseBoolean(tranMsg)) {
                     sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;
                 }
-                //如果有ForbiddenHook，则执行这些钩子的checkForbidden方法
+                //如果有ForbiddenHook，则构造出CheckForbiddenContext，并执行这些钩子的checkForbidden方法
                 if (hasCheckForbiddenHook()) {
                     //首先需要构造后续执行钩子需要用到的一些参数，所有参数会存储到checkForbiddenContext
                     CheckForbiddenContext checkForbiddenContext = new CheckForbiddenContext();
@@ -1016,7 +1039,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 }
 
                 /**
-                 * 构建消息发送请求包 。 主要包含如下重要信息:生产者组、主题名称、默认 创建主题 Key、该 主题在单个 Broker 默认
+                 * 构建消息发送请求包 。 主要包含如下重要信息:生产者组、主题名称、默认 创建主题 Key、该主题在单个 Broker 默认
                  * 队列数 、队列 ID (队列序号)、消息系统标记 ( MessageSysFlag)、 消息发送时间、消息标记(RocketMQ对消息中的 flag
                  * 不做任何处理， 供应用程序使用)、 消息扩展属性、消息重试次数、是否是批量消息等。
                  * */
@@ -1034,13 +1057,16 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 requestHeader.setUnitMode(this.isUnitMode());
                 requestHeader.setBatch(msg instanceof MessageBatch);
                 requestHeader.setBrokerName(brokerName);
+                /**如果消息是重试类型(主题以%RETRY%开始)的消息，则会在消息头中设置消息的"当前重试次数"、"最大重试次数"*/
                 if (requestHeader.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
+                    //调用 MessageAccessor.getReconsumeTime(msg) 从消息中获取当前的重试次数（reconsumeTimes）
                     String reconsumeTimes = MessageAccessor.getReconsumeTime(msg);
                     if (reconsumeTimes != null) {
+                        //如果得到的重试次数不为空，则设置到消息头的reconsumeTimes属性中，并清除消息中的重试次数属性。
                         requestHeader.setReconsumeTimes(Integer.valueOf(reconsumeTimes));
                         MessageAccessor.clearProperty(msg, MessageConst.PROPERTY_RECONSUME_TIME);
                     }
-
+                    //调用 MessageAccessor.getMaxReconsumeTimes(msg) 从消息中获取最大重试次数（maxReconsumeTimes）。
                     String maxReconsumeTimes = MessageAccessor.getMaxReconsumeTimes(msg);
                     if (maxReconsumeTimes != null) {
                         requestHeader.setMaxReconsumeTimes(Integer.valueOf(maxReconsumeTimes));
@@ -1150,8 +1176,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return mQClientFactory;
     }
 
+    /**【】：如果消息体太大，则压缩消息体，并将压缩后的内容设置到msg中。。因此如果这一步压缩了消息
+     *      体消息体的内容就变了*/
     private boolean tryToCompressMessage(final Message msg) {
-        //step1：当前的"批量消息"不支持压缩
+        //step1：当前"批量消息"不支持压缩
         if (msg instanceof MessageBatch) {
             //batch does not support compressing right now
             return false;
@@ -1836,6 +1864,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
     }
 
+    /**初始化主题的路由信息*/
     private void initTopicRoute() {
         List<String> topics = this.defaultMQProducer.getTopics();
         if (topics != null && topics.size() > 0) {

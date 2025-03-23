@@ -1353,6 +1353,9 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         throw new MQBrokerException(response.getCode(), response.getRemark(), addr);
     }
 
+    /**[]：得到参数messageQueue这个消息队列的最大偏移
+     * 实现逻辑：构建请求头(就是new一个请求头，然后将需要的参数设置进去)；设置请求码GET_MAX_OFFSET；利
+     *      用netty发同步请求*/
     public long getMaxOffset(final String addr, final MessageQueue messageQueue, final long timeoutMillis)
         throws RemotingException, MQBrokerException, InterruptedException {
         GetMaxOffsetRequestHeader requestHeader = new GetMaxOffsetRequestHeader();

@@ -25,7 +25,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 /**
  * 实现消息的 故障转移 和 负载均衡
  * 【和LatencyFaultToleranceImpl的关系】
- *      MQFaultStrategy为消息的故障转移和负载均衡提供支持，在这个过程中，会调用到LatencyFaultToleranceImpl的方法来判断
+ *      MQFaultStrategy为消息的故障转移和负载均衡提供支持。在这个过程中，会调用到LatencyFaultToleranceImpl的方法来判断
  *      Broker的延迟信息 和 状态
  * */
 public class MQFaultStrategy {
@@ -151,6 +151,9 @@ public class MQFaultStrategy {
         this.latencyFaultTolerance.shutdown();
     }
 
+    /**【】：根据sendLatencyFaultEnable的值来决定，靠哪些过滤器来筛选出一个消息队列。
+     *      不管哪种方案，没有选到满足条件的messageQueue时，tpInfo.selectOneMessageQueue()是
+     *      兜底方案。*/
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName, final boolean resetIndex) {
         BrokerFilter brokerFilter = threadBrokerFilter.get();
         brokerFilter.setLastBrokerName(lastBrokerName);
@@ -159,11 +162,12 @@ public class MQFaultStrategy {
             if (resetIndex) {
                 tpInfo.resetIndex();
             }
+            /*优先查找isAvailable的。判断逻辑(系统当前时间 不小于 startTimestamp属性的值)*/
             MessageQueue mq = tpInfo.selectOneMessageQueue(availableFilter, brokerFilter);
             if (mq != null) {
                 return mq;
             }
-
+            /*如果没有找到，再考虑可到达的isReachable。判断逻辑(看reachableFlag的值)*/
             mq = tpInfo.selectOneMessageQueue(reachableFilter, brokerFilter);
             if (mq != null) {
                 return mq;
@@ -171,7 +175,8 @@ public class MQFaultStrategy {
 
             return tpInfo.selectOneMessageQueue();
         }
-        //情况2：如果关闭了”延迟故障检测“，则"只"根据brokerFilter过滤器把根据mod拿到的消息队列筛一遍，并返回。
+        /*情况2：如果关闭了"延迟故障检测"，则"只"根据brokerFilter过滤器把根据mod拿到的消息队列，
+         用过滤器的规则筛一遍，并返回。*/
         MessageQueue mq = tpInfo.selectOneMessageQueue(brokerFilter);
         if (mq != null) {
             return mq;
@@ -179,13 +184,18 @@ public class MQFaultStrategy {
         return tpInfo.selectOneMessageQueue();
     }
 
-    //？？
+    /**
+     * []：根据参数更新FaultItem
+     * @param brokerName brokerName（代表一个broker集群）
+     * @param currentLatency 当前延迟值（代表发送消息所耗费的时间）
+     * @param isolation isolation（代表是否隔离）???
+     * @param reachable reachable（代表是否可用）*/
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation,
                                 final boolean reachable) {
         if (this.sendLatencyFaultEnable) {
             /**
-             * 首次isolation传入的是false，currentLatency是发送消息所耗费的时间，如下
-             * this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+             * 首次isolation传入的是false，currentLatency是发送消息所耗费的时间————从开始发送消息到最后
+             *      得到sendKernelImpl方法返回的sendResult经历的时间(换言之即发送这个消息的耗时)
              * */
             long duration = computeNotAvailableDuration(isolation ? 10000 : currentLatency);
             this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration, reachable);
@@ -193,8 +203,9 @@ public class MQFaultStrategy {
     }
 
     /**
-     * 根据延迟时间对比MQFaultStrategy中的延迟级别数组latencyMax，不可用时长数组notAvailableDuration。来
-     *      将该broker加进faultItemTable中。
+     * 【】：根据当前的延迟值（currentLatency）计算一个不可用持续时间（notAvailableDuration）。
+     * 逻辑实现：在latencyMax数组中找到不大于currentLatency的最大值假设索引是m，返回
+     *      notAvailableDuration数组中这个下标(m)对应的值
      */
     private long computeNotAvailableDuration(final long currentLatency) {
         for (int i = latencyMax.length - 1; i >= 0; i--) {

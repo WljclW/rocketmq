@@ -18,8 +18,9 @@
 package org.apache.rocketmq.client.latency;
 
 /**
- * 【QWen】延迟容错机制 （Latency Fault Tolerance）。它的核心作用是帮助客户端（如生产者或消费者）在与 Broker 的交互中，动态评
+ * 【QWen】延迟容错机制 （Latency Fault Tolerance）。它的核心作用是帮助客户端（如生产者或消费者）在与Broker的交互中，动态评
  *      估和处理 Broker 的延迟问题，从而避免因某个 Broker 性能下降或故障而导致整个系统的性能受到影响。
+ *      因此这些方法总最主要的功能就是对Broker状态的变更 或者 查询
  * */
 public interface LatencyFaultTolerance<T> {
     /**

@@ -30,7 +30,7 @@ public class TopicPublishInfo {
     private boolean orderTopic = false;     //是否是顺序消息
     private boolean haveTopicRouterInfo = false;
     private List<MessageQueue> messageQueueList = new ArrayList<>(); //该主题对应的所有消息队列
-    private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();  //每选择一次消息队列， 该值会自增1，如果 Integer.MAX_VALUE, 则重置为0，用于选择消息队列
+    private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();  //每选择一次消息队列，该值会自增1，如果超过Integer.MAX_VALUE, 则重置为0，用于选择消息队列
     private TopicRouteData topicRouteData;  //路由元数据
 
     public interface QueueFilter {
@@ -99,9 +99,11 @@ public class TopicPublishInfo {
         }
         /**
          * 根据过滤器筛选队列的逻辑如下：
-         * 根据ThreadLocalIndex拿队列，拿到队列循环遍历过滤器。。。有两种结果
+         * 根据ThreadLocalIndex值取余拿队列，针对拿到的消息队列循环遍历过滤器进行筛选。。。有两种结果
          *       ————如果能选到队列(即filterResult==true),则返回。
          *       ————如果选不到队列，则返回null
+         * [说明]下面的外层循环是循环次数是：messageQueueList.size()，也就是说最多遍历一轮所有的消息队
+         *      列，期间如果找到符合的消息队列就返回；如果最后还是没有找到，则出了for循环就返回null
          * */
         //如果存在过滤器，使用下面的if块进行筛选
         if (filter != null && filter.length != 0) {

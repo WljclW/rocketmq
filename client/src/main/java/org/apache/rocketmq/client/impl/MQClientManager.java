@@ -27,7 +27,10 @@ import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 /**
- * 【总述】负责MQClientInstance(producer和consumer的底层类，他们在rocketmq中都属于客户端)的创建和管理，ProducerAccumulator的创建和管理。
+ * 【总述】负责MQClientInstance(producer和consumer的底层类，他们在rocketmq中都属于客户端)的创建和管理；
+ *          以及ProducerAccumulator的创建和管理。
+ *         MQClientInstance的创建和管理通过factoryTable、factoryIndexGenerator两个字段；
+ *         ProducerAccumulator的管理通过accumulatorTable字段
  * 一个 JVM 实例中只存在一个MQClientManager实例。维护一个MQClientInstance缓存表ConcurrentMap<String,MQClientInstance> factoryTable
  *      即：同一个clientId只会创建一个MQClientInstance实例。
  * MQClientInstance是客户端各种类型的Consumer和Producer的底层类。这个类首先从NameServer获取并保存各种配置信息，比如
