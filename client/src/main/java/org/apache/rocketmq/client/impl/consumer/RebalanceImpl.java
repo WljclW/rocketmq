@@ -241,12 +241,12 @@ public abstract class RebalanceImpl {
         return true;
     }
 
-    /**【作用】是对所有的消息队列进行负载均衡。。。返回值表示是不是所有的消息队列都已经再平衡完成*/
+    /**【作用】对所有的消息队列进行负载均衡。。。返回值表示是不是所有的消息队列都已经再平衡完成*/
     public boolean doRebalance(final boolean isOrder) {
         boolean balanced = true;
         /*拿到所有的订阅信息。
         * 【注意】每一个消费者内部持有一个属于自己的RebalanceImpl对象，因此这里拿到的订阅信息其实是当前消费者所有的订阅信息。
-        *       在这个维度上，继续细化，这个订阅信息的键值是topic*/
+        *       在这个维度上，继续细化，这个订阅信息的键是topic*/
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {

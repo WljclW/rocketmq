@@ -18,9 +18,10 @@ package org.apache.rocketmq.client.latency;
 
 /**
  * Resolver接口的作用本质上应该表述为：给出一个BrokerName，解析出一个Broker的地址。具体的实现逻辑
- *      则由方法resolve的编码实现
+ *      则由方法resolve的编码实现。比如：在DefaultMQProducerImpl的构造方法中，创建MQFaultStrategy
+ *      对象时，会创建一个匿名的Resolver对象，它的resolve方法的逻辑是返回这个Broker集群中id=0的节点地址
  * */
 public interface Resolver {
 
-    String resolve(String name);
+    String resolve(String name /*brokerName*/);
 }

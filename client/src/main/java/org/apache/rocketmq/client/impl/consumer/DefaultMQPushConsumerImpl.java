@@ -128,6 +128,9 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     private volatile boolean pause = false;
     private boolean consumeOrderly = false;
     private MessageListener messageListenerInner;
+    /*用于存储消费者的消费进度。初始化时会根据消费的类型(广播？非广播？)来创建具体的对应的实现类。
+    * 作用：比如持久化消费进度的服务就会调用OffsetStore的存储方法持久化这个消费者对于多个消息队列的消费进度，且这
+    *       个逻辑会在定时任务中执行；*/
     private OffsetStore offsetStore;
     private ConsumeMessageService consumeMessageService;
     private ConsumeMessageService consumeMessagePopService;
@@ -1485,14 +1488,20 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return false;
     }
 
+    /**【】：持久化消息队列的消费进度到 本地存储 或者 远端。*/
     @Override
     public void persistConsumerOffset() {
         try {
+            /*step1:确保状态正常*/
             this.makeSureStateOK();
             Set<MessageQueue> mqs = new HashSet<>();
+            /*step2:获取当前消费者分配到的所有消息队列messageQueue*/
             Set<MessageQueue> allocateMq = this.rebalanceImpl.getProcessQueueTable().keySet();
             mqs.addAll(allocateMq);
-
+            /*step3:依次持久化这些消息队列的消费进度。
+            * 这里的this.offsetStore是一个接口的引用，会根据消费类型来使用不同的对象，不同的对象也对应不同的持久化方式！！！面向
+            *   接口编程。这里有两种不同的实现即OffsetStore接口的两种实现————一是LocalFileOffsetStore将消费进度持久化在本地；
+            *   另一种是RemoteBrokerOffsetStore将消费进度持久化在Broker端*/
             this.offsetStore.persistAll(mqs);
         } catch (Exception e) {
             log.error("group: " + this.defaultMQPushConsumer.getConsumerGroup() + " persistConsumerOffset exception", e);
@@ -1590,23 +1599,27 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         this.serviceState = serviceState;
     }
 
+    /**【】：根据消息堆积量（消息累积总数，也即未被处理的消息总数）动态调整消费者的线程池核心线程数*/
     public void adjustThreadPool() {
+        //计算消息堆积量？？
         long computeAccTotal = this.computeAccumulationTotal();
+        //获取动态调整线程池的阈值(这个阈值指的是消息堆积的数量)
         long adjustThreadPoolNumsThreshold = this.defaultMQPushConsumer.getAdjustThreadPoolNumsThreshold();
 
         long incThreshold = (long) (adjustThreadPoolNumsThreshold * 1.0);
 
         long decThreshold = (long) (adjustThreadPoolNumsThreshold * 0.8);
-
+        /*情况1：消息堆积很多时增加核心线程参数*/
         if (computeAccTotal >= incThreshold) {
             this.consumeMessageService.incCorePoolSize();
         }
-
+        /*情况2：消息堆积数量不到0.8倍阈值时，减少核心线程参数*/
         if (computeAccTotal < decThreshold) {
             this.consumeMessageService.decCorePoolSize();
         }
     }
 
+    /**[]:计算当前消费者被分配的processQueue尚未被处理的消息总数*/
     private long computeAccumulationTotal() {
         long msgAccTotal = 0;
         ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = this.rebalanceImpl.getProcessQueueTable();

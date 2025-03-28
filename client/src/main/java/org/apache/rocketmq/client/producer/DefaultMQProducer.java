@@ -257,8 +257,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @param customizedTraceTopic The name value of message trace topic.If you don't config,you can use the default
      *                             trace topic name.
      */
-    public DefaultMQProducer(final String producerGroup, RPCHook rpcHook, boolean enableMsgTrace,
-        final String customizedTraceTopic) {
+    public DefaultMQProducer(final String producerGroup, RPCHook rpcHook, boolean enableMsgTrace /*是不是开启消息追踪*/,
+        final String customizedTraceTopic /*用户指定的”追踪消息的这些记录“存放的topic*/) {
         this(producerGroup, rpcHook);
         //if client open the message trace feature
         if (enableMsgTrace) {
@@ -359,7 +359,12 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
-     * 启动生产者实例。内部会执行很多初始化来准备这个实例，因此在发送或者查询消息时务必调用这个方法
+     * 启动生产者实例。内部会执行很多初始化来准备这个实例，因此在发送或者查询消息时务必调用这个方法。
+     * 【干的活】
+     *      1.结合nameSpace设置生产者的组名；
+     *      2.调用DefaultMQProducerImpl.start()方法
+     *      3.如果不是null，执行this.produceAccumulator.start()
+     *      4.如果traceDispatcher不为null，调用traceDispatcher.start()，启动消息追踪服务
      * Start this producer instance. </p>
      *
      * <strong> Much internal initializing procedures are carried out to make this instance prepared, thus, it's a must
@@ -376,9 +381,11 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
         [说明]更深层次的理解是DefaultMQProducerImpl类才是实际上干活的方法，封装了各种内部干活的实现；当前类仅仅是
                 暴露给用户用于设置一些自定义配置，然后方法内调用的其实是DefaultMQProducerImpl的方法来实现需求*/
         this.defaultMQProducerImpl.start();
+        /*启动ProduceAccumulator。这个类的作用需要看看？？*/
         if (this.produceAccumulator != null) {
             this.produceAccumulator.start();
         }
+        /*启动消息追踪 的服务*/
         if (null != traceDispatcher) {
             try {
                 traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());

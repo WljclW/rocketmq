@@ -139,6 +139,7 @@ public class PullMessageService extends ServiceThread {
     }
 
     /**
+     * 【】：从阻塞队列拿到”拉取消息请求“，然后执行popMessage/pullMessage方法拿消息。
      * 亮点：从阻塞队列获取的时候使用MessageRequest(体现面向接口编程)、从阻塞队列获取任务的take()————没有时会阻塞
      * */
     @Override

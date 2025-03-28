@@ -36,7 +36,7 @@ public class RebalanceService extends ServiceThread {
         this.mqClientFactory = mqClientFactory;
     }
 
-    /**线程启动后就会执行run()
+    /**【】：线程启动后就会执行run()。rocketmq这里服务的框架使用这种方式
      * 【功能】该服务默认是每间隔20秒*/
     @Override
     public void run() {
@@ -47,11 +47,12 @@ public class RebalanceService extends ServiceThread {
             this.waitForRunning(realWaitInterval);
             /*lastRebalanceTimestamp是上一次再平衡的时间*/
             long interval = System.currentTimeMillis() - lastRebalanceTimestamp;
-            if (interval < minInterval) { /*说明离上一次再平衡还不久即暂时不需要再平衡，则更新realWaitInterval*/
+            if (interval < minInterval) { /*说明离上一次再平衡还不久即暂时不需要再平衡，仅更新realWaitInterval*/
                 realWaitInterval = minInterval - interval;
             } else {
                 /*doRebalance()执行负载均衡。
-                如果均衡执行成功则更新realWaitInterval字段为waitInterval；否则更新为minInterval(以便在负载均衡失败时更快的进行再平衡)*/
+                如果均衡执行成功则更新realWaitInterval字段为waitInterval；否则更新为minInterval(以便在负载均衡失
+                    败时更快的进行下一次的再平衡)*/
                 boolean balanced = this.mqClientFactory.doRebalance();
                 realWaitInterval = balanced ? waitInterval : minInterval;
                 //从这里可以看出来lastRebalanceTimestamp时上一次再平衡时间(只要进行再平衡就会更新，并不是说再平衡成功了才更新)

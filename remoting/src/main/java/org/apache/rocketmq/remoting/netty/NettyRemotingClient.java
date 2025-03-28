@@ -111,7 +111,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final ConcurrentHashMap<String /* cidr */, Bootstrap> bootstrapMap = new ConcurrentHashMap<>();
     /*Channel 是 Netty 中表示网络连接的核心组件，用于与远程服务通信。
     channelTables：当前客户端已创建的连接(网络通道、netty channel)。每一个远程地址对应一条长连接*/
-    private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String /* 远端的addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<>();
     private final ConcurrentMap<Channel, ChannelWrapper> channelWrapperTables = new ConcurrentHashMap<>();
 
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ClientHouseKeepingService"));
@@ -508,12 +508,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**【】：在需要更新的时候更新namesrvAddrList，更新完成后遍历channelTables，对于无效的远端addr，将对应的channelWrapper删除
+     * 【说明】：
+     *      1.这里的更新不是把参数的addrs添加到namesrvAddrList，而是用参数的addrs替换目前namesrvAddrList中所有的元素*/
     @Override
     public void updateNameServerAddressList(List<String> addrs) {
+        /*获取现在的namesrv列表*/
         List<String> old = this.namesrvAddrList.get();
         boolean update = false;
-
+        /*如果形参的addrs不是空，表示需要对这个list研究一下*/
         if (!addrs.isEmpty()) {
+            /*step1:判断是不是有差异，设置标志变量update*/
             if (null == old) {
                 update = true;
             } else if (addrs.size() != old.size()) {
@@ -526,9 +531,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     }
                 }
             }
-
+            /*如果update为true，表示需要更新；更新完成后关闭无效的channel*/
             if (update) {
-                Collections.shuffle(addrs);
+                Collections.shuffle(addrs); //随机排序
                 LOGGER.info("name server address updated. NEW : {} , OLD: {}", addrs, old);
                 this.namesrvAddrList.set(addrs);
 

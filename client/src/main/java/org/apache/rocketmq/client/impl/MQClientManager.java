@@ -79,7 +79,8 @@ public class MQClientManager {
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();   // 根据客户端配置生成唯一的客户端ID
         MQClientInstance instance = this.factoryTable.get(clientId);     // 尝试从实例表中获取已存在的MQ客户端实例
-        /**
+        /*
+         * 如果没有的话则调用构造器创建MQClientInstance实例...并将clientId——>MQClientInstance实例的映射关系存入到factoryTable
          * 从下面的逻辑可以看出来，对于同样的clientId，MQClientInstance实例只会创建一个。
          * */
         if (null == instance) {     //如果实例不存在创建一个新的实例。

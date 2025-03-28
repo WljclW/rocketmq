@@ -45,7 +45,9 @@ public class ClientConfig {
     public static final String HEART_BEAT_V2 = "com.rocketmq.heartbeat.v2";
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
     private String clientIP = NetworkUtil.getLocalAddress();
-    /*构建clientid的时候使用，如果是cluster模式，如果这个值是默认值，就会将这个值重置为”pid+纳秒数“*/
+    /*构建clientid的时候使用..
+    在方法DefaultMQProducerImpl.start(boolean)中，会调用到this.defaultMQProducer.changeInstanceNameToPID()————
+        此时如果这个属性值是”DEFAULT“，就会将这个值重新设置为”pid+纳秒数“*/
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     @Deprecated
@@ -260,10 +262,13 @@ public class ClientConfig {
         return cc;
     }
 
+    /**拿到用户配置的namesrvAddr，返回endpoint这样的形式，即不包括”http://“*/
     public String getNamesrvAddr() {
+        /*如果是http开始这样的形式，就进if语句块拿到http://之后的字符串*/
         if (StringUtils.isNotEmpty(namesrvAddr) && NameServerAddressUtils.NAMESRV_ENDPOINT_PATTERN.matcher(namesrvAddr.trim()).matches()) {
             return NameServerAddressUtils.getNameSrvAddrFromNamesrvEndpoint(namesrvAddr);
         }
+        /*否则直接返回*/
         return namesrvAddr;
     }
 
@@ -383,7 +388,9 @@ public class ClientConfig {
 
     /**
      * []：获取命名空间的方法
-     * 命名空间在 RocketMQ 中通常用于多租户场景，允许不同的租户在同一个集群中隔离资源（如 Topic 和 Group）
+     * 主要用于实现 多租户隔离 和 资源逻辑分组 。它的作用类似于其他分布式系统中的命名空间或租户标识，用于在同
+     *      一套 RocketMQ 集群中支持多个独立的逻辑分区，允许不同的租户在同一个集群中隔离资源（如 Topic 和
+     *      Group）。。指定nameSpace之后，不同nameSpace下可以用相同的topic等资源
      * */
     @Deprecated
     public String getNamespace() {

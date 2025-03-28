@@ -81,6 +81,8 @@ public class NamespaceUtil {
         return resourceWithNamespace;
     }
 
+    /**【】：给resourceWithOutNamespace字符串资源添加上namespace属性。。
+     * 这里的resourceWithOutNamespace可以是生产者组名、*/
     public static String wrapNamespace(String namespace, String resourceWithOutNamespace) {
         if (StringUtils.isEmpty(namespace) || StringUtils.isEmpty(resourceWithOutNamespace)) {
             return resourceWithOutNamespace;
@@ -89,10 +91,10 @@ public class NamespaceUtil {
         if (isSystemResource(resourceWithOutNamespace) || isAlreadyWithNamespace(resourceWithOutNamespace, namespace)) {
             return resourceWithOutNamespace;
         }
-
+        /*withOutRetryAndDLQ方法会返回组名，去除”%RETRY%“或者”%DLQ%“前缀*/
         String resourceWithoutRetryAndDLQ = withOutRetryAndDLQ(resourceWithOutNamespace);
         StringBuilder stringBuilder = new StringBuilder();
-
+        /*下面两个if是根据生产者组名看是不是 重试组 以及 延迟组*/
         if (isRetryTopic(resourceWithOutNamespace)) {
             stringBuilder.append(MixAll.RETRY_GROUP_TOPIC_PREFIX);
         }
@@ -100,7 +102,7 @@ public class NamespaceUtil {
         if (isDLQTopic(resourceWithOutNamespace)) {
             stringBuilder.append(MixAll.DLQ_GROUP_TOPIC_PREFIX);
         }
-        //生产者的组名完整的格式是下面的声明。
+        //生产者的组名完整的格式是下面的声明————即”_namespace%producerGroup“，其中"_"的位置是 %RETRY% 或者 %DLQ% 或者 什么也没有
         return stringBuilder.append(namespace).append(NAMESPACE_SEPARATOR).append(resourceWithoutRetryAndDLQ).toString();
 
     }

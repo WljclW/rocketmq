@@ -156,7 +156,7 @@ public class TopicPublishInfo {
     }
 
     /**
-     * 【总述】根据sendWhichQueue返回一个消息队列
+     * 【总述】根据sendWhichQueue的取余计算，返回一个消息队列
      * 【说明】
      * 1. MQFaultStrategy#selectOneMessageQueue(TopicPublishInfo, java.lang.String, boolean) 的逻辑可以知道：
      *      下面的方法是一个兜底的逻辑

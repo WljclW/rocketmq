@@ -291,7 +291,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         if (clientConfig.isEnableStreamRequestType()) {
             this.remotingClient.registerRPCHook(new StreamTypeRPCHook());
         }
-        /*rpcHook ：用户自定义的 RPC 钩子。*/
+        /*rpcHook：用户自定义的 RPC 钩子。*/
         this.remotingClient.registerRPCHook(rpcHook);
         /*DynamicalExtFieldRPCHook ：动态扩展字段的处理逻辑。*/
         this.remotingClient.registerRPCHook(new DynamicalExtFieldRPCHook());
@@ -1355,7 +1355,8 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
 
     /**[]：得到参数messageQueue这个消息队列的最大偏移
      * 实现逻辑：构建请求头(就是new一个请求头，然后将需要的参数设置进去)；设置请求码GET_MAX_OFFSET；利
-     *      用netty发同步请求*/
+     *      用netty发同步请求
+     * @param addr broker地址*/
     public long getMaxOffset(final String addr, final MessageQueue messageQueue, final long timeoutMillis)
         throws RemotingException, MQBrokerException, InterruptedException {
         GetMaxOffsetRequestHeader requestHeader = new GetMaxOffsetRequestHeader();

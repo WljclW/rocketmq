@@ -23,6 +23,10 @@ public class NameServerAddressUtils {
     public static final Pattern NAMESRV_ENDPOINT_PATTERN = Pattern.compile("^http://.*");
     public static final Pattern INST_ENDPOINT_PATTERN = Pattern.compile("^" + ENDPOINT_PREFIX + INSTANCE_REGEX + "\\..*");
 
+    /**从配置文件中获取指定的namesrv地址，第二个参数"System.getenv(MixAll.NAMESRV_ADDR_ENV)"作为默认值——即环境变量中配置的
+     *      NAMESRV_ADDR_ENV对应的值作为结果的默认值。
+     *      如果配置文件中”NAMESRV_ADDR_PROPERTY“对应的值不是null，就返回这个值；
+     *      如果配置文件中”NAMESRV_ADDR_PROPERTY“对应的值是null，就返回环境变量”NAMESRV_ADDR_ENV“对应的值*/
     public static String getNameServerAddresses() {
         return System.getProperty(MixAll.NAMESRV_ADDR_PROPERTY, System.getenv(MixAll.NAMESRV_ADDR_ENV));
     }

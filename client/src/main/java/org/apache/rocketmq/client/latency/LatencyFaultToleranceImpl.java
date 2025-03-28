@@ -31,10 +31,10 @@ import org.apache.rocketmq.client.common.ThreadLocalIndex;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
-/**rocketmq提供的延迟容错机制的一种实现。主要目的是针对Broker状态的管理*/
+/**rocketmq提供的延迟容错机制的一种实现————即LatencyFaultTolerance接口的官方默认实现。主要目的是针对Broker状态的管理*/
 public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> {
     private final static Logger log = LoggerFactory.getLogger(MQFaultStrategy.class);
-    /*BrokerName——>该broker集群的不可用时间*/
+    /*BrokerName——>该broker集群对应的故障检测条目FaultItem*/
     private final ConcurrentHashMap<String, FaultItem> faultItemTable = new ConcurrentHashMap<String, FaultItem>(16);
     private int detectTimeout = 200;
     private int detectInterval = 2000;
@@ -57,8 +57,19 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         this.serviceDetector = serviceDetector;
     }
 
-    /**[]：对一组 Broker(就是faultItemTable中的条目)进行一轮可达性检测
-     * 它通过定期检查每个Broker的状态，判断其是否可达，并更新其可用性标志*/
+    /**[]：对一组 Broker(就是faultItemTable中的所有条目)进行一轮可达性检测它通过定期检查每个Broker的状态，判断其是否可达，并更新其
+     *      reachableFlag标志。。
+     *      操作的步骤：
+     *          1. 遍历faultItemTable中所有的条目，如果是时候检查了则继续；否则看下一个键值对；
+     *          2. 通过"resolver.resolve"拿到broker集群中的一个brokerAddr(这里默认的实现是获取id=0的broker地址)；
+     *              如果拿到的brokerAddr为null，则从faultItemTable中移除该条目；
+     *              如果拿到的brokerAddr不为null，则继续后面逻辑
+     *          3. 调用serviceDetector.detect方法，检测指定地址（brokerAddr）的 Broker 是否可达。————方法就是尝试获取某一个消
+     *              息队列的最大偏移，看看能不能拿到
+     *      操作的结果体现为两点：
+     *          1.faultItemTable中键对应的Broker集群master地址拿不到的时候，将faultItemTable这一项移除
+     *          2.调用方法”serviceDetector.detect“，如果某一个BrokerAddr时可达到的，则将该轮映射的值FaultItem的reachableFlag标
+     *              志置为true*/
     public void detectByOneRound() {
         for (Map.Entry<String, FaultItem> item : this.faultItemTable.entrySet()) {
             FaultItem brokerItem = item.getValue();
@@ -67,8 +78,9 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             if (System.currentTimeMillis() - brokerItem.checkStamp >= 0) {
                 //更新这个brokerItem下一次需要被检测的时间戳
                 brokerItem.checkStamp = System.currentTimeMillis() + this.detectInterval;
-                /*在DefaultMQProducerImpl的构造器中会创建LatencyFaultToleranceImpl，此时传递给构造
-                器的resolver逻辑是：根据BrokerName返回id=0节点的brokerAddr*/
+                /*step1：在DefaultMQProducerImpl的构造器中会创建LatencyFaultToleranceImpl，此时传递给构造
+                器的resolver逻辑是：根据faultItemTable中当前索引项的键BrokerName返回这个broker集群中id=0节点
+                的brokerAddr*/
                 String brokerAddr = resolver.resolve(brokerItem.getName());
                 if (brokerAddr == null) {
                     faultItemTable.remove(item.getKey());
@@ -77,9 +89,9 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
                 if (null == serviceDetector) {
                     continue;
                 }
-                /*调用 serviceDetector 的 detect 方法，检测指定地址（brokerAddr）的 Broker 是否可达。*/
+                /*step2：调用serviceDetector的detect 方法，检测指定地址（brokerAddr）的 Broker 是否可达。*/
                 boolean serviceOK = serviceDetector.detect(brokerAddr, detectTimeout);
-                //如果Broker可达，则更新brokerItem的可达性标志为true。。
+                /*step3：如果Broker可达，则更新brokerItem的可达性标志为true。。*/
                 if (serviceOK && !brokerItem.reachableFlag) {
                     log.info(brokerItem.name + " is reachable now, then it can be used.");
                     brokerItem.reachableFlag = true;
@@ -88,6 +100,8 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
     }
 
+    /**【】：启动一个新的线程去检测broker的reachable这个属性
+     * 每3秒进行一次故障检测*/
     public void startDetector() {
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
@@ -222,7 +236,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
 
         /**
-         * 【】：rocketmq会根据每次延迟预测不可用时间，这里就是根据预测的不可用时间更新这个broker集群从什么时候
+         * 【】：rocketmq会根据每次延迟预测不可用时间，这个方法的目的：根据预测的不可用时间更新这个broker集群从什么时候
          *      开始变得可用
          * 给startTimestamp赋值为:当前时间+computeNotAvailableDuration(isolation ? 10000 : currentLatency);的结
          *      果，这个startTimestamp参数在isAvailable()逻辑会用到
