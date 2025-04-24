@@ -571,7 +571,9 @@ public class RouteInfoManager {
         unRegisterBroker(Sets.newHashSet(unRegisterBrokerRequest));
     }
 
-    /**[]：根据set集合(set集合中是一个个的Broker注销的请求)，注销集合中提到的Broker注销请求*/
+    /**
+     * []：根据set集合(set集合中是一个个的Broker注销的请求)，注销集合中提到的Broker注销请求。。。
+     * [说明]：这个方法还是比较关键的，会删除所有与被删除Broker相关的缓存信息*/
     public void unRegisterBroker(Set<UnRegisterBrokerRequestHeader> unRegisterRequests) {
         try {
             Set<String> removedBroker = new HashSet<>();

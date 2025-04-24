@@ -99,7 +99,7 @@ public class NamesrvController {
     }
 
     public boolean initialize() {   /**做一些初始化操作*/
-        loadConfig();   //加载KV配置表...加载系统配置，这是系统运行所必需的配置信息
+        loadConfig();   //加载KV配置表...KV配置和其他配置的区别？？
         initiateNetworkComponents();  //创建网络处理组件。包括：remotingClient和remotingServer
         initiateThreadExecutors(); //初始化线程池。一个是clientRequestThreadPoolQueue；另一个是defaultThreadPoolQueue
         registerProcessor();    //注册处理接收到请求的处理器。一个处理请求码为"GET_ROUTE_BY_TOPIC"的请求，一个是defaultProcessor
@@ -148,9 +148,9 @@ public class NamesrvController {
     }
 
     /**
-     * 创建两个阻塞队列，并初始化两个线程池，一个是defaultExecutor，用于处理默认的远程请求；
+     *     创建两个阻塞队列，并初始化两个线程池，一个是defaultExecutor，用于处理默认的远程请求；
      * 另一个是clientRequestExecutor，用于处理客户端的路由信息请求。
-     * [这两个线程池的区别？]看下面的registerProcessor方法，registerProcessor线程池是特
+     * [这两个线程池的区别？]看下面的registerProcessor方法，clientRequestExecutor线程池是特
      *      定的处理器使用的，这种处理器只处理请求码是“GET_ROUTE_BY_TOPIC”的这类请求；另外
      *      一个defaultExecutor线程池是默认处理器处理请求时使用的
      * 这两个线程池都使用了LinkedBlockingQueue作为任务队列，并且重写了newTaskFor方法，使
@@ -158,7 +158,7 @@ public class NamesrvController {
      * */
     private void initiateThreadExecutors() {
         this.defaultThreadPoolQueue = new LinkedBlockingQueue<>(this.namesrvConfig.getDefaultThreadPoolQueueCapacity());
-        //用于处理通用的远程请求(比如：心跳包，Broker注册)
+        //用于处理通用的远程请求(可以理解为除了“路由信息请求”的其他请求。比如：心跳包，Broker注册)
         this.defaultExecutor = ThreadUtils.newThreadPoolExecutor(this.namesrvConfig.getDefaultThreadPoolNums(), this.namesrvConfig.getDefaultThreadPoolNums(), 1000 * 60, TimeUnit.MILLISECONDS, this.defaultThreadPoolQueue, new ThreadFactoryImpl("RemotingExecutorThread_"));
 
         this.clientRequestThreadPoolQueue = new LinkedBlockingQueue<>(this.namesrvConfig.getClientRequestThreadPoolQueueCapacity());
@@ -279,7 +279,7 @@ public class NamesrvController {
      * 调用routeInfoManager对象的start方法，启动一个路由信息管理器，用于维护Broker和Topic的路由关系。
      * */
     public void start() throws Exception {
-        this.remotingServer.start();    //接收和处理客户端的请求
+        this.remotingServer.start();    //用于接收和处理客户端的请求
 
         // In test scenarios where it is up to OS to pick up an available port, set the listening port back to config
         if (0 == nettyServerConfig.getListenPort()) {
@@ -288,7 +288,7 @@ public class NamesrvController {
 
         this.remotingClient.updateNameServerAddressList(Collections.singletonList(NetworkUtil.getLocalAddress()
             + ":" + nettyServerConfig.getListenPort()));
-        this.remotingClient.start();    //向其他服务发送请求
+        this.remotingClient.start();    //用于向其他服务发送请求
 
         if (this.fileWatchService != null) {    //动态加载证书文件的服务
             this.fileWatchService.start();

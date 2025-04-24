@@ -137,7 +137,7 @@ public class Configuration {
                 this.storePathObject = object;
                 // check
                 this.storePathField = object.getClass().getDeclaredField(fieldName);
-                assert this.storePathField != null
+                assert this.storePathField != null  /*保证有对应的字段，并且对应的字段不是static类型的*/
                     && !Modifier.isStatic(this.storePathField.getModifiers());
                 this.storePathField.setAccessible(true);
             } catch (NoSuchFieldException e) {

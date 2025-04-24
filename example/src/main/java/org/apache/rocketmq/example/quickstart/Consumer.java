@@ -29,10 +29,15 @@ import java.lang.reflect.Proxy;
  * This example shows how to subscribe and consume messages using providing {@link DefaultMQPushConsumer}.
  */
 public class Consumer {
-
+    /*
+    * 测试时发现打印的消费日志信息中线程的信息是：
+    *     ConsumeMessageThread_please_rename_unique_group_name_4_m。其中m的值是[1,20]之间的整数。并且通
+    * 过“Runtime.getRuntime().availableProcessors()”获取的值也是20.
+    *     Runtime.getRuntime().availableProcessors() //返回当前机器的逻辑核心数，而不是物理核心数
+    * */
     public static final String CONSUMER_GROUP = "please_rename_unique_group_name_4";
     public static final String DEFAULT_NAMESRVADDR = "127.0.0.1:9876";
-    public static final String TOPIC = "TopicTest";
+    public static final String TOPIC = "MyTopic0101";
 
     public static void main(String[] args) throws MQClientException {
 

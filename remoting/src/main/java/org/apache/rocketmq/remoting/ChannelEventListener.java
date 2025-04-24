@@ -25,7 +25,7 @@ public interface ChannelEventListener {
 
     void onChannelException(final String remoteAddr, final Channel channel);
 
-    void onChannelIdle(final String remoteAddr, final Channel channel);
+    void onChannelIdle(final String remoteAddr, final Channel channel); //处理通道空闲
 
     void onChannelActive(final String remoteAddr, final Channel channel);
 }

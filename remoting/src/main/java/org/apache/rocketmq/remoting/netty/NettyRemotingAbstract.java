@@ -477,17 +477,18 @@ public abstract class NettyRemotingAbstract {
     /**
      * <p>
      * This method is periodically invoked to scan and expire deprecated request.
+     * 定期调用这个方法来检测并移除过期的请求
      * </p>
      */
     public void scanResponseTable() {
-        final List<ResponseFuture> rfList = new LinkedList<>();
+        final List<ResponseFuture> rfList = new LinkedList<>(); /*用于存储找到的过期请求*/
         Iterator<Entry<Integer, ResponseFuture>> it = this.responseTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<Integer, ResponseFuture> next = it.next();
             ResponseFuture rep = next.getValue();
             //if条件满足表示：请求已经过时了
             if ((rep.getBeginTimestamp() + rep.getTimeoutMillis() + 1000) <= System.currentTimeMillis()) {
-                rep.release();
+                rep.release(); //释放与该请求相关的资源。这里其实释放的是信号量Semaphor
                 it.remove();
                 rfList.add(rep);
                 log.warn("remove timeout request, " + rep);
@@ -705,7 +706,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     class NettyEventExecutor extends ServiceThread {
-        private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<>();
+        private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<>(); //存储待处理的网络事件
 
         public void putNettyEvent(final NettyEvent event) {
             int currentSize = this.eventQueue.size();
@@ -725,8 +726,8 @@ public abstract class NettyRemotingAbstract {
 
             while (!this.isStopped()) {
                 try {
-                    NettyEvent event = this.eventQueue.poll(3000, TimeUnit.MILLISECONDS);
-                    if (event != null && listener != null) {
+                    NettyEvent event = this.eventQueue.poll(3000, TimeUnit.MILLISECONDS); /*如果有数据立即返回；否则最多等待3秒返回null或者数据*/
+                    if (event != null && listener != null) { /*根据事件类型，调用listener的相关方法*/
                         switch (event.getType()) {
                             case IDLE:
                                 listener.onChannelIdle(event.getRemoteAddr(), event.getChannel());

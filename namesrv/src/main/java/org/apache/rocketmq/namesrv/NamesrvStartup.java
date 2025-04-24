@@ -53,7 +53,7 @@ public class NamesrvStartup {
 
     public static void main(String[] args) {
         main0(args);    //启动namesrvController
-        controllerManagerMain();   //启动ControllerManager
+        controllerManagerMain();   //启动ControllerManager。可选配置见参数NamesrvConfig.enableControllerInNamesrv
     }
 
     public static NamesrvController main0(String[] args) {

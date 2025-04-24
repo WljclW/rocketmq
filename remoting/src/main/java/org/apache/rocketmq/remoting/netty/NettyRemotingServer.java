@@ -102,7 +102,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private final ScheduledExecutorService scheduledExecutorService;
     private final ChannelEventListener channelEventListener;
 
-    //定时扫描号，对NettyRemotingAbstract 中的responseTable 进行扫描，将超时的请求移除。
+    //定时扫描，对NettyRemotingAbstract 中的responseTable 进行扫描，将超时的请求移除。
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ServerHouseKeepingService"));
 
     private DefaultEventExecutorGroup defaultEventExecutorGroup;    //用来处理Handler的线程池或说Netty ChannelHandler线程执行组。
@@ -132,7 +132,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     }
 
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
-        final ChannelEventListener channelEventListener) {
+        final ChannelEventListener channelEventListener /*在创建的时候这个参数通常是xxxxHouseKeepingService*/) {
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());
         this.serverBootstrap = new ServerBootstrap();
         this.nettyServerConfig = nettyServerConfig;
@@ -141,8 +141,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this.publicExecutor = buildPublicExecutor(nettyServerConfig);
         this.scheduledExecutorService = buildScheduleExecutor();
 
-        this.eventLoopGroupBoss = buildBossEventLoopGroup();
-        this.eventLoopGroupSelector = buildEventLoopGroupSelector();
+        this.eventLoopGroupBoss = buildBossEventLoopGroup(); //创建处理accept的线程池
+        this.eventLoopGroupSelector = buildEventLoopGroupSelector(); //创建业务线程池，可以理解为事件循环线程组
 
         loadSslContext();
     }
@@ -155,7 +155,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
     }
 
-    private EventLoopGroup buildBossEventLoopGroup() {
+    private EventLoopGroup buildBossEventLoopGroup() { /*epoll和NIO这两种选择*/
         if (useEpoll()) {
             return new EpollEventLoopGroup(1, new ThreadFactoryImpl("NettyEPOLLBoss_"));
         } else {
@@ -206,14 +206,14 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(nettyServerConfig.getServerWorkerThreads(),
             new ThreadFactoryImpl("NettyServerCodecThread_"));
 
-        prepareSharableHandlers();  //准备共享的处理器，这个处理器可以在多个通道中共享
+        prepareSharableHandlers();  /*准备共享的处理器，这个处理器可以在多个通道中共享。。这些handler在下面的configChannel方法使用*/
 
         serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector) //配置服务器的引导程序。前者负责接受连接，后者后者负责处理IO操作(处理已建立的连接)
             .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)  //根据os是否支持epoll进行选择
-            .option(ChannelOption.SO_BACKLOG, 1024) //
-            .option(ChannelOption.SO_REUSEADDR, true)
+            .option(ChannelOption.SO_BACKLOG, 1024) //待连接的队列大小。超过时其他的连接丢弃
+            .option(ChannelOption.SO_REUSEADDR, true) //允许地址服用。处于TIME_WAIT状态的接口可以被别的进程绑定
             .childOption(ChannelOption.SO_KEEPALIVE, false)
-            .childOption(ChannelOption.TCP_NODELAY, true)
+            .childOption(ChannelOption.TCP_NODELAY, true) //禁用nagle算法
             .localAddress(new InetSocketAddress(this.nettyServerConfig.getBindAddress(),
                 this.nettyServerConfig.getListenPort()))
             .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -257,7 +257,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         };
         this.timer.newTimeout(timerScanResponseTable, 1000 * 3, TimeUnit.MILLISECONDS);
 
-        scheduledExecutorService.scheduleWithFixedDelay(() -> {
+        scheduledExecutorService.scheduleWithFixedDelay(() -> { /*每隔1秒打印 出站 和 入站 信息的快照*/
             try {
                 NettyRemotingServer.this.printRemotingCodeDistribution();
             } catch (Throwable e) {
@@ -286,15 +286,19 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             );
     }
 
+    /**根据nettyServerConfig的字段设置“每一个客户端建立的通道”的几个参数。*/
     private void addCustomConfig(ServerBootstrap childHandler) {
+        /*发送缓冲区的大小。超出此大小发送操作将被阻塞直到有空间可以使用。*/
         if (nettyServerConfig.getServerSocketSndBufSize() > 0) {
             log.info("server set SO_SNDBUF to {}", nettyServerConfig.getServerSocketSndBufSize());
             childHandler.childOption(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize());
         }
+        /*接收缓冲区的大小。用于接收从网络接收到的数据，满了的话将将会暂停接收数据*/
         if (nettyServerConfig.getServerSocketRcvBufSize() > 0) {
             log.info("server set SO_RCVBUF to {}", nettyServerConfig.getServerSocketRcvBufSize());
             childHandler.childOption(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize());
         }
+        /**/
         if (nettyServerConfig.getWriteBufferLowWaterMark() > 0 && nettyServerConfig.getWriteBufferHighWaterMark() > 0) {
             log.info("server set netty WRITE_BUFFER_WATER_MARK to {},{}",
                 nettyServerConfig.getWriteBufferLowWaterMark(), nettyServerConfig.getWriteBufferHighWaterMark());
@@ -302,6 +306,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 nettyServerConfig.getWriteBufferLowWaterMark(), nettyServerConfig.getWriteBufferHighWaterMark()));
         }
 
+        /*判断相关配置。使用netty的默认内存池分配策略————PooledByteBufAllocator.DEFAULT*/
         if (nettyServerConfig.isServerPooledByteBufAllocatorEnable()) {
             childHandler.childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         }
@@ -436,13 +441,13 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     private void printRemotingCodeDistribution() {
         if (distributionHandler != null) {
-            //获取并打印入站 请求码分布信息
+            //获取并打印入站请求的快照(是字符串)
             String inBoundSnapshotString = distributionHandler.getInBoundSnapshotString();
             if (inBoundSnapshotString != null) {
                 TRAFFIC_LOGGER.info("Port: {}, RequestCode Distribution: {}",
                     nettyServerConfig.getListenPort(), inBoundSnapshotString);
             }
-            //获取并打印出站 响应码分布信息
+            //获取并打印出站响应的快照(是一个字符串)
             String outBoundSnapshotString = distributionHandler.getOutBoundSnapshotString();
             if (outBoundSnapshotString != null) {
                 TRAFFIC_LOGGER.info("Port: {}, ResponseCode Distribution: {}",

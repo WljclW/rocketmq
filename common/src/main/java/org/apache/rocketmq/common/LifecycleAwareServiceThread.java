@@ -23,6 +23,18 @@ public abstract class LifecycleAwareServiceThread extends ServiceThread {
 
     private final AtomicBoolean started = new AtomicBoolean(false);
 
+    /**
+     *    【总述】这个run方法提供了一种更通用、功能更完全的实现。其中"started.notifyAll();"会唤醒所有等在started对象锁的线程，
+     * 而服务真正的逻辑在run0方法实现。
+                比如：下面的代码段就是用于等待获取started对象锁
+                     // 某个其他线程
+                     synchronized (started) {
+                         while (!started.get()) {
+                            started.wait(); // 等待服务启动
+                         }
+                     // 服务已经启动，继续干活
+                     }
+     * */
     @Override
     public void run() {
         started.set(true);

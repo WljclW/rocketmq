@@ -186,7 +186,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return r.nextInt(999);
     }
 
-    private void loadSocksProxyJson() {
+    private void loadSocksProxyJson() { /*从json加载SOCKs的代理信息*/
         Map<String, SocksProxyConfig> sockProxyMap = JSON.parseObject(
             nettyClientConfig.getSocksProxyConfig(), new TypeReference<Map<String, SocksProxyConfig>>() {
             });
@@ -220,7 +220,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                             LOGGER.warn("Connections are insecure as SSLContext is null!");
                         }
                     }
-                    /**addLast里要是没有传入EventExecutorGroup，那事件的执行默认在 Work 线程组*/
+                    /**1.addLast里要是没有传入自定义的其他的线程池，那事件的执行默认在 Work EventLoopGroup。
+                     * 2.实际开发时，建议将耗时操作的handler执行时放在自定义的线程池中*/
                     ch.pipeline().addLast(  //Netty 的核心扩展点，应用程序的业务逻辑可以通过该事件处理器进行扩展
                         nettyClientConfig.isDisableNettyWorkerGroup() ? null : defaultEventExecutorGroup,
                         new NettyEncoder(), //RocketMQ 请求编码器，即协议编码器
@@ -250,7 +251,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         nettyEventExecutor.start();
 
-        //删除过期的定时任务
+        /*跟NettyRemotingServer类似，用于删除过期的请求，并调用对应的callback*/
         TimerTask timerTaskScanResponseTable = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
@@ -516,7 +517,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         /*获取现在的namesrv列表*/
         List<String> old = this.namesrvAddrList.get();
         boolean update = false;
-        /*如果形参的addrs不是空，表示需要对这个list研究一下*/
+        /*对比addrs 和 old，看看是不是有变化。如果有变化，update需要被更新为true。*/
         if (!addrs.isEmpty()) {
             /*step1:判断是不是有差异，设置标志变量update*/
             if (null == old) {
@@ -541,7 +542,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 if (this.namesrvAddrChoosed.get() != null && !addrs.contains(this.namesrvAddrChoosed.get())) {
                     String namesrvAddr = this.namesrvAddrChoosed.get();
                     for (String addr : this.channelTables.keySet()) {
-                        if (addr.contains(namesrvAddr)) {
+                        if (addr.contains(namesrvAddr)) { /*在channelTables中找到namesrvAddrChoosed对应的channelWrapper并关闭*/
                             ChannelWrapper channelWrapper = this.channelTables.get(addr);
                             if (channelWrapper != null) {
                                 channelWrapper.close();
@@ -968,20 +969,25 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * 扫描可用(available)的namesrv
+     * 思路：
+     *      从namesrvAddrList获取namesrv地址，并尝试建立连接，连接成功的话将namesrvAddr-->channel注册到availableNamesrvAddrMap*/
     private void scanAvailableNameSrv() {
         List<String> nameServerList = this.namesrvAddrList.get();
         if (nameServerList == null) {
             LOGGER.debug("scanAvailableNameSrv addresses of name server is null!");
             return;
         }
-
+        /*更新availableNamesrvAddrMap中记录的namesrvAddr*/
         for (String address : NettyRemotingClient.this.availableNamesrvAddrMap.keySet()) {
             if (!nameServerList.contains(address)) {
                 LOGGER.warn("scanAvailableNameSrv remove invalid address {}", address);
                 NettyRemotingClient.this.availableNamesrvAddrMap.remove(address);
             }
         }
-
+        /*    遍历nameServerList获取或者创建namesrv对应的channel：如果创建成功则在availableNamesrvAddrMap中记录
+           如果创建失败也需要把它从availableNamesrvAddrMap移除*/
         for (final String namesrvAddr : nameServerList) {
             scanExecutor.execute(new Runnable() {
                 @Override

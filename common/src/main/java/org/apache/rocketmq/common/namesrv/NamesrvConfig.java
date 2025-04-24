@@ -80,6 +80,11 @@ public class NamesrvConfig {
 
     /**
      * Is startup the controller in this name-srv。。。nameSrv在启动的时候可以嵌入Controller模块
+     * 关于这个属性的补充说明：
+     *    在 RocketMQ 的架构中，NameServer 作为轻量级的服务注册中心，主要负责管理 Broker 的路由信息，并为 Producer 和 Consumer 提供
+     * 路由服务。传统的 NameServer 是无状态的，不参与集群的协调和管理。
+     *    然而，在某些场景下（例如高可用性和动态扩展），需要一个更强大的协调机制来管理整个集群的状态和元数据。为此，RocketMQ 引入了
+     * Controller 的概念，它是一种集中式的协调组件，用于管理集群的元数据、Broker 状态、主从切换等任务。
      */
     private boolean enableControllerInNamesrv = false;
 
