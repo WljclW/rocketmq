@@ -314,11 +314,12 @@ public class BrokerController {
         final NettyClientConfig nettyClientConfig,
         final MessageStoreConfig messageStoreConfig
     ) {
-        /*构造函数形参参数 设置到本身字段*/
+        /*1. 构造函数形参参数 设置到本身字段*/
         this.brokerConfig = brokerConfig;
         this.nettyServerConfig = nettyServerConfig;
         this.nettyClientConfig = nettyClientConfig;
         this.messageStoreConfig = messageStoreConfig;
+        /*2. 创建多种管理器*/
         /*根据ip以及端口设置storeHost字段、给字段brokerStatsManager赋值、给字段broadcastOffsetManager赋值*/
         this.setStoreHost(new InetSocketAddress(this.getBrokerConfig().getBrokerIP1(), getListenPort()));
         //管理Broker的统计信息(rocketmq中记录统计信息的类通常是xxxstatsManager)
@@ -340,7 +341,8 @@ public class BrokerController {
             this.consumerOffsetManager = messageStoreConfig.isEnableLmq() ? new LmqConsumerOffsetManager(this) : new ConsumerOffsetManager(this);
         }
         this.topicQueueMappingManager = new TopicQueueMappingManager(this);
-        /*处理Consumer拉取消息请求的类..针对请求码是RequestCode.PULL_MESSAGE的请求*/
+        /*3. 创建各种处理器*/
+        /*处理Consumer拉取消息请求的处理器..针对请求码是RequestCode.PULL_MESSAGE的请求*/
         this.pullMessageProcessor = new PullMessageProcessor(this);
         this.peekMessageProcessor = new PeekMessageProcessor(this);
         /*Consumer使用Push方式的长轮询机制拉取请求时，请求可以被挂起！！同时当有消息到达时进行推送处理的服务*/
@@ -352,6 +354,7 @@ public class BrokerController {
         this.changeInvisibleTimeProcessor = new ChangeInvisibleTimeProcessor(this);
         this.sendMessageProcessor = new SendMessageProcessor(this);
         this.replyMessageProcessor = new ReplyMessageProcessor(this);
+        /*4. 初始化各种监听器*/
         /*有消息到达Broker时的监听器，回调pullRequestHoldService中的notifyMessageArriving()方法*/
         this.messageArrivingListener = new NotifyMessageArrivingListener(this.pullRequestHoldService, this.popMessageProcessor, this.notificationProcessor);
         // 消费者ID变化监听器
@@ -384,7 +387,7 @@ public class BrokerController {
         /*Broker主从同步进度管理类*/
         this.slaveSynchronize = new SlaveSynchronize(this);
         this.endTransactionProcessor = new EndTransactionProcessor(this);
-        /*为不同类型的请求，创建各种线程池的阻塞队列*/
+        /*6. 为不同类型的请求，创建各种线程池的阻塞队列*/
         //①发送消息线程池队列
         this.sendThreadPoolQueue = new LinkedBlockingQueue<>(this.brokerConfig.getSendThreadPoolQueueCapacity());
         this.putThreadPoolQueue = new LinkedBlockingQueue<>(this.brokerConfig.getPutThreadPoolQueueCapacity());
@@ -778,7 +781,7 @@ public class BrokerController {
         }
     }
 
-    /**[]:从持久化存储中加载各种元数据管理器的数据——即加载服务器config/目录下的所有配置文件、日志文件。比
+    /**[]:从持久化存储中加载各种元数据管理器的数据——即broker。conf文件中指定的所有配置文件、日志文件。比
      *  如：Topic相关配置、Consumer消费消息进度情况、Consumer订阅关系、Consumer过滤关系，CommitLog、
      *  ConsumeQueue日志文件*/
     public boolean initializeMetadata() {
@@ -794,30 +797,34 @@ public class BrokerController {
         return result;
     }
 
+    /**
+     * 创建MessageStore(最终创建的MessageStore是在MessageStoreFactory.build方法完成),并进行初始化
+     * */
     public boolean initializeMessageStore() {
         boolean result = true;
         try {
             DefaultMessageStore defaultMessageStore;
-            //创建消息存储类DefaultMessageStore
+            /*1.创建消息存储类DefaultMessageStore....构造器中会做很多操作。【注】这个对象仅仅是一个参数，在后面的"MessageStoreFactory.build"才会创建
+            最终的MessageStore，在build方法中会体现到用户扩展的点*/
             if (this.messageStoreConfig.isEnableRocksDBStore()) {
                 defaultMessageStore = new RocksDBMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener, this.brokerConfig, topicConfigManager.getTopicConfigTable());
             } else {
                 defaultMessageStore = new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener, this.brokerConfig, topicConfigManager.getTopicConfigTable());
             }
-            //如果使用的是DLegerCommitLog，则创建DLedgerRoLeChangeHandLer
+            /*2. 如果使用的是DLegerCommitLog，则创建DLedgerRoLeChangeHandLer*/
             if (messageStoreConfig.isEnableDLegerCommitLog()) {
                 DLedgerRoleChangeHandler roleChangeHandler =
                     new DLedgerRoleChangeHandler(this, defaultMessageStore);
                 ((DLedgerCommitLog) defaultMessageStore.getCommitLog())
                     .getdLedgerServer().getDLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
             }
-            //Broker的消息统计类
+            /*3. Broker的消息统计类*/
             this.brokerStats = new BrokerStats(defaultMessageStore);
 
-            // Load store plugin
+            // Load store plugin....【扩展点】
             MessageStorePluginContext context = new MessageStorePluginContext(
                 messageStoreConfig, brokerStatsManager, messageArrivingListener, brokerConfig, configuration);
-            this.messageStore = MessageStoreFactory.build(context, defaultMessageStore);
+            this.messageStore = MessageStoreFactory.build(context, defaultMessageStore); /*这一步才是创建了最终的MessageStore对象。提供了用户的扩展点*/
             this.messageStore.getDispatcherList().addFirst(new CommitLogDispatcherCalcBitMap(this.brokerConfig, this.consumerFilterManager));
             if (messageStoreConfig.isTimerWheelEnable()) {
                 this.timerCheckpoint = new TimerCheckpoint(BrokerPathConfigHelper.getTimerCheckPath(messageStoreConfig.getStorePathRootDir()));
@@ -848,6 +855,7 @@ public class BrokerController {
         return this.recoverAndInitService();
     }
 
+    /***/
     public boolean recoverAndInitService() throws CloneNotSupportedException {
 
         boolean result = true;
@@ -858,8 +866,8 @@ public class BrokerController {
         }
 
         if (messageStore != null) {
-            registerMessageStoreHook();
-            result = this.messageStore.load();
+            registerMessageStoreHook(); //注册消息存储钩子函数
+            result = this.messageStore.load(); //进行消息存储的加载。完成了持久化文件比如：consumequeue、commitlog等文件的加载
         }
 
         if (messageStoreConfig.isTimerWheelEnable()) {
@@ -879,20 +887,21 @@ public class BrokerController {
 
         if (result) {
 
-            initializeRemotingServer();
+            initializeRemotingServer(); /*初始化Broker端的服务器：一个可以处理所有的请求；一个仅仅处理发送消息的请求*/
 
             initializeResources(); //初始化后面处理请求会用到的各种线程池
 
-            registerProcessor(); //注册处理器(注册时指定该处理器对应的requestCode、处理时使用的线程池)
+            registerProcessor(); //注册处理器(注册时指定该处理器对应的requestCode、对应的处理器、执行处理流程的线程池)
 
-            initializeScheduledTasks();
+            initializeScheduledTasks(); //初始化各种定时任务
 
             initialTransaction();
 
             initialAcl();
 
-            initialRpcHooks();
+            initialRpcHooks(); //初始化RPC钩子。这一不会涉及到从资源文件加载类，并通过反射来创建类的对象。。---经典的操作很多值得反复看
 
+            //后面是对于TLS的初始化操作
             if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
                 // Register a listener to reload SslContext
                 try {
@@ -939,6 +948,7 @@ public class BrokerController {
         return result;
     }
 
+    /**初始化时会注册3个钩子函数、1个sendMessageHook*/
     public void registerMessageStoreHook() {
         List<PutMessageHook> putMessageHookList = messageStore.getPutMessageHookList();
 

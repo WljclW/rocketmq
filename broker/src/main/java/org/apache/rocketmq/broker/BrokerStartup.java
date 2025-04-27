@@ -97,16 +97,20 @@ public class BrokerStartup {
         nettyServerConfig.setListenPort(10911); //设置netty服务端的监听端口
         messageStoreConfig.setHaListenPort(0);
 
-        Options options = ServerUtil.buildCommandlineOptions(new Options());
+        Options options = ServerUtil.buildCommandlineOptions(new Options()); /*Options有四个主要的集合：longOpts(长表示)、optionGroups、requiresOpts(必须要有的选项)、shortOpts(短表示)*/
+        /*解析命令行，完成属性的解析 以及 配置对象属性的初始化*/
+        /*1.解析命令行为CommandLine实例*/
         CommandLine commandLine = ServerUtil.parseCmdLine(
             "mqbroker", args, buildCommandlineOptions(options), new DefaultParser());
         if (null == commandLine) {
             System.exit(-1);
         }
-        /**从此开始到方法结束前两行，做的事：解析命令行 以及 配置文件，将所得配置信息封装到
+        /**从此开始到方法结束前两行，做的事：加载配置文件 以及 读取命令行的解析，将所得配置信息封装到
          * brokerConfig、nettyServerConfig、nettyClientConfig、messageStoreConfig*/
         Properties properties = null;
-        /*处理启动Broker时，命令中的-c参数*/
+        /*2.1 处理启动Broker时，命令中的-c参数。拿到conf配置文件，将文件中的配置封装到properties对象中。。如果
+        * properties对象不是null，就将这些配置设置到brokerConfig、nettyServerConfig、nettyClientConfig、
+        * messageStoreConfig*/
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
@@ -122,7 +126,8 @@ public class BrokerStartup {
             MixAll.properties2Object(properties, nettyClientConfig);
             MixAll.properties2Object(properties, messageStoreConfig);
         }
-        //处理其他命令，注入到BrokerConfig中，比如：-n命令
+        /*2.2 brokerConfig的额外处理。处理其他命令如果brokerConfig需要的话，注入到BrokerConfig中，比如：-n命令；然后
+        * 验证一下brokerConfig中设置的namesrv地址*/
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
         if (null == brokerConfig.getRocketmqHome()) {
             System.out.printf("Please set the %s variable in your environment " +
@@ -144,7 +149,9 @@ public class BrokerStartup {
                 System.exit(-3);
             }
         }
-        /*如果Broker的角色时从，设置“消息占用内存的最大比率”比默认值再小10%*/
+        /*2.3 messageStoreConfig的相关额外处理。
+                ①如果Broker的角色时从，设置“消息占用内存的最大比率”比默认值再小10%；
+                ②brokerConfig允许角色切换，则设置 以及 验证brokerId是不是合规*/
         if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
             int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
             messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
@@ -206,7 +213,7 @@ public class BrokerStartup {
             MixAll.printObjectProperties(console, messageStoreConfig, true);
             System.exit(0);
         }
-
+        /*设置配置类的日志*/
         log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
         MixAll.printObjectProperties(log, brokerConfig);
         MixAll.printObjectProperties(log, nettyServerConfig);
@@ -216,7 +223,7 @@ public class BrokerStartup {
         final BrokerController controller = new BrokerController(
             brokerConfig, nettyServerConfig, nettyClientConfig, messageStoreConfig);
 
-        // Remember all configs to prevent discard。。配置信息缓存到Broker本地内存
+        // Remember all configs to prevent discard。。配置信息 缓存到Broker本地内存
         controller.getConfiguration().registerConfig(properties);
 
         return controller;
@@ -252,7 +259,7 @@ public class BrokerStartup {
                 controller.shutdown();
                 System.exit(-3);
             }
-            Runtime.getRuntime().addShutdownHook(new Thread(buildShutdownHook(controller)));
+            Runtime.getRuntime().addShutdownHook(new Thread(buildShutdownHook(controller))); /*注册jvm虚拟机关闭时执行的钩子函数，*/
             return controller;
         } catch (Throwable e) {
             e.printStackTrace();

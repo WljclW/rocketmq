@@ -34,7 +34,7 @@ import org.apache.rocketmq.store.logfile.DefaultMappedFile;
 import org.apache.rocketmq.store.logfile.MappedFile;
 
 /**
- * Create MappedFile in advance
+ * Create MappedFile in advance。提前创建mappedFile
  * 【】具体干的事见run方法，就是执行mmapOperation操作
  */
 public class AllocateMappedFileService extends ServiceThread {
@@ -149,7 +149,8 @@ public class AllocateMappedFileService extends ServiceThread {
     }
 
     /**
-     * Only interrupted by the external thread, will return false
+     * Only interrupted by the external thread, will return false.
+     * 这个服务干的活就是这个方法，只要返回值时ture，就会一直执行
      */
     private boolean mmapOperation() {
         boolean isSuccess = false;

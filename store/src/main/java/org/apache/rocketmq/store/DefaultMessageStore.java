@@ -163,7 +163,7 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService scheduledExecutorService;
     private final BrokerStatsManager brokerStatsManager;
     /**
-     * 在消息拉取长轮询下的消息到达的监听器
+     * 在消息拉取长轮询下的会用到的 消息到达监听器
      * */
     private final MessageArrivingListener messageArrivingListener;
     //broker配置文件
@@ -224,13 +224,13 @@ public class DefaultMessageStore implements MessageStore {
 
     public DefaultMessageStore(final MessageStoreConfig messageStoreConfig, final BrokerStatsManager brokerStatsManager,
         final MessageArrivingListener messageArrivingListener, final BrokerConfig brokerConfig, final ConcurrentMap<String, TopicConfig> topicConfigTable) throws IOException {
-        this.messageArrivingListener = messageArrivingListener;
+        this.messageArrivingListener = messageArrivingListener; /*消息到达监听器*/
         this.brokerConfig = brokerConfig;
         this.messageStoreConfig = messageStoreConfig;
         this.aliveReplicasNum = messageStoreConfig.getTotalReplicas();
-        this.brokerStatsManager = brokerStatsManager;
+        this.brokerStatsManager = brokerStatsManager; /*Broker状态管理，运行指标收集*/
         this.topicConfigTable = topicConfigTable;
-        /*初始化mappedFile分配服务*/
+        /*初始化mappedFile（内存映射文件）创建服务*/
         this.allocateMappedFileService = new AllocateMappedFileService(this);
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);
@@ -240,13 +240,13 @@ public class DefaultMessageStore implements MessageStore {
 
         this.consumeQueueStore = createConsumeQueueStore();
 
-        this.flushConsumeQueueService = createFlushConsumeQueueService();
-        this.cleanCommitLogService = new CleanCommitLogService();
+        this.flushConsumeQueueService = createFlushConsumeQueueService(); //commitlog刷盘线程
+        this.cleanCommitLogService = new CleanCommitLogService(); //清理commitlog的线程
         this.cleanConsumeQueueService = createCleanConsumeQueueService();
         this.correctLogicOffsetService = createCorrectLogicOffsetService();
         this.storeStatsService = new StoreStatsService(getBrokerIdentity());
         this.indexService = new IndexService(this);
-
+        /*主从同步服务*/
         if (!messageStoreConfig.isEnableDLegerCommitLog() && !this.messageStoreConfig.isDuplicationEnable()) {
             if (brokerConfig.isEnableControllerMode()) {
                 this.haService = new AutoSwitchHAService();
@@ -259,34 +259,37 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
         }
-        //判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件
+        /*if的条件：判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件。
+        * reputMessageService用来把CommiteLog的数据写到consumerqueue和index文件中。就是转发commitlog的线程*/
         if (!messageStoreConfig.isEnableBuildConsumeQueueConcurrently()) {
             this.reputMessageService = new ReputMessageService();
         } else {
             this.reputMessageService = new ConcurrentReputMessageService();
         }
-        //会创建这个"堆外内存池"
+        /*创建这个"堆外内存池"————直接内存池。
+        * 避免了频繁创建。在异步刷盘的时候作为与pagecache的数据交换区，通过commit操作完成数据传输到pagecache*/
         this.transientStorePool = new TransientStorePool(messageStoreConfig.getTransientStorePoolSize(), messageStoreConfig.getMappedFileSizeCommitLog());
-
+        /*创建一个仅包含一个线程的定时任务线程池，会在addScheduleTask方法用到，添加定时任务*/
         this.scheduledExecutorService =
             ThreadUtils.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread", getBrokerIdentity()));
-
+        /*初始化dispatcherList。这个东西是后续用于消息分发的处理链，会依次调用每一个的dispatch方法，这个方法的具体逻辑就是将commitlog转
+        发给某文件*/
         this.dispatcherList = new LinkedList<>();
-        this.dispatcherList.addLast(new CommitLogDispatcherBuildConsumeQueue());
-        this.dispatcherList.addLast(new CommitLogDispatcherBuildIndex());
+        this.dispatcherList.addLast(new CommitLogDispatcherBuildConsumeQueue()); //commitlog转发给consumequeue文件
+        this.dispatcherList.addLast(new CommitLogDispatcherBuildIndex()); //将commitlog分发给index文件
         if (messageStoreConfig.isEnableCompaction()) {
             this.compactionStore = new CompactionStore(this);
             this.compactionService = new CompactionService(commitLog, this, compactionStore);
             this.dispatcherList.addLast(new CommitLogDispatcherCompaction(compactionService));
         }
-
+        /*创建lock文件，并校验commitlog以及comsumerqueue文件夹的正确性*/
         File file = new File(StorePathConfigHelper.getLockFile(messageStoreConfig.getStorePathRootDir()));
-        UtilAll.ensureDirOK(file.getParent());
-        UtilAll.ensureDirOK(getStorePathPhysic());
-        UtilAll.ensureDirOK(getStorePathLogic());
+        UtilAll.ensureDirOK(file.getParent()); //整个rocketmq持久化文件存储的文件夹根路径，比如：D:\IDEA_projects\STORE_DATA\ROCKETMQ_DATA
+        UtilAll.ensureDirOK(getStorePathPhysic()); //commitlog文件夹的根路径。比如：D:/IDEA_projects/STORE_DATA/ROCKETMQ_DATA\commitlog
+        UtilAll.ensureDirOK(getStorePathLogic()); //consumerqueue文件夹的根路径。比如：D:/IDEA_projects/STORE_DATA/ROCKETMQ_DATA\consumequeue
         lockFile = new RandomAccessFile(file, "rw");
 
-        parseDelayLevel();
+        parseDelayLevel(); //初始化delayLevelTable。延迟等级——>延迟时间
     }
 
     public ConsumeQueueStoreInterface createConsumeQueueStore() {
@@ -305,6 +308,9 @@ public class DefaultMessageStore implements MessageStore {
         return new CorrectLogicOffsetService();
     }
 
+    /**
+     * 根据“MessageStoreConfig#messageDelayLevel”完成延迟等级——>延迟时间的对应，并放到delayLevelTable
+     * */
     public boolean parseDelayLevel() {
         HashMap<String, Long> timeUnitTable = new HashMap<>();
         timeUnitTable.put("s", 1000L);
@@ -317,15 +323,15 @@ public class DefaultMessageStore implements MessageStore {
             String[] levelArray = levelString.split(" ");
             for (int i = 0; i < levelArray.length; i++) {
                 String value = levelArray[i];
-                String ch = value.substring(value.length() - 1);
-                Long tu = timeUnitTable.get(ch);
+                String ch = value.substring(value.length() - 1); //拿到延迟时间单位
+                Long tu = timeUnitTable.get(ch); //格局单位计算换算成秒
 
-                int level = i + 1;
+                int level = i + 1; //延迟的等级需要从1开始
                 if (level > this.maxDelayLevel) {
                     this.maxDelayLevel = level;
                 }
                 long num = Long.parseLong(value.substring(0, value.length() - 1));
-                long delayTimeMillis = tu * num;
+                long delayTimeMillis = tu * num; //计算延迟时间，单位秒
                 this.delayLevelTable.put(level, delayTimeMillis);
             }
         } catch (Exception e) {
@@ -349,6 +355,7 @@ public class DefaultMessageStore implements MessageStore {
      *      判断上一次退出是否正常。其实现机制是Broker在启动时创建${ROCKET_HOME}/store/abort文件，在退出时通过注
      *      册JVM钩子函数删除abort文件。如果下一次启动时存在abort文件。说明Broker是异常退出的，CommitLog与
      *      ConsumeQueue数据有可能不一致，需要进行修复
+     * 2. 加载CommitLog
      */
     @Override
     public boolean load() {
@@ -438,12 +445,12 @@ public class DefaultMessageStore implements MessageStore {
         this.consumeQueueStore.start();
         this.storeStatsService.start();
 
-        if (this.haService != null) {
+        if (this.haService != null) { //启动数据同步
             this.haService.start();
         }
 
-        this.createTempFile();
-        this.addScheduleTask();
+        this.createTempFile(); //创建abort文件
+        this.addScheduleTask(); //添加多种定时任务
         this.perfs.start();
         this.shutdown = false;
     }
@@ -2224,7 +2231,7 @@ public class DefaultMessageStore implements MessageStore {
             switch (tranType) {
                 case MessageSysFlag.TRANSACTION_NOT_TYPE:
                 case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
-                    //将消息在CommitLog的位置等信息写入到ConsumeQueue
+                    //将消息在CommitLog的位置等信息写入到ConsumeQueue，实现commitlog的转发
                     putMessagePositionInfo(request);
                     break;
                 case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
@@ -2717,6 +2724,7 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /*定期将ConsumerQueue的消费数据持久化到磁盘。主要的刷盘逻辑见doFlush方法*/
     class FlushConsumeQueueService extends ServiceThread {
         private static final int RETRY_TIMES_OVER = 3;
         private long lastFlushTimestamp = 0;
@@ -2738,17 +2746,17 @@ public class DefaultMessageStore implements MessageStore {
                 logicsMsgTimestamp = DefaultMessageStore.this.getStoreCheckpoint().getLogicsMsgTimestamp();
             }
 
-            ConcurrentMap<String, ConcurrentMap<Integer, ConsumeQueueInterface>> tables = DefaultMessageStore.this.getConsumeQueueTable();
-
+            ConcurrentMap<String/*某一topic*/, ConcurrentMap<Integer, ConsumeQueueInterface>> tables = DefaultMessageStore.this.getConsumeQueueTable(); //拿到所有的消费队列
+            /*遍历每一个topic下所有的消费队列，尝试刷盘，如果失败则重试retryTimes次数*/
             for (ConcurrentMap<Integer, ConsumeQueueInterface> maps : tables.values()) {
-                for (ConsumeQueueInterface cq : maps.values()) {
+                for (ConsumeQueueInterface cq : maps.values()) { //内层for循环会拿到每一个消费队列
                     boolean result = false;
-                    for (int i = 0; i < retryTimes && !result; i++) {
+                    for (int i = 0; i < retryTimes && !result; i++) { //如果失败则重试指定的次数
                         result = DefaultMessageStore.this.consumeQueueStore.flush(cq, flushConsumeQueueLeastPages);
                     }
                 }
             }
-
+            /*对压缩数据进行刷盘*/
             if (messageStoreConfig.isEnableCompaction()) {
                 compactionStore.flush(flushConsumeQueueLeastPages);
             }

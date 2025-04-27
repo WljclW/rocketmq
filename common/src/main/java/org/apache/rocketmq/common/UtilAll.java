@@ -728,6 +728,7 @@ public class UtilAll {
         PlatformDependent.freeDirectBuffer(buffer);
     }
 
+    /*保证路径名是有效的*/
     public static void ensureDirOK(final String dirName) {
         if (dirName != null) {
             if (dirName.contains(MixAll.MULTI_PATH_SPLITTER)) {
@@ -736,7 +737,7 @@ public class UtilAll {
                     createDirIfNotExist(dir);
                 }
             } else {
-                createDirIfNotExist(dirName);
+                createDirIfNotExist(dirName); //如果文件不存在，需要进行创建
             }
         }
     }

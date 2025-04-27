@@ -26,6 +26,13 @@ import org.apache.commons.cli.ParseException;
 
 public class ServerUtil {
 
+    /**[]：方法的作用是根据添加两个特定的Option到options。
+     * 1. Option就好比可以设置的选项，比如：这里添加了h和n选项
+     * 2. 看Option的构造器可以看到有四个参数，分别是：
+     *      option————当前选项的短表示，一般只有一个字母
+     *      longOption————当前选项的长表示，比如一个单词
+     *      hasArgs————当前选项是不是有参数
+     *      description————这个参数的描述*/
     public static Options buildCommandlineOptions(final Options options) {
         Option opt = new Option("h", "help", false, "Print help");
         opt.setRequired(false);
@@ -46,7 +53,7 @@ public class ServerUtil {
         hf.setWidth(110);
         CommandLine commandLine = null;
         try {
-            commandLine = parser.parse(options, args);      //进行命令行的解析，底层有一个默认实现见DefaultParser(实现CommandLineParser接口)
+            commandLine = parser.parse(options, args); //进行命令行的解析，底层有一个默认实现见DefaultParser(实现CommandLineParser接口)
             if (commandLine.hasOption('h')) {
                 hf.printHelp(appName, options, true);
                 System.exit(0);

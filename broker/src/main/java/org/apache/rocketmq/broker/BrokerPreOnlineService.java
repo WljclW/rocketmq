@@ -67,9 +67,9 @@ public class BrokerPreOnlineService extends ServiceThread {
                 LOGGER.info("broker {} is online", this.brokerController.getBrokerConfig().getCanonicalName());
                 break;
             }
-            try {
+            try { /*尝试做预上线工作*/
                 boolean isSuccess = this.prepareForBrokerOnline();
-                if (!isSuccess) {
+                if (!isSuccess) { //如果失败则等待1秒继续
                     this.waitForRunning(1000);
                 } else {
                     break;

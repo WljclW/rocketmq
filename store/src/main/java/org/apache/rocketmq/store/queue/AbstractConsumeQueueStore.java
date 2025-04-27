@@ -33,6 +33,7 @@ public abstract class AbstractConsumeQueueStore implements ConsumeQueueStoreInte
     protected final DefaultMessageStore messageStore;
     protected final MessageStoreConfig messageStoreConfig;
     protected final QueueOffsetOperator queueOffsetOperator = new QueueOffsetOperator();
+    /*键是topic；值是topic下所有的消息队列(value的键是消息队列的id)。*/
     protected final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueueInterface>> consumeQueueTable;
 
     public AbstractConsumeQueueStore(DefaultMessageStore messageStore) {

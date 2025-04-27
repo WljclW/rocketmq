@@ -99,15 +99,21 @@ public class ServiceProvider {
         String fullName = PREFIX + clazz.getName();
         return load(fullName, clazz);
     }
-    
+
+    /**用于从资源文件中读取服务名称并根据这些名称创建相应的服务实例*/
     public static <T> List<T> load(String name, Class<?> clazz) {
         LOG.info("Looking for a resource file of name [{}] ...", name);
         List<T> services = new ArrayList<>();
-        InputStream is = getResourceAsStream(getContextClassLoader(), name);
+        InputStream is = getResourceAsStream(getContextClassLoader() /*当前线程的类加载器*/, name); /*根据类加载器查找资源名称并返回输入流*/
         if (is == null) {
             LOG.warn("No resource file with name [{}] found.", name);
             return services;
         }
+        /*
+        * 使用 BufferedReader 读取输入流中的内容。
+        InputStreamReader(is, StandardCharsets.UTF_8)：将字节流转换为字符流，并使用 UTF-8 编码读取。
+        reader.readLine()：按行读取资源文件中的内容，每一行代表一个服务名称。
+        * */
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String serviceName = reader.readLine();
             List<String> names = new ArrayList<>();
@@ -117,9 +123,9 @@ public class ServiceProvider {
                     name);
                 if (!names.contains(serviceName)) {
                     names.add(serviceName);
-                    services.add(initService(getContextClassLoader(), serviceName, clazz));
+                    services.add(initService(getContextClassLoader(), serviceName, clazz)); //进行类加载、通过反射实例化serviceName对象
                 }
-                serviceName = reader.readLine();
+                serviceName = reader.readLine(); //继续读取文件的下一行
             }
         } catch (Exception e) {
             LOG.error("Error occurred when looking for resource file " + name, e);
@@ -153,13 +159,15 @@ public class ServiceProvider {
         return s;
     }
 
+    /**加载具体的服务并进行初始化*/
     protected static <T> T initService(ClassLoader classLoader, String serviceName, Class<?> clazz) {
         Class<?> serviceClazz = null;
         try {
             if (classLoader != null) {
                 try {
                     // Warning: must typecast here & allow exception to be generated/caught & recast properly
-                    serviceClazz = classLoader.loadClass(serviceName);
+                    serviceClazz = classLoader.loadClass(serviceName); //根据serviceName加载类
+                    //if-else：检查加载的类是不是期望的类 或者 它的子类
                     if (clazz.isAssignableFrom(serviceClazz)) {
                         LOG.info("Loaded class {} from classloader {}", serviceClazz.getName(),
                             objectId(classLoader));
@@ -170,6 +178,7 @@ public class ServiceProvider {
                             serviceClazz.getName(),
                             objectId(serviceClazz.getClassLoader()), clazz.getName());
                     }
+                    //如果校验通过则通过反射拿到类的无参构造器来创建实例
                     return (T) serviceClazz.getDeclaredConstructor().newInstance();
                 } catch (ClassNotFoundException ex) {
                     if (classLoader == thisClassLoader) {

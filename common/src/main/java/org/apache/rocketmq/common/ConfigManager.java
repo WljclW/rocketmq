@@ -34,7 +34,9 @@ public abstract class ConfigManager {
 
     /**【作用】加载子类方法configFilePath()指定的文件，并调用decode方法解析(decode方法由子类重写)
      * 【流程】类似于模板方法，父类这里制定了加载的流程，但是具体的文件名等信息是子类通过重写父类的
-     *      某些方法提供。。从子类中拿到文件名(如果有非空内容)，则尝试加载*/
+     *      某些方法提供。。从子类中拿到文件名(如果有非空内容)，则尝试加载...下面的流程中重要的是
+     *      decode方法，会根据json创建具体的类，以“ConsumerOffsetManager#decode”为例做了注
+     *      释，其他的持久化文件的加载也是类似的道理*/
     public boolean load() {
         String fileName = null;
         try {

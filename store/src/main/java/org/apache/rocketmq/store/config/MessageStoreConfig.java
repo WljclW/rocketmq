@@ -240,7 +240,9 @@ public class MessageStoreConfig {
     private int transientStorePoolSize = 5;
     private boolean fastFailIfNoBufferInStorePool = false;
 
-    // DLedger message store config
+    /* DLedger message store config
+    * 用于启用或禁用基于 DLedger 协议 的 CommitLog 实现。DLedger 是一种分布式一致性协议，类似于 Raft，专门
+    * 用于实现高可用的日志复制和管理。*/
     private boolean enableDLegerCommitLog = false;
     private String dLegerGroup;
     private String dLegerPeers;

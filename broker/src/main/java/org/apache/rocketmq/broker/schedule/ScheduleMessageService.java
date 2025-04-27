@@ -96,7 +96,7 @@ public class ScheduleMessageService extends ConfigManager {
     private DataVersion dataVersion = new DataVersion();
     /*是否支持延迟消息的异步传递*/
     private boolean enableAsyncDeliver = false;
-    /*支持延迟消息的异步传递*/
+    /**/
     private ScheduledExecutorService handleExecutorService;
     /*执行持久化的服务，在构造器中进行初始化*/
     private final ScheduledExecutorService scheduledPersistService;
@@ -371,12 +371,11 @@ public class ScheduleMessageService extends ConfigManager {
                 if (level > this.maxDelayLevel) {
                     this.maxDelayLevel = level;
                 }
-                /*num是数字，tu是单位对应的毫秒数。相乘就是代表的时间。
-                * 将<延迟等级，延迟时间>这样的键值对放入到delayLevelTable*/
+                /*num是数字，tu是单位对应的毫秒数。相乘就是代表的时间。。将<延迟等级，延迟时间>这样的键值对放入到delayLevelTable*/
                 long num = Long.parseLong(value.substring(0, value.length() - 1));
                 long delayTimeMillis = tu * num;
                 this.delayLevelTable.put(level, delayTimeMillis);
-                if (this.enableAsyncDeliver) {
+                if (this.enableAsyncDeliver) { /*支持异步发送的消息会在deliverPendingTable中添加一个对应的阻塞队列*/
                     this.deliverPendingTable.put(level, new LinkedBlockingQueue<>());
                 }
             }

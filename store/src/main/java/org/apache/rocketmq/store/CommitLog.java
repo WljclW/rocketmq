@@ -158,17 +158,19 @@ public class CommitLog implements Swappable {
         return putMessageThreadLocal;
     }
 
+    /**功能：完成CommitLog文件夹下所有文件的加载
+     * 加载流程：①完成commit log文件的加载；②如果不允许预读则设置读模式为随机读；③调用checkSelf检查内存映射文件的大小*/
     public boolean load() {
-        boolean result = this.mappedFileQueue.load(); //加载映射文件队列(其实就是根据CommitLog目录的所有文件创建内存映射文件，并将创建的内存映射文件添加到列表中)
-        if (result && !defaultMessageStore.getMessageStoreConfig().isDataReadAheadEnable()) {
-            /**
+        boolean result = this.mappedFileQueue.load(); //①加载映射文件队列(其实就是根据CommitLog目录的所有文件创建内存映射文件，并将创建的内存映射文件添加到列表中)
+        if (result && !defaultMessageStore.getMessageStoreConfig().isDataReadAheadEnable()) { //②
+            /**isDataReadAheadEnable()用于判断是不是开启预读功能。
              * MADV_RANDOM是 Linux 系统中的一个内存建议标志（Memory Advice），用于告诉操作系统文件将以随机顺序访问。当设置
              *      为 MADV_RANDOM 时，操作系统会禁用预读功能，避免不必要的磁盘 I/O 操作。
              * 在随机IO的情况下，禁用"预读功能"会避免很多的磁盘IO读操作，从而提高系统的性能。
              * */
             scanFileAndSetReadMode(LibC.MADV_RANDOM);
         }
-        this.mappedFileQueue.checkSelf();
+        this.mappedFileQueue.checkSelf(); //③
         log.info("load commit log " + (result ? "OK" : "Failed"));
         return result;
     }

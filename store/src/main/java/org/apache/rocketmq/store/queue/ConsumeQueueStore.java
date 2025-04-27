@@ -149,8 +149,9 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
 
     @Override
     public void putMessagePositionInfoWrapper(DispatchRequest dispatchRequest) {
-        //根据主题 和 队列ID，获取对应的ConsumeQueue文件
+        //根据主题 和 队列ID，获取对应的ConsumeQueue实例
         ConsumeQueueInterface cq = this.findOrCreateConsumeQueue(dispatchRequest.getTopic(), dispatchRequest.getQueueId());
+        //存储逻辑的实现
         this.putMessagePositionInfoWrapper(cq, dispatchRequest);
     }
 
@@ -195,17 +196,24 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
         return fileQueueLifeCycle.load();
     }
 
-    private boolean loadConsumeQueues(String storePath, CQType cqType) {
+    /**
+     * 【功能】完成所有的ConsumeQueue的加载(会创建ConsumeQueue实例) 并记录。
+     *          比如：storePath可能是“D:\IDEA_projects\STORE_DATA\ROCKETMQ_DATA\consumequeue”
+     * 【实现流程】首先拿到consumequeue文件夹路径，遍历里面所有的文件夹或者文件组成fileTopicList（这个列表里其实就是所有topic文件夹的绝对
+     * 路径）；遍历fileTopicList中所有的名字，针对每一个元素再遍历该文件夹下的所有名字得到fileQueueIdList（这个文件夹其实就是某一个topic
+     * 下所有队列log文件夹的绝对路径，结尾分别是0，1，2...表示队列id）
+     * */
+    private boolean loadConsumeQueues(String storePath/*consumequeue文件夹路径*/, CQType cqType) {
         File dirLogic = new File(storePath);
-        File[] fileTopicList = dirLogic.listFiles();
+        File[] fileTopicList = dirLogic.listFiles(); //列出某一个路径下所有的“文件”以及“文件夹”名称组成的列表
         if (fileTopicList != null) {
 
             for (File fileTopic : fileTopicList) {
-                String topic = fileTopic.getName();
+                String topic = fileTopic.getName(); //返回列表中的名称。即拿到fileTopic最后一个分隔符后面的子串
 
                 File[] fileQueueIdList = fileTopic.listFiles();
-                if (fileQueueIdList != null) {
-                    for (File fileQueueId : fileQueueIdList) {
+                if (fileQueueIdList != null) { //fileQueueIdList是某一个topic所有队列问价夹的绝对路径
+                    for (File fileQueueId : fileQueueIdList) { //fileQueueId就是某一个topic的某一个队列id
                         int queueId;
                         try {
                             queueId = Integer.parseInt(fileQueueId.getName());
@@ -214,7 +222,7 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
                         }
 
                         queueTypeShouldBe(topic, cqType);
-
+                        /*根据消息队列路径完成文件的加载到内存*/
                         ConsumeQueueInterface logic = createConsumeQueueByType(cqType, topic, queueId, storePath);
                         this.putConsumeQueue(topic, queueId, logic);
                         if (!this.load(logic)) {
@@ -367,6 +375,7 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
         return fileQueueLifeCycle.isFirstFileExist();
     }
 
+    /**根据topic 和 queueId 找到对应的consumequeue，如果找不到的话会进行创建*/
     @Override
     public ConsumeQueueInterface findOrCreateConsumeQueue(String topic, int queueId) {
         ConcurrentMap<Integer, ConsumeQueueInterface> map = consumeQueueTable.get(topic);
@@ -380,7 +389,7 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
             }
         }
 
-        ConsumeQueueInterface logic = map.get(queueId);
+        ConsumeQueueInterface logic = map.get(queueId); //获取queueId对应的队列
         if (logic != null) {
             return logic;
         }
@@ -424,6 +433,7 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
         this.queueOffsetOperator.updateQueueOffset(topicQueueKey, offset);
     }
 
+    /*将从文件加载的消息队列存储到consumeQueueTable*/
     private void putConsumeQueue(final String topic, final int queueId, final ConsumeQueueInterface consumeQueue) {
         ConcurrentMap<Integer/* queueId */, ConsumeQueueInterface> map = this.consumeQueueTable.get(topic);
         if (null == map) {

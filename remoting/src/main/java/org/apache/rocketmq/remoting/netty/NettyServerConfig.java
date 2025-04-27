@@ -23,7 +23,7 @@ public class NettyServerConfig implements Cloneable {
      * By default, it's wildcard address, listening all network interfaces.
      */
     private String bindAddress = "0.0.0.0";     // NameServer 默认绑定地址
-    private int listenPort = 0; //NameServer监听端口，默认初始化为9876
+    private int listenPort = 0;
     private int serverWorkerThreads = 8;    // Netty 业务线程池线程个数
     /*业务线程池
     *   Netty public 任务线程池线程个数， Netty 网络根据业务类型会创建不同的线程池，比如处理消息发送、消息消费、心跳检测等。

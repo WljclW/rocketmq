@@ -94,7 +94,7 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         this.topic = topic;
         this.queueId = queueId;
 
-        String queueDir = this.storePath
+        String queueDir = this.storePath //计算出某一个具体的消息队列  的绝对路径
             + File.separator + topic
             + File.separator + queueId;
 
@@ -677,19 +677,21 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         return this.minLogicOffset / CQ_STORE_UNIT_SIZE;
     }
 
+    /**根据参数DispatchRequest实现commitlog到consumequeue文件的转发*/
     @Override
     public void putMessagePositionInfoWrapper(DispatchRequest request) {
         final int maxRetries = 30;
-        boolean canWrite = this.messageStore.getRunningFlags().isCQWriteable();
+        boolean canWrite = this.messageStore.getRunningFlags().isCQWriteable(); //确保consumequeue是可写的状态
         for (int i = 0; i < maxRetries && canWrite; i++) {
             long tagsCode = request.getTagsCode();
+            /*if块实现 扩展模块存储的实现*/
             if (isExtWriteEnable()) {
                 ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
                 cqExtUnit.setFilterBitMap(request.getBitMap());
                 cqExtUnit.setMsgStoreTime(request.getStoreTimestamp());
                 cqExtUnit.setTagsCode(request.getTagsCode());
 
-                long extAddr = this.consumeQueueExt.put(cqExtUnit);
+                long extAddr = this.consumeQueueExt.put(cqExtUnit); //拿到写入的结果并校验
                 if (isExtAddr(extAddr)) {
                     tagsCode = extAddr;
                 } else {
@@ -697,19 +699,23 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
                         topic, queueId, request.getCommitLogOffset());
                 }
             }
+            /*调用putMessagePositionInfo将消息的位置信息写入到consumequeue。并在后续的if-else根据结果做处理*/
             boolean result = this.putMessagePositionInfo(request.getCommitLogOffset(),
                 request.getMsgSize(), tagsCode, request.getConsumeQueueOffset());
             if (result) {
+                //如果是从节点 或者 启用dledger协议的复制日志，则更新检查点信息
                 if (this.messageStore.getMessageStoreConfig().getBrokerRole() == BrokerRole.SLAVE ||
                     this.messageStore.getMessageStoreConfig().isEnableDLegerCommitLog()) {
                     this.messageStore.getStoreCheckpoint().setPhysicMsgTimestamp(request.getStoreTimestamp());
                 }
+                //setLogicsMsgTimestamp和setPhysicMsgTimestamp的区别是什么？？
                 this.messageStore.getStoreCheckpoint().setLogicsMsgTimestamp(request.getStoreTimestamp());
+                //如果启用了多队列分发，则继续操作
                 if (MultiDispatchUtils.checkMultiDispatchQueue(this.messageStore.getMessageStoreConfig(), request)) {
                     multiDispatchLmqQueue(request, maxRetries);
                 }
                 return;
-            } else {
+            } else { //putMessagePositionInfo方法执行失败时会记录日志等
                 // XXX: warn and notify me
                 log.warn("[BUG]put commit log position info to " + topic + ":" + queueId + " " + request.getCommitLogOffset()
                     + " failed, retry " + i + " times");

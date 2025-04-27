@@ -62,6 +62,7 @@ public class MappedFileQueue implements Swappable {
         this.allocateMappedFileService = allocateMappedFileService;
     }
 
+    /**用于校验 相邻两个mappedFile的初始偏移量的差值 必须等于 mappedFileSize。否则报错*/
     public void checkSelf() {
         List<MappedFile> mappedFiles = new ArrayList<>(this.mappedFiles);
         if (!mappedFiles.isEmpty()) {
@@ -248,7 +249,8 @@ public class MappedFileQueue implements Swappable {
     }
 
     /**
-     * 【总述】根据CommitLog文件夹下的文件，对每一个文件创建内存映射文件(mappedFile)，并保存到mappedFiles列表中。
+     * 【总述】参数files是CommitLog文件夹下的所有文件。对每一个文件创建内存映射文件(mappedFile) 并进行 一定的初始化操
+     * 作，并保存到mappedFiles列表中。
      * 【返回值】true加载成功；false加载失败
      * */
     public boolean doLoad(List<File> files) {
@@ -261,13 +263,13 @@ public class MappedFileQueue implements Swappable {
                 continue;
             }
 
-            if (file.length() == 0 && i == files.size() - 1) { //最后一个文件没有东西，删除最后一个文件
+            if (file.length() == 0 && i == files.size() - 1) { //最后一个文件没有东西，则进入if删除最后一个文件
                 boolean ok = file.delete();
                 log.warn("{} size is 0, auto delete. is_ok: {}", file, ok);
                 continue;
             }
 
-            if (file.length() != this.mappedFileSize) { //如果存在一个文件大小不匹配，就返回false表示加载失败
+            if (file.length() != this.mappedFileSize) { //如果存在一个文件大小和mappedFileSize不相等，就返回false表示加载失败
                 log.warn(file + "\t" + file.length()
                         + " length not matched message store config value, please check it manually");
                 return false;

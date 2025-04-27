@@ -166,8 +166,10 @@ public class DefaultMappedFile extends AbstractMappedFile {
         this.writeBuffer = transientStorePool.borrowBuffer();
         this.transientStorePool = transientStorePool;
     }
-
-    private void init(final String fileName, final int fileSize) throws IOException {
+    /**
+     * 根据参数创建fileName指定文件的 内存映射文件
+     * */
+    private void init(final String fileName/*log文件的路径*/, final int fileSize/*mappedFileSize数值*/) throws IOException {
         this.fileName = fileName;
         this.fileSize = fileSize;
         this.file = new File(fileName);
@@ -181,7 +183,7 @@ public class DefaultMappedFile extends AbstractMappedFile {
             this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
             //创建内存映射文件
             this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
-            TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);    //记录总的内存映射文件所占空间
+            TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);  //记录总的内存映射文件所占空间
             TOTAL_MAPPED_FILES.incrementAndGet();   //记录文件数量
             ok = true;
         } catch (FileNotFoundException e) {

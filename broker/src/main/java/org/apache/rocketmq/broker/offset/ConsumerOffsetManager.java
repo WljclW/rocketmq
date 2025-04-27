@@ -293,7 +293,9 @@ public class ConsumerOffsetManager extends ConfigManager {
     public String configFilePath() {
         return BrokerPathConfigHelper.getConsumerOffsetPath(this.brokerController.getMessageStoreConfig().getStorePathRootDir());
     }
-
+    /**【】：利用加载到的json串，还原成一个ConsumerOffsetManager对象。。。
+     * 1. 整个过程主要借助于方法“RemotingSerializable.fromJson”。整个解析的最后是调用到了“com.alibaba.fastjson.JSON#parseObject”，这是
+     * 阿里实现的fastjson*/
     @Override
     public void decode(String jsonString) {
         if (jsonString != null) {
