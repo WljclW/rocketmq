@@ -620,8 +620,8 @@ public class RouteInfoManager {
                             brokerName
                         );
 
-                        removeBrokerName = true;
-                    } else if (isMinBrokerIdChanged) {
+                        removeBrokerName = true; //变量标识 是不是移除了某一个集群
+                    } else if (isMinBrokerIdChanged) { //3.2如果原来id最小的broker已经下线了.
                         needNotifyBrokerMap.put(brokerName, new BrokerStatusChangeInfo(
                             brokerData.getBrokerAddrs(), brokerAddr, null));
                     }
@@ -650,7 +650,7 @@ public class RouteInfoManager {
                     reducedBroker.add(brokerName);
                 }
             }
-            /*操作5：根据BrokerName，遍历所有主题的队列，如果队列中包含当前Broker的队列，则移除，如果topic只包含待移除Broker的队
+            /*操作5：根据BrokerName，遍历所有主题的队列。如果队列中包含当前Broker的队列，则移除；如果topic只包含待移除Broker的队
                 列，从路由表中删除该topic*/
             cleanTopicByUnRegisterRequests(removedBroker, reducedBroker);
 
@@ -947,7 +947,7 @@ public class RouteInfoManager {
      * 具体步骤如下：
      *      遍历needNotifyBrokerMap中的每个Broker名称。
      *      获取该Broker的状态变更信息和对应的Broker数据。
-     *      如果Broker数据不为空且启用了代理主节点功能，则调用notifyMinBrokerIdChanged方法，传递Broker地址、离线Broker地址和HA Broker地址。
+     *      如果Broker数据不为空且启用了代理'主'节点功能，则调用notifyMinBrokerIdChanged方法————参数传递Broker地址、离线Broker地址和HA Broker地址。
      * */
     private void notifyMinBrokerIdChanged(Map<String, BrokerStatusChangeInfo> needNotifyBrokerMap)
         throws InterruptedException, RemotingConnectException, RemotingTimeoutException, RemotingSendRequestException,
@@ -1192,7 +1192,7 @@ class BrokerAddrInfo {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(Object obj) { /*判断对象相等的标准就是：集群名称 和 broker地址都相等*/
         if (this == obj) {
             return true;
         }
