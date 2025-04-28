@@ -39,22 +39,25 @@ public class StoreCheckpoint {
     private volatile long masterFlushedOffset = 0;
     private volatile long confirmPhyOffset = 0;
 
+    /**用于初始化检查点文件（Checkpoint File）。检查点文件记录了 Broker 的运行状态信息（如消息的时间戳、刷盘偏移量等），在系统恢复
+     * 时可以利用这些信息快速定位最新的数据位置。*/
     public StoreCheckpoint(final String scpPath) throws IOException {
+        /*创建 或者 加载检查点文件*/
         File file = new File(scpPath);
         UtilAll.ensureDirOK(file.getParent());
         boolean fileExists = file.exists();
-
+        /*打开检查点文件，获取channel，并将内容映射到内存。每一块大小为OS的page size*/
         this.randomAccessFile = new RandomAccessFile(file, "rw");
         this.fileChannel = this.randomAccessFile.getChannel();
         this.mappedByteBuffer = fileChannel.map(MapMode.READ_WRITE, 0, DefaultMappedFile.OS_PAGE_SIZE);
-
+        /*如果原来文件就存在，则加载文件中的信息*/
         if (fileExists) {
             log.info("store checkpoint file exists, " + scpPath);
-            this.physicMsgTimestamp = this.mappedByteBuffer.getLong(0);
-            this.logicsMsgTimestamp = this.mappedByteBuffer.getLong(8);
-            this.indexMsgTimestamp = this.mappedByteBuffer.getLong(16);
-            this.masterFlushedOffset = this.mappedByteBuffer.getLong(24);
-            this.confirmPhyOffset = this.mappedByteBuffer.getLong(32);
+            this.physicMsgTimestamp = this.mappedByteBuffer.getLong(0); //物理偏移量
+            this.logicsMsgTimestamp = this.mappedByteBuffer.getLong(8); //逻辑偏移量
+            this.indexMsgTimestamp = this.mappedByteBuffer.getLong(16); //index消息的时间戳
+            this.masterFlushedOffset = this.mappedByteBuffer.getLong(24); //主节点刷盘偏移量
+            this.confirmPhyOffset = this.mappedByteBuffer.getLong(32); //被确认的消息物理偏移量
 
             log.info("store checkpoint file physicMsgTimestamp " + this.physicMsgTimestamp + ", "
                 + UtilAll.timeMillisToHumanString(this.physicMsgTimestamp));
@@ -64,7 +67,7 @@ public class StoreCheckpoint {
                 + UtilAll.timeMillisToHumanString(this.indexMsgTimestamp));
             log.info("store checkpoint file masterFlushedOffset " + this.masterFlushedOffset);
             log.info("store checkpoint file confirmPhyOffset " + this.confirmPhyOffset);
-        } else {
+        } else { //文件不存在，记录日志表示是一个新的检查点文件
             log.info("store checkpoint file not exists, " + scpPath);
         }
     }

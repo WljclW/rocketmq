@@ -252,14 +252,15 @@ public class BrokerStartup {
 
     public static BrokerController createBrokerController(String[] args) {
         try {
-            /*buildBrokerController方法完成命令行、配置文件的解析，new一个BrokerController对象*/
+            /*buildBrokerController方法完成命令行、配置文件的解析，利用解析的结果new一个BrokerController对象*/
             BrokerController controller = buildBrokerController(args);
+            /*BrokerController的初始化*/
             boolean initResult = controller.initialize();
             if (!initResult) {
-                controller.shutdown();
+                controller.shutdown(); //如果初始化失败就停止后续步骤
                 System.exit(-3);
             }
-            Runtime.getRuntime().addShutdownHook(new Thread(buildShutdownHook(controller))); /*注册jvm虚拟机关闭时执行的钩子函数，*/
+            Runtime.getRuntime().addShutdownHook(new Thread(buildShutdownHook(controller))); /*注册jvm虚拟机关闭时执行的钩子函数*/
             return controller;
         } catch (Throwable e) {
             e.printStackTrace();

@@ -19,6 +19,7 @@ package org.apache.rocketmq.store.queue;
 import org.apache.rocketmq.store.Swappable;
 
 /**
+ * FileQueueLifeCycle 包含由 FILE 直接实现的 ConsumerQueue 的生命周期方法。？？？如何形象的理解这个类的作用？？
  * FileQueueLifeCycle contains life cycle methods of ConsumerQueue that is directly implemented by FILE.
  */
 public interface FileQueueLifeCycle extends Swappable {

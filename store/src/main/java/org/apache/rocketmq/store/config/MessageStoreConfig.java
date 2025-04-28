@@ -108,7 +108,7 @@ public class MessageStoreConfig {
     // default, defaultRocksDB
     @ImportantField
     private String storeType = StoreType.DEFAULT.getStoreType();
-    // ConsumeQueue file size,default is 30W
+    // ConsumeQueue file size,default is 600w字节，大约是6M
     private int mappedFileSizeConsumeQueue = 300000 * ConsumeQueue.CQ_STORE_UNIT_SIZE;
     // enable consume queue ext
     private boolean enableConsumeQueueExt = false;
@@ -1035,6 +1035,7 @@ public class MessageStoreConfig {
         this.flushCommitLogTimed = flushCommitLogTimed;
     }
 
+    /**获取消息存储的根路径，就是在broker.conf中配置的属性”storePathRootDir“的值*/
     public String getStorePathRootDir() {
         return storePathRootDir;
     }

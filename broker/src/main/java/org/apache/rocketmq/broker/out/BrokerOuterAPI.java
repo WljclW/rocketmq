@@ -451,7 +451,9 @@ public class BrokerOuterAPI {
     /**
      * Considering compression brings much CPU overhead to name server, stream API will not support compression and
      * compression feature is deprecated.
-     *  registerBrokerAll方法用于将broker注册到所有可用的NameServer节点上
+     *       registerBrokerAll方法用于将broker注册到所有可用的NameServer节点上...并行注册，用CountDownLaunch来保证注册到所
+     *   有的namesrv，主线程才会继续往后执行(rocketmq源码很多地方都是这样的方式)
+     *
      * @param clusterName
      * @param brokerAddr
      * @param brokerName
@@ -679,6 +681,11 @@ public class BrokerOuterAPI {
         }
     }
 
+    /**
+     *      判断 Broker 是否需要向 NameServer 注册元数据 。它通过向所有的 NameServer 发送请求，检查 Broker 的元数
+     *  据版本（DataVersion）是否与 NameServer 的记录一致。如果发现不一致，则认为需要注册，并将结果记录在 changedList
+     *  中返回。
+     * */
     public List<Boolean> needRegister(
         final String clusterName,
         final String brokerAddr,
@@ -690,12 +697,14 @@ public class BrokerOuterAPI {
         final List<Boolean> changedList = new CopyOnWriteArrayList<>();
         List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
+            /*for循环并发完成对所有的namesrv的查询；countDownLatch变量保证了所有的查询都完成后主线程从才继续执行*/
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
             for (final String namesrvAddr : nameServerAddressList) {
                 brokerOuterExecutor.execute(new AbstractBrokerRunnable(new BrokerIdentity(clusterName, brokerName, brokerId, isInBrokerContainer)) {
                     @Override
                     public void run0() {
                         try {
+                            /*创建QUERY_DATA_VERSION请求，请求体中带着”topicConfigWrapper.getDataVersion()“——数据版本*/
                             QueryDataVersionRequestHeader requestHeader = new QueryDataVersionRequestHeader();
                             requestHeader.setBrokerAddr(brokerAddr);
                             requestHeader.setBrokerId(brokerId);
@@ -707,14 +716,14 @@ public class BrokerOuterAPI {
                             DataVersion nameServerDataVersion = null;
                             Boolean changed = false;
                             switch (response.getCode()) {
-                                case ResponseCode.SUCCESS: {
+                                case ResponseCode.SUCCESS: { /*请求成功时。根据响应头的changed 以及 校验数据版本是不是相同 最终决策出*/
                                     QueryDataVersionResponseHeader queryDataVersionResponseHeader =
                                         (QueryDataVersionResponseHeader) response.decodeCommandCustomHeader(QueryDataVersionResponseHeader.class);
                                     changed = queryDataVersionResponseHeader.getChanged();
                                     byte[] body = response.getBody();
                                     if (body != null) {
                                         nameServerDataVersion = DataVersion.decode(body, DataVersion.class);
-                                        if (!topicConfigWrapper.getDataVersion().equals(nameServerDataVersion)) {
+                                        if (!topicConfigWrapper.getDataVersion().equals(nameServerDataVersion)) { //数据版本不相等
                                             changed = true;
                                         }
                                     }
@@ -727,7 +736,7 @@ public class BrokerOuterAPI {
                             }
                             LOGGER.warn("Query data version from name server {} OK, changed {}, broker {}, name server {}", namesrvAddr, changed, topicConfigWrapper.getDataVersion(), nameServerDataVersion == null ? "" : nameServerDataVersion);
                         } catch (Exception e) {
-                            changedList.add(Boolean.TRUE);
+                            changedList.add(Boolean.TRUE); //如果出现异常则认为需要更新
                             LOGGER.error("Query data version from name server {} exception", namesrvAddr, e);
                         } finally {
                             countDownLatch.countDown();
@@ -737,7 +746,7 @@ public class BrokerOuterAPI {
 
             }
             try {
-                countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS);
+                countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS); //设置超时时间防止无限制等待
             } catch (InterruptedException e) {
                 LOGGER.error("query dataversion from nameserver countDownLatch await Exception", e);
             }

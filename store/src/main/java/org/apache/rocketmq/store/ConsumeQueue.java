@@ -123,27 +123,33 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
         return result;
     }
 
+    /**
+     *      用于恢复 ConsumeQueue 文件的核心逻辑。ConsumeQueue 是 RocketMQ 的逻辑队列索引文件，用于快速定位消息的
+     * 位置。recover() 方法的主要作用是从磁盘中加载 ConsumeQueue 文件，并根据文件内容恢复其状态（如最大物理偏移量、扩
+     * 展地址等）*/
     @Override
     public void recover() {
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
         if (!mappedFiles.isEmpty()) {
-
+            /*从倒数第3个开始恢复.不足三个则从头开始*/
             int index = mappedFiles.size() - 3;
             if (index < 0) {
                 index = 0;
             }
-
+            /*初始化一些参数，这些参数用于控制恢复过程中的文件读取和状态更新。*/
             int mappedFileSizeLogics = this.mappedFileSize;
             MappedFile mappedFile = mappedFiles.get(index);
-            ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();
+            ByteBuffer byteBuffer = mappedFile.sliceByteBuffer(); //创建一个独立于原始的视图。如果多线程直接操作原始的ByteBuffer会报错
             long processOffset = mappedFile.getFileFromOffset();
             long mappedFileOffset = 0;
             long maxExtAddr = 1;
             while (true) {
+                /*for循环会完成一个文件中数据的恢复。
+                每次读取consumequeue中的一个单元(consumequeue记录的是逻辑信息，每一个消息固定20字节表示)*/
                 for (int i = 0; i < mappedFileSizeLogics; i += CQ_STORE_UNIT_SIZE) {
-                    long offset = byteBuffer.getLong();
-                    int size = byteBuffer.getInt();
-                    long tagsCode = byteBuffer.getLong();
+                    long offset = byteBuffer.getLong(); //消息在commitlog中的偏移量
+                    int size = byteBuffer.getInt(); //消息的大小
+                    long tagsCode = byteBuffer.getLong(); //标签的哈希值或者扩展地址
 
                     if (offset >= 0 && size > 0) {
                         mappedFileOffset = i + CQ_STORE_UNIT_SIZE;
@@ -157,7 +163,7 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
                         break;
                     }
                 }
-
+                /*for循环结束完一个文件之后，需要将变量值更新到下一个文件*/
                 if (mappedFileOffset == mappedFileSizeLogics) {
                     index++;
                     if (index >= mappedFiles.size()) {
@@ -178,12 +184,12 @@ public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
                     break;
                 }
             }
-
+            /*更新当前的刷盘点 和 提交点；执行truncateDirtyFiles删除损坏或者无效的数据*/
             processOffset += mappedFileOffset;
             this.mappedFileQueue.setFlushedWhere(processOffset);
             this.mappedFileQueue.setCommittedWhere(processOffset);
             this.mappedFileQueue.truncateDirtyFiles(processOffset);
-
+            /*如果启用了扩展存储，则恢复；之后调用truncateByMaxAddress删除无效 或 损坏的扩展存储*/
             if (isExtReadEnable()) {
                 this.consumeQueueExt.recover();
                 log.info("Truncate consume queue extend file by max {}", maxExtAddr);

@@ -222,27 +222,31 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService scheduledCleanQueueExecutorService =
         ThreadUtils.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreCleanQueueScheduledThread"));
 
+    /**初始化消息存储模块的核心组件。DefaultMessageStore 是 RocketMQ 的默认消息存储实现，负责管理消息的持久化、索引构建、刷盘、清理等功能*/
     public DefaultMessageStore(final MessageStoreConfig messageStoreConfig, final BrokerStatsManager brokerStatsManager,
         final MessageArrivingListener messageArrivingListener, final BrokerConfig brokerConfig, final ConcurrentMap<String, TopicConfig> topicConfigTable) throws IOException {
+        /*初始化消息存储的基础参数*/
         this.messageArrivingListener = messageArrivingListener; /*消息到达监听器*/
         this.brokerConfig = brokerConfig;
         this.messageStoreConfig = messageStoreConfig;
         this.aliveReplicasNum = messageStoreConfig.getTotalReplicas();
         this.brokerStatsManager = brokerStatsManager; /*Broker状态管理，运行指标收集*/
         this.topicConfigTable = topicConfigTable;
-        /*初始化mappedFile（内存映射文件）创建服务*/
+        /*初始化mappedFile（内存映射文件）创建服务————用于管理内存映射文件（MappedFile）的分配。
+        * 说明：内存映射文件是 RocketMQ 消息存储的核心机制，用于高效地读写磁盘文件。*/
         this.allocateMappedFileService = new AllocateMappedFileService(this);
+        /*根据配置决定使用哪一种commitlog*/
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);
         } else {
             this.commitLog = new CommitLog(this);
         }
 
-        this.consumeQueueStore = createConsumeQueueStore();
+        this.consumeQueueStore = createConsumeQueueStore(); //管理consumequeue数据
 
-        this.flushConsumeQueueService = createFlushConsumeQueueService(); //commitlog刷盘线程
-        this.cleanCommitLogService = new CleanCommitLogService(); //清理commitlog的线程
-        this.cleanConsumeQueueService = createCleanConsumeQueueService();
+        this.flushConsumeQueueService = createFlushConsumeQueueService(); //consumequeue刷盘线程
+        this.cleanCommitLogService = new CleanCommitLogService(); //清理过期的commitlog 的线程
+        this.cleanConsumeQueueService = createCleanConsumeQueueService(); //清理过期的consumequeue 的线程
         this.correctLogicOffsetService = createCorrectLogicOffsetService();
         this.storeStatsService = new StoreStatsService(getBrokerIdentity());
         this.indexService = new IndexService(this);
@@ -259,7 +263,8 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
         }
-        /*if的条件：判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件。
+        /* 初始化重放commitlog的服务。会根据if条件（是否允许并行构建）创建不同的服务类型
+        if的条件：判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件。
         * reputMessageService用来把CommiteLog的数据写到consumerqueue和index文件中。就是转发commitlog的线程*/
         if (!messageStoreConfig.isEnableBuildConsumeQueueConcurrently()) {
             this.reputMessageService = new ReputMessageService();
@@ -269,26 +274,26 @@ public class DefaultMessageStore implements MessageStore {
         /*创建这个"堆外内存池"————直接内存池。
         * 避免了频繁创建。在异步刷盘的时候作为与pagecache的数据交换区，通过commit操作完成数据传输到pagecache*/
         this.transientStorePool = new TransientStorePool(messageStoreConfig.getTransientStorePoolSize(), messageStoreConfig.getMappedFileSizeCommitLog());
-        /*创建一个仅包含一个线程的定时任务线程池，会在addScheduleTask方法用到，添加定时任务*/
+        /*创建一个仅包含一个线程的定时任务线程池。会在addScheduleTask方法用到，添加定时任务*/
         this.scheduledExecutorService =
             ThreadUtils.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread", getBrokerIdentity()));
-        /*初始化dispatcherList。这个东西是后续用于消息分发的处理链，会依次调用每一个的dispatch方法，这个方法的具体逻辑就是将commitlog转
-        发给某文件*/
+        /*初始化dispatcherList，其实就是构建消息分发链。这个东西是后续用于消息分发的处理链，会依次调用每一个的dispatch方法，这个方法的
+        具体逻辑就是将commitlog转发给某文件*/
         this.dispatcherList = new LinkedList<>();
         this.dispatcherList.addLast(new CommitLogDispatcherBuildConsumeQueue()); //commitlog转发给consumequeue文件
         this.dispatcherList.addLast(new CommitLogDispatcherBuildIndex()); //将commitlog分发给index文件
-        if (messageStoreConfig.isEnableCompaction()) {
+        if (messageStoreConfig.isEnableCompaction()) { //如果开启压缩服务，还会在链中添加CommitLogDispatcherCompaction
             this.compactionStore = new CompactionStore(this);
             this.compactionService = new CompactionService(commitLog, this, compactionStore);
             this.dispatcherList.addLast(new CommitLogDispatcherCompaction(compactionService));
         }
-        /*创建lock文件，并校验commitlog以及comsumerqueue文件夹的正确性*/
+        /*创建lock文件，并 校验目录结构，如果没有commitlog文件夹 以及 consumequeue文件夹 这一步会创建*/
         File file = new File(StorePathConfigHelper.getLockFile(messageStoreConfig.getStorePathRootDir()));
         UtilAll.ensureDirOK(file.getParent()); //整个rocketmq持久化文件存储的文件夹根路径，比如：D:\IDEA_projects\STORE_DATA\ROCKETMQ_DATA
         UtilAll.ensureDirOK(getStorePathPhysic()); //commitlog文件夹的根路径。比如：D:/IDEA_projects/STORE_DATA/ROCKETMQ_DATA\commitlog
         UtilAll.ensureDirOK(getStorePathLogic()); //consumerqueue文件夹的根路径。比如：D:/IDEA_projects/STORE_DATA/ROCKETMQ_DATA\consumequeue
-        lockFile = new RandomAccessFile(file, "rw");
-
+        lockFile = new RandomAccessFile(file, "rw"); //创建锁文件
+        /*完成延迟时间和等级的映射，并存储*/
         parseDelayLevel(); //初始化delayLevelTable。延迟等级——>延迟时间
     }
 
@@ -355,7 +360,9 @@ public class DefaultMessageStore implements MessageStore {
      *      判断上一次退出是否正常。其实现机制是Broker在启动时创建${ROCKET_HOME}/store/abort文件，在退出时通过注
      *      册JVM钩子函数删除abort文件。如果下一次启动时存在abort文件。说明Broker是异常退出的，CommitLog与
      *      ConsumeQueue数据有可能不一致，需要进行修复
-     * 2. 加载CommitLog
+     * 2. 加载CommitLog文件夹下的所有文件
+     * 3. 加载consumequeue和batchconsumequeue文件夹下的所有文件
+     * 4. 如果开启压缩服务需要加载
      */
     @Override
     public boolean load() {
@@ -1933,30 +1940,30 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 恢复ConsumeQueue、CommitLog、OffsetTable，并记录日志
+     * 主要是恢复ConsumeQueue、CommitLog、OffsetTable，并记录耗时
      * */
     private void recover(final boolean lastExitOK) throws RocksDBException {
-        boolean recoverConcurrently = this.isRecoverConcurrently();
+        boolean recoverConcurrently = this.isRecoverConcurrently(); //是否并发恢复
         LOGGER.info("message store recover mode: {}", recoverConcurrently ? "concurrent" : "normal");
 
-        // recover consume queue
+        // ①recover consume queue
         long recoverConsumeQueueStart = System.currentTimeMillis();
         this.recoverConsumeQueue();
         long maxPhyOffsetOfConsumeQueue = this.consumeQueueStore.getMaxPhyOffsetInConsumeQueue();
         long recoverConsumeQueueEnd = System.currentTimeMillis();
 
-        // recover commitlog
+        // ②recover commitlog
         if (lastExitOK) {
             this.commitLog.recoverNormally(maxPhyOffsetOfConsumeQueue);
         } else {
             this.commitLog.recoverAbnormally(maxPhyOffsetOfConsumeQueue);
         }
 
-        // recover consume offset table
+        // ③recover consume offset table
         long recoverCommitLogEnd = System.currentTimeMillis();
         this.recoverTopicQueueTable();
         long recoverConsumeOffsetEnd = System.currentTimeMillis();
-
+        // 记录消息耗时
         LOGGER.info("message store recover total cost: {} ms, " +
                 "recoverConsumeQueue: {} ms, recoverCommitLog: {} ms, recoverOffsetTable: {} ms",
             recoverConsumeOffsetEnd - recoverConsumeQueueStart, recoverConsumeQueueEnd - recoverConsumeQueueStart,

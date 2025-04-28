@@ -18,6 +18,10 @@ package org.apache.rocketmq.store;
 
 import java.util.Map;
 
+/**
+ *     用于封装消息分发请求的相关信息。这个类的主要作用是将从 CommitLog 中解析出来的消息元数据传递给下游的处
+ * 理模块（如 ConsumeQueue 和 IndexFile），以便进一步构建逻辑队列索引或索引文件。
+ * */
 public class DispatchRequest {
     private final String topic; //主题
     private final int queueId; //消息队列id

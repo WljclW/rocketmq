@@ -783,17 +783,17 @@ public class BrokerController {
 
     /**[]:从持久化存储中加载各种元数据管理器的数据——即broker。conf文件中指定的所有配置文件、日志文件。比
      *  如：Topic相关配置、Consumer消费消息进度情况、Consumer订阅关系、Consumer过滤关系，CommitLog、
-     *  ConsumeQueue日志文件*/
+     *  ConsumeQueue日志文件。。这些文件的根路径是”config文件夹“*/
     public boolean initializeMetadata() {
-        //从磁盘中加载Topic相关配置，文件路径：{user.home}/store/config/topics.json
+        //从磁盘中加载Topic相关配置，文件路径：{Broker.conf配置的路径}/config/topics.json
         boolean result = this.topicConfigManager.load();
-        result = result && this.topicQueueMappingManager.load();
-        //从磁盘中加载不同consumer消费消息的进度情况，文件路径：{user.home}/store/config/consumeroffset.json
+        result = result && this.topicQueueMappingManager.load(); //{Broker.conf配置的路径}/config/topicQueueMapping.json
+        //从磁盘中加载不同consumer消费消息的进度情况，文件路径：{Broker.conf配置的路径}/config/consumeroffset.json
         result = result && this.consumerOffsetManager.load();
-        //从磁盘中加载consumer订阅关系，文件路径：{user.home}/store/config/subscriptionGroup.json
+        //从磁盘中加载consumer订阅关系，文件路径：{Broker.conf配置的路径}/config/subscriptionGroup.json
         result = result && this.subscriptionGroupManager.load();
-        result = result && this.consumerFilterManager.load();
-        result = result && this.consumerOrderInfoManager.load();
+        result = result && this.consumerFilterManager.load(); //{Broker.conf配置的路径}/config/consumerFilter.json
+        result = result && this.consumerOrderInfoManager.load(); //{Broker.conf配置的路径}/config/consumerOrderInfo.json
         return result;
     }
 
@@ -840,6 +840,7 @@ public class BrokerController {
         return result;
     }
 
+    /**BrokerController的初始化工作，主要初始化：元数据信息(config文件夹下的信息)、消息存储messagestore、恢复和初始化服务*/
     public boolean initialize() throws CloneNotSupportedException {
         /*加载多个相关的持久化配置文件，出现加载不正常时，直接返回false*/
         boolean result = this.initializeMetadata();
@@ -855,39 +856,39 @@ public class BrokerController {
         return this.recoverAndInitService();
     }
 
-    /***/
+    /**用于在 Broker 启动时恢复和初始化服务。该方法的核心任务是加载持久化数据、初始化资源和服务组件，并确保 Broker 能够正常对外提供服务*/
     public boolean recoverAndInitService() throws CloneNotSupportedException {
 
-        boolean result = true;
+        boolean result = true; //表示最终的处理结果
 
         if (this.brokerConfig.isEnableControllerMode()) {
             this.replicasManager = new ReplicasManager(this);
             this.replicasManager.setFenced(true);
         }
-
+        /*加载所有消息存储相关的持久化文件（包括commitlog、consumequeue等）*/
         if (messageStore != null) {
             registerMessageStoreHook(); //注册消息存储钩子函数
             result = this.messageStore.load(); //进行消息存储的加载。完成了持久化文件比如：consumequeue、commitlog等文件的加载
         }
-
+        /*开启定时消息存储功能*/
         if (messageStoreConfig.isTimerWheelEnable()) {
             result = result && this.timerMessageStore.load();
         }
 
         //scheduleMessageService load after messageStore load success
         result = result && this.scheduleMessageService.load();
-
+        /*依次调用所有附加插件的load方法。附加插件允许开发者扩展 Broker 的功能，例如监控、审计等。*/
         for (BrokerAttachedPlugin brokerAttachedPlugin : brokerAttachedPlugins) {
             if (brokerAttachedPlugin != null) {
                 result = result && brokerAttachedPlugin.load();
             }
         }
-
+        /*创建 BrokerMetricsManager 实例，用于管理和报告 Broker 的运行指标（如吞吐量、延迟等）。*/
         this.brokerMetricsManager = new BrokerMetricsManager(this);
 
         if (result) {
 
-            initializeRemotingServer(); /*初始化Broker端的服务器：一个可以处理所有的请求；一个仅仅处理发送消息的请求*/
+            initializeRemotingServer(); /*初始化Broker端的服务器(Broker对外提供服务的核心组件)：一个可以处理所有的请求；一个仅仅处理发送消息的请求*/
 
             initializeResources(); //初始化后面处理请求会用到的各种线程池
 
@@ -895,13 +896,13 @@ public class BrokerController {
 
             initializeScheduledTasks(); //初始化各种定时任务
 
-            initialTransaction();
+            initialTransaction(); //初始化事务管理模块，用于支持分布式事务消息。
 
-            initialAcl();
+            initialAcl(); //初始化访问控制列表（ACL），用于限制客户端的权限。
 
             initialRpcHooks(); //初始化RPC钩子。这一不会涉及到从资源文件加载类，并通过反射来创建类的对象。。---经典的操作很多值得反复看
 
-            //后面是对于TLS的初始化操作
+            /*如果启用了TLS（传输层安全），则创建 FileWatchService，用于监控证书文件的变化并动态重新加载 SSL 上下文*/
             if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
                 // Register a listener to reload SslContext
                 try {
@@ -1718,7 +1719,7 @@ public class BrokerController {
         /*如果 Broker 未被隔离且未启用 Dledger 或消息复制，则尝试注册到 NameServer。*/
         if (!isIsolated && !this.messageStoreConfig.isEnableDLegerCommitLog() && !this.messageStoreConfig.isDuplicationEnable()) {
             changeSpecialServiceStatus(this.brokerConfig.getBrokerId() == MixAll.MASTER_ID);
-            this.registerBrokerAll(true, false, true);
+            this.registerBrokerAll(true, false, true /*第一次时会强制注册*/);
         }
         //broker发送心跳包
         scheduledFutures.add(this.scheduledExecutorService.scheduleAtFixedRate(new AbstractBrokerRunnable(this.getBrokerIdentity()) {
@@ -1861,7 +1862,8 @@ public class BrokerController {
             } else {
                 topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
             }
-            //当 topicConfigTable 达到一定大小时，触发批量注册操作，并清空 topicConfigTable
+            /*如果允许分批注册 并且 topicConfigTable达到阈值时，触发批量注册操作。并清空 topicConfigTable准备下一次分批。
+            * 好处：分批注册减小了单次通信的数据量，降低了网络和namesrv的压力*/
             if (this.brokerConfig.isEnableSplitRegistration()
                 && topicConfigTable.size() >= this.brokerConfig.getSplitRegistrationSize()) {
                 TopicConfigAndMappingSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildSerializeWrapper(topicConfigTable);
@@ -1869,13 +1871,14 @@ public class BrokerController {
                 topicConfigTable.clear();
             }
         }
-
+        /*获取当前队列的映射信息*/
         Map<String, TopicQueueMappingInfo> topicQueueMappingInfoMap = this.getTopicQueueMappingManager().getTopicQueueMappingTable().entrySet().stream()
             .map(entry -> new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), TopicQueueMappingDetail.cloneAsMappingInfo(entry.getValue())))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
+        /*打包成序列化包装器。里面包含了需要发送给namesrv的全部数据*/
         TopicConfigAndMappingSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().
             buildSerializeWrapper(topicConfigTable, topicQueueMappingInfoMap);
+        /*如果需要注册，则注册*/
         if (this.brokerConfig.isEnableSplitRegistration() || forceRegister || needRegister(this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
             this.brokerConfig.getBrokerName(),

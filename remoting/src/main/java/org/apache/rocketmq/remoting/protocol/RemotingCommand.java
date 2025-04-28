@@ -43,10 +43,11 @@ import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
 /**
- * RocketMQ是消息中间件，那么首先要解决的问题就是消息本身该如何设计。因为整个系统中它是传递的对
+ *     RocketMQ是消息中间件，那么首先要解决的问题就是消息本身该如何设计。因为整个系统中它是传递的对
  * 象，是数据的载体。那么对于消息本身来说，我们需要定义消息的格式，这样客户端与服务端之间可以遵循
  * 定义好的消息格式来进行通信。在RocketMQ体系中，通过RemotingCommand对象来进行交互，，它对数据
  * 进行了封装。
+ *     这个类是对请求 以及 响应 进行的封装，因此每一个字段既可能出现请求的时候，也可能出现在响应的时候
  * */
 public class RemotingCommand {
     public static final String SERIALIZE_TYPE_PROPERTY = "rocketmq.serialize.type";
@@ -87,10 +88,10 @@ public class RemotingCommand {
         }
     }
 
-    private int code;   //操作码
-    private LanguageCode language = LanguageCode.JAVA;  //实现的语言
-    private int version = 0;
-    private int opaque = requestId.getAndIncrement();   //在同一个连接上的不同的请求标识码，与响应消息中的相对应
+    private int code;   //①请求操作码，方根据不同的请求码进行不同的业务处理 ②应答响应码，0成功，1失败
+    private LanguageCode language = LanguageCode.JAVA;  //请求方 或者 应答方实现的语言
+    private int version = 0; //请求方 或者 应答方 程序的版本
+    private int opaque = requestId.getAndIncrement();   /*requestId，在同一个连接上的不同请求标识码。应答方不做修改原值返回*/
     private int flag = 0;   //区分是普通RPc还是onewayRPC的标志
     private String remark;  //传输自定义文本信息
     private HashMap<String, String> extFields;  //自定义扩展信息

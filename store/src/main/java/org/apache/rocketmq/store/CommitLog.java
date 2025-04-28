@@ -714,6 +714,7 @@ public class CommitLog implements Swappable {
     }
 
     /**
+     * 非正常退出时恢复commitlog的方法
      * @throws RocksDBException only in rocksdb mode
      */
     public void recoverAbnormally(long maxPhyOffsetOfConsumeQueue) throws RocksDBException {
@@ -849,14 +850,21 @@ public class CommitLog implements Swappable {
         this.getMessageStore().onCommitLogAppend(msg, result, commitLogFile);
     }
 
+    /**     用于判断某个 MappedFile 是否适合参与异常恢复（Abnormal Recovery）。它的主要作用是通过解析文件头部的关键字段
+     * （如魔数、物理偏移量、存储时间戳等），验证文件的有效性，并决定是否从该文件开始恢复。*/
     private boolean isMappedFileMatchedRecover(final MappedFile mappedFile) throws RocksDBException {
         ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();
-
+        /*验证魔数*/
         int magicCode = byteBuffer.getInt(MessageDecoder.MESSAGE_MAGIC_CODE_POSITION);
         if (magicCode != MessageDecoder.MESSAGE_MAGIC_CODE && magicCode != MessageDecoder.MESSAGE_MAGIC_CODE_V2) {
             return false;
         }
-
+        /*
+        * if：如果启用了 RocksDB 存储模式，则读取文件中的物理偏移量（Physical Offset）。比较物理偏移量与 ConsumeQueue 中
+        *   的最大物理偏移量（maxPhyOffsetInConsumeQueue）。如果物理偏移量小于等于 maxPhyOffsetInConsumeQueue，则认为
+        *   该文件适合恢复。
+        * else：普通存储模式文件的恢复
+        * */
         if (this.defaultMessageStore.getMessageStoreConfig().isEnableRocksDBStore()) {
             final long maxPhyOffsetInConsumeQueue = this.defaultMessageStore.getQueueStore().getMaxPhyOffsetInConsumeQueue();
             long phyOffset = byteBuffer.getLong(MessageDecoder.MESSAGE_PHYSIC_OFFSET_POSITION);
@@ -865,16 +873,17 @@ public class CommitLog implements Swappable {
                 return true;
             }
         } else {
-            int sysFlag = byteBuffer.getInt(MessageDecoder.SYSFLAG_POSITION);
+            int sysFlag = byteBuffer.getInt(MessageDecoder.SYSFLAG_POSITION); //获取系统的标志位，是一个int数据
             int bornHostLength = (sysFlag & MessageSysFlag.BORNHOST_V6_FLAG) == 0 ? 8 : 20;
             int msgStoreTimePos = 4 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 8 + bornHostLength;
-            long storeTimestamp = byteBuffer.getLong(msgStoreTimePos);
+            long storeTimestamp = byteBuffer.getLong(msgStoreTimePos); //读取时间戳
             if (0 == storeTimestamp) {
                 return false;
             }
-
+            /*如果存储时间戳小于等于检查点时间戳，则认为适合恢复*/
             if (this.defaultMessageStore.getMessageStoreConfig().isMessageIndexEnable()
                 && this.defaultMessageStore.getMessageStoreConfig().isMessageIndexSafe()) {
+                /*如果启用消息索引 且 索引安全，则使用getMinTimestampIndex()*/
                 if (storeTimestamp <= this.defaultMessageStore.getStoreCheckpoint().getMinTimestampIndex()) {
                     log.info("find check timestamp, {} {}",
                         storeTimestamp,
@@ -882,6 +891,7 @@ public class CommitLog implements Swappable {
                     return true;
                 }
             } else {
+                /*否则，使用getMinTimestamp()*/
                 if (storeTimestamp <= this.defaultMessageStore.getStoreCheckpoint().getMinTimestamp()) {
                     log.info("find check timestamp, {} {}",
                         storeTimestamp,

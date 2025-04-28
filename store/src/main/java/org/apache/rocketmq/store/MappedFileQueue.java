@@ -43,7 +43,7 @@ public class MappedFileQueue implements Swappable {
 
     protected final String storePath; // 存储路径
 
-    protected final int mappedFileSize; //mappesFile文件的大小
+    protected final int mappedFileSize; //mappesFile文件的大小。值是600 0000
     //mappedFile的集合
     protected final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<>();
     //创建mappedFile的服务
@@ -194,18 +194,19 @@ public class MappedFileQueue implements Swappable {
         return mfs;
     }
 
+    /**截断offset之后的无效 或者 损坏 的数据*/
     public void truncateDirtyFiles(long offset) {
         List<MappedFile> willRemoveFiles = new ArrayList<>();
 
         for (MappedFile file : this.mappedFiles) {
             long fileTailOffset = file.getFileFromOffset() + this.mappedFileSize;
-            //只保留offset之前的文件————因此如果一个文件末尾的偏移量都不大于offset，则该文件必备保留(说明这个文件一定是在offset之前)
+            /*只保留offset之前的文件————因此如果一个文件末尾的偏移量都不大于offset，则该文件必备保留(说明这个文件一定是在offset之前)*/
             if (fileTailOffset > offset) { //需要特别关注一下未见末尾偏移量大于offset的文件
                 if (offset >= file.getFileFromOffset()) { //说明file中是有有效偏移的
                     file.setWrotePosition((int) (offset % this.mappedFileSize));
                     file.setCommittedPosition((int) (offset % this.mappedFileSize));
                     file.setFlushedPosition((int) (offset % this.mappedFileSize));
-                } else/* offset < file.getFileFromOffset() */ { //offset小于文件名(文件名其实就是文件中最小的偏移量)，说明这个文件是有效文件之后创建的需要删除
+                } else/* offset < file.getFileFromOffset() */ { /*offset小于文件名(文件名其实就是文件中最小的偏移量)，说明这个文件是有效文件之后创建的需要删除，没有有效数据*/
                     file.destroy(1000);
                     willRemoveFiles.add(file); //将需要删除的文件添加到一个列表willRemoveFiles
                 }

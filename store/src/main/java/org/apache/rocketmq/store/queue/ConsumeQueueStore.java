@@ -75,6 +75,7 @@ public class ConsumeQueueStore extends AbstractConsumeQueueStore {
         return true;
     }
 
+    /**依次拿到每一个consumequeue进行恢复*/
     @Override
     public void recover() {
         for (ConcurrentMap<Integer, ConsumeQueueInterface> maps : this.consumeQueueTable.values()) {
