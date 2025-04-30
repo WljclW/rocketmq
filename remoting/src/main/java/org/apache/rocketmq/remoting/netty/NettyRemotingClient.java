@@ -116,7 +116,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ClientHouseKeepingService"));
 
-    private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<>();
+    private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<>(); //原子引用类型。更新namesrv的列表
     private final ConcurrentMap<String, Boolean> availableNamesrvAddrMap = new ConcurrentHashMap<>();
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
@@ -509,9 +509,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
-    /**【】：在需要更新的时候更新namesrvAddrList，更新完成后遍历channelTables，对于无效的远端addr，将对应的channelWrapper删除
+    /**【】：主要完成两个事：①在需要更新的时候更新namesrvAddrList。②更新完成后遍历channelTables，对于无效的远
+     *      端addr，将对应的channelWrapper删除
      * 【说明】：
-     *      1.这里的更新不是把参数的addrs添加到namesrvAddrList，而是用参数的addrs替换目前namesrvAddrList中所有的元素*/
+     *      1. 这里的更新不是把参数的addrs添加到namesrvAddrList，而是用参数的addrs替换目前namesrvAddrList中所有
+     *  的元素
+     *      2. 涉及到了原子引用类型的使用。*/
     @Override
     public void updateNameServerAddressList(List<String> addrs) {
         /*获取现在的namesrv列表*/
@@ -519,7 +522,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         boolean update = false;
         /*对比addrs 和 old，看看是不是有变化。如果有变化，update需要被更新为true。*/
         if (!addrs.isEmpty()) {
-            /*step1:判断是不是有差异，设置标志变量update*/
+            /*step1:判断addrs是不是都在old中，设置标志变量update(如果部分在old中没有则update被设置为ture)*/
             if (null == old) {
                 update = true;
             } else if (addrs.size() != old.size()) {

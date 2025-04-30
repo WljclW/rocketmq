@@ -43,6 +43,8 @@ import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
 /**
+ *     rocketmq服务端 和 客户端 沟通时消息的格式规范..客户端请求时将request封装为这种类型，同时服务端响应的时候也会把
+ * 响应的信息封装成RemotingCommand类型
  *     RocketMQ是消息中间件，那么首先要解决的问题就是消息本身该如何设计。因为整个系统中它是传递的对
  * 象，是数据的载体。那么对于消息本身来说，我们需要定义消息的格式，这样客户端与服务端之间可以遵循
  * 定义好的消息格式来进行通信。在RocketMQ体系中，通过RemotingCommand对象来进行交互，，它对数据
@@ -88,25 +90,27 @@ public class RemotingCommand {
         }
     }
 
-    private int code;   //①请求操作码，方根据不同的请求码进行不同的业务处理 ②应答响应码，0成功，1失败
+    /*①请求操作码，方根据不同的请求码进行不同的业务处理 ②应答响应码，0成功，1失败；
+    * RequestCode.java就规定了各种不同的请求码，比如105就是GET_ROUTEINFO_BY_TOPIC————通过topic获取路由信息*/
+    private int code;
     private LanguageCode language = LanguageCode.JAVA;  //请求方 或者 应答方实现的语言
     private int version = 0; //请求方 或者 应答方 程序的版本
     private int opaque = requestId.getAndIncrement();   /*requestId，在同一个连接上的不同请求标识码。应答方不做修改原值返回*/
     private int flag = 0;   //区分是普通RPc还是onewayRPC的标志
-    private String remark;  //传输自定义文本信息
+    private String remark;  //传输自定义文本信息.比如“服务端传来的'No topic route info ....'”,也就是说可以是一段报错信息
     private HashMap<String, String> extFields;  //自定义扩展信息
     private transient CommandCustomHeader customHeader;
     private transient CommandCustomHeader cachedHeader;
 
     private SerializeType serializeTypeCurrentRPC = serializeTypeConfigInThisServer;
 
-    private transient byte[] body;
+    private transient byte[] body; //消息的实质性内容，比如根据topic查询路由信息时，返回的这个字段就是具体的路由信息只不过是byte数组
     private boolean suspended;
     private transient Stopwatch processTimer;
 
     protected RemotingCommand() {
     }
-
+    /**在发送消息之前，会利用下面的消息来创建RemotingCommand。。。*/
     public static RemotingCommand createRequestCommand(int code, CommandCustomHeader customHeader) {
         RemotingCommand cmd = new RemotingCommand();
         cmd.setCode(code);

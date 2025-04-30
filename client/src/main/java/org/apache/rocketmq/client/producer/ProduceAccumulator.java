@@ -94,7 +94,7 @@ public class ProduceAccumulator {
 
         private void doWork() throws InterruptedException {
             Collection<MessageAccumulation> values = syncSendBatchs.values();
-            final int sleepTime = Math.max(1, holdMs / 2);
+            final int sleepTime = Math.max(1, holdMs / 2); //设置线程休眠时间至少为1ms
             for (MessageAccumulation v : values) {
                 v.wakeup();
                 synchronized (v) {

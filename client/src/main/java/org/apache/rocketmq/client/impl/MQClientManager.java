@@ -71,14 +71,14 @@ public class MQClientManager {
      *      ConcurrentMap<String， MQClientinstance＞ factoryTable = new ConcurrentHashMap<String， MQClientlnstance＞（），
      *      也就是同一个 clientId 只会创建一个MQClientinstance。(cluster模式下，同一个jvm中生产者消费者的clientId是不一样的，因为
      *      clientId中包含了"org.apache.rocketmq.client.ClientConfig#instanceName"，但是在DefaultMQPushConsumerImpl#start()方
-     *      法中，会完成对这个属性的修改为pid+纳秒数，防止同一个jvm的多个重名为默认值"DEFAULT")
+     *      法中，会完成对这个属性的修改为“pid+纳秒数”，防止同一个jvm的多个重名为默认值"DEFAULT"的instanceName)
      * 2. clientId为客户端IP+instance+unitname（可选），如果在同一台物理服务器部署两个应用程序，应用程序的clientId岂不是相同，这样
      *      是不是会造成混乱？为了避免出现这个问题，如果instance为默认值DEFAULT，RocketMQ会自动将instance设置为进程ID，这样就避免了
      *      不同进程相互影响
      * */
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
-        String clientId = clientConfig.buildMQClientId();   // 根据客户端配置生成唯一的客户端ID
-        MQClientInstance instance = this.factoryTable.get(clientId);     // 尝试从实例表中获取已存在的MQ客户端实例
+        String clientId = clientConfig.buildMQClientId();   // 根据客户端配置生成唯一的客户端ID。形如：10.189.145.29@30756#10132644845500
+        MQClientInstance instance = this.factoryTable.get(clientId); // 尝试从实例表中获取已存在的MQ客户端实例
         /*
          * 如果没有的话则调用构造器创建MQClientInstance实例...并将clientId——>MQClientInstance实例的映射关系存入到factoryTable
          * 从下面的逻辑可以看出来，对于同样的clientId，MQClientInstance实例只会创建一个。
@@ -101,7 +101,7 @@ public class MQClientManager {
 
     /**返回ClientConfig对象对应的ProduceAccumulator对象，或者创建一个属于自己的。*/
     public ProduceAccumulator getOrCreateProduceAccumulator(final ClientConfig clientConfig) {
-        String clientId = clientConfig.buildMQClientId();
+        String clientId = clientConfig.buildMQClientId(); /*形如10.189.145.29@DEFAULT*/
         /*先获取，没有的话再创建。创建后在放的时候如果发现已经有了，就返回已有的*/
         ProduceAccumulator accumulator = this.accumulatorTable.get(clientId);
         if (null == accumulator) {

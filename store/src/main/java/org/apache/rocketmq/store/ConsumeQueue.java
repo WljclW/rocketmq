@@ -42,8 +42,9 @@ import org.apache.rocketmq.store.queue.QueueOffsetOperator;
 import org.apache.rocketmq.store.queue.ReferredIterator;
 
 /**
- * 【】单个ConsumeQueue文件可以看作是ConsumeQueue条目构成的数组，其下标记为当前条目的逻辑偏移量。
+ * 【总述】单个ConsumeQueue文件可以看作是ConsumeQueue条目构成的数组，其下标记为当前条目的逻辑偏移量。
  * 构建的逻辑：消息到达CommitLog时，会由转发线程将消息转发到ConsumeQueue和index文件。
+ *          每一个consumequeue文件包含30W个这样的索引条目，因此一共是30W*20字节，可知每一个consumequeue约是5.72MB
  * */
 public class ConsumeQueue implements ConsumeQueueInterface, FileQueueLifeCycle {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);

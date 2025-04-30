@@ -25,6 +25,8 @@ import org.apache.rocketmq.remoting.annotation.CFNullable;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 import org.apache.rocketmq.remoting.rpc.TopicRequestHeader;
 
+/**请求路由信息的请求头。
+ * 在"org.apache.rocketmq.remoting.protocol.header"包中定义了很多的请求头(xxxxReuqestheader以及xxxxReponseHeader)*/
 public class GetRouteInfoRequestHeader extends TopicRequestHeader {
 
     @CFNotNull

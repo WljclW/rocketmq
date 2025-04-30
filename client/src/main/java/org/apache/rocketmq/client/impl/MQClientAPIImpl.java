@@ -238,8 +238,14 @@ import static org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode.SUCC
  *  等更高层次的 API 使用。
  *  负责与 Broker 和 NameServer 进行通信。它是生产者（Producer）和消费者（Consumer）的底层接口，提供了消息发
  *  送、拉取、心跳、订阅管理等核心功能。
- *  */
-/**
+ *
+ * 此类和MQClientInstance类的区别：
+ *      此类是 RocketMQ 客户端的底层通信实现类，负责与 Broker 和 NameServer 进行网络通信。它封装了所有与远程服务交互
+ *  的 RPC 调用逻辑。
+ *      是一个低级别(即较低层次的抽象)的类，直接与 RocketMQ 的网络层交互。方法内的最终实现几乎都是通过"this.remotingClient"的
+ *  方法来实现，最直接的体现看方法start()，只有一句话"this.remotingClient.start()"，因此该类相当于底层网络操作的进一步封装
+ *
+ *
  * MQClientAPIImpl 是 RocketMQ 客户端与服务端（Broker 和 NameServer）通信的桥梁，主要作用包括：
  *      发送请求 ：
  *          封装了向 Broker 和 NameServer 发送请求的逻辑，例如发送消息、拉取消息、更新消费进度等。
@@ -320,6 +326,9 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         return remotingClient;
     }
 
+    /**
+     * 从配置中或远程地址服务器（如 DNS、ZooKeeper、Nacos 等）动态获取 NameServer 地址，并在地址发生变化时更新本地缓存。
+     * */
     public String fetchNameServerAddr() {
         try {
             String addrs = this.topAddressing.fetchNSAddr();
@@ -350,6 +359,7 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         return nameSrvAddr;
     }
 
+    /**利用参数addrs更新本实例缓存的namesrvlist*/
     public void updateNameServerAddressList(final String addrs) {
         String[] addrArray = addrs.split(";");
         List<String> list = Arrays.asList(addrArray);

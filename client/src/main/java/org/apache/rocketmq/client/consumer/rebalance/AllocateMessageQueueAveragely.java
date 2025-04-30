@@ -40,7 +40,7 @@ public class AllocateMessageQueueAveragely extends AbstractAllocateMessageQueueS
         /*averageSize：表示平均一个消费者需要分配到的消息队列数量。。。。
         * mqAll.size() / cidAll.size()：表示平均一个消费者需要分配到几个消息队列
         * 整体计算averageSize的流程：
-        *       如果mqAll.size() <= cidAll.size()：则每一个消费者平均分配一个队列(其实最真实的是有的消费者都分不到)；
+        *       如果mqAll.size() <= cidAll.size()：则每一个消费者平均分配一个队列(其实最真实的是有的消费者都分不到消息队列)；
         *       如果mqAll.size() > cidAll.size()，则需要分情况：
         *              情况①：index < mod，即当前消费者所在的索引 < 取余，这些消费者需要多分配一个消息队列
         *              情况②：index>=mod，后面的这些消费者就负责除数个消息队列就可以了

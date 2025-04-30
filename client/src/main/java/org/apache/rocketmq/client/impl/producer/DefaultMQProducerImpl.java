@@ -126,7 +126,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final ExecutorService defaultAsyncSenderExecutor;
     protected BlockingQueue<Runnable> checkRequestQueue;
     protected ExecutorService checkExecutor;
-    private ServiceState serviceState = ServiceState.CREATE_JUST;
+    private ServiceState serviceState = ServiceState.CREATE_JUST; //服务的窗台。服务启动的时候会用到
     private MQClientInstance mQClientFactory;
     private ArrayList<CheckForbiddenHook> checkForbiddenHookList = new ArrayList<>();
     private MQFaultStrategy mqFaultStrategy;
@@ -189,7 +189,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 try {
                     /*创建一个消息队列；并向指定的服务端点（endpoint）发送请求，获取该消息队列的最大偏移量。*/
                     MessageQueue mq = new MessageQueue(candidateTopic.get() /*获取topic*/, null, 0);
-                    //向目标服务器（endpoint）发送请求，获取指定消息队列的最大偏移量。
+                    //向目标broker主服务器（endpoint）发送请求，获取指定消息队列的最大偏移量。
                     mQClientFactory.getMQClientAPIImpl()
                             .getMaxOffset(endpoint, mq, timeoutMillis);
                     return true;
@@ -202,7 +202,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.mqFaultStrategy = new MQFaultStrategy(defaultMQProducer.cloneClientConfig(), new Resolver() {
             /*rosolve作用：根据BrokerName，获取该Broker的发布地址(这里的实现是拿这个broker集群的主节点地址)*/
             @Override
-            public String resolve(String name) {
+            public String resolve(String name/*broker名称*/) {
                 return DefaultMQProducerImpl.this.mQClientFactory.findBrokerAddressInPublish(name);
             }
         }, serviceDetector);
@@ -291,7 +291,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 this.checkConfig(); //检查设置的producerGroup(生产者组名)是否合法
                 /*如果生产者组不是CLIENT_INNER_PRODUCER并且instanceName是DEFAULT的话，修改instanceName为”pid#纳秒数“*/
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
-                    this.defaultMQProducer.changeInstanceNameToPID();
+                    this.defaultMQProducer.changeInstanceNameToPID(); /*instanceName将变成的i形式类似于：30756#10132644845500*/
                 }
                 /*获取 或 创建MQ客户端工厂实例。mQClientFactory其实是MQClientInstance的对象*/
                 this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
@@ -922,7 +922,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /**
-     * tryToFindTopicPublishlnfo是查找主题的路由信息。
+     *      tryToFindTopicPublishlnfo是查找主题的路由信息。方法的最终目的就是获取某一个topic的路由信息，本地没有就请
+     * 求namesrv,同时需要更新本地的缓存信息；如果本地有就直接返回
      *      如果生产者中缓存了 topic 的路由信息，且该路由信息中包含了消息队列，则直接返回该路由信息;
      *      如果没有缓存或没有包含消息队列， 则向NameServer查询该topic 的路由信息。 如果最终未找到路由
      *  信息，则抛出异常：无法找到主题相关路由信息异常

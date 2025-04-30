@@ -31,12 +31,12 @@ import org.apache.rocketmq.common.MixAll;
  */
 public class BrokerData implements Comparable<BrokerData> {
     private String cluster; // broker所属的集群名称
-    private String brokerName;  //broker的名字
+    private String brokerName;  //broker的名字。比如：broker-a,在broker.conf中配置
 
     /**
      * The container that store the all single instances for the current broker replication cluster.
      * The key is the brokerId, and the value is the address of the single broker instance.
-     * 存储当前broker集群的所有单个实例的容器。键是brokerId，值是单个broker实例的地址。
+     * 存储当前broker集群的每一个容器的地址。键是brokerId，值是单个broker实例的地址。
      */
     private HashMap<Long, String> brokerAddrs;
     private String zoneName;

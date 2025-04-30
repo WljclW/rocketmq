@@ -294,7 +294,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
          *      放入到PullMessageService#messageRequestQueue——拉取消息服务中的阻塞队列*/
         long cachedMessageCount = processQueue.getMsgCount().get();
         long cachedMessageSizeInMiB = processQueue.getMsgSize().get() / (1024 * 1024);
-        //缓存消息的数量超过阈值，则进行流控
+        //ProcessQueue缓存消息的数量超过阈值，则进行流控
         if (cachedMessageCount > this.defaultMQPushConsumer.getPullThresholdForQueue()) {
             this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_CACHE_FLOW_CONTROL);
             if ((queueFlowControlTimes++ % 1000) == 0) {
@@ -304,7 +304,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             }
             return;
         }
-        //缓存消息的大小超过阈值，则进行流控
+        //ProcessQueue缓存消息的大小超过阈值，则进行流控
         if (cachedMessageSizeInMiB > this.defaultMQPushConsumer.getPullThresholdSizeForQueue()) {
             this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_CACHE_FLOW_CONTROL);
             if ((queueFlowControlTimes++ % 1000) == 0) {
@@ -1305,6 +1305,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                     //重试消息的topic名称：%RETRY% + 消费者组名
                     final String retryTopic = MixAll.getRetryTopic(this.defaultMQPushConsumer.getConsumerGroup());
                     SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(retryTopic, SubscriptionData.SUB_ALL);
+                    /*将“重试消息主题——>SubscriptionData设置到rebalanceImpl属性”*/
                     this.rebalanceImpl.getSubscriptionInner().put(retryTopic, subscriptionData);
                     break;
                 default:
@@ -1601,14 +1602,15 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
     /**【】：根据消息堆积量（消息累积总数，也即未被处理的消息总数）动态调整消费者的线程池核心线程数*/
     public void adjustThreadPool() {
-        //计算消息堆积量？？
+        //step1：计算消息堆积量？？
         long computeAccTotal = this.computeAccumulationTotal();
-        //获取动态调整线程池的阈值(这个阈值指的是消息堆积的数量)
+        /*step2：获取动态调整线程池的阈值(这个阈值指的是消息堆积的数量)*/
         long adjustThreadPoolNumsThreshold = this.defaultMQPushConsumer.getAdjustThreadPoolNumsThreshold();
 
         long incThreshold = (long) (adjustThreadPoolNumsThreshold * 1.0);
 
         long decThreshold = (long) (adjustThreadPoolNumsThreshold * 0.8);
+        /*step3：增加或减少核心线程数*/
         /*情况1：消息堆积很多时增加核心线程参数*/
         if (computeAccTotal >= incThreshold) {
             this.consumeMessageService.incCorePoolSize();
@@ -1619,7 +1621,8 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
-    /**[]:计算当前消费者被分配的processQueue尚未被处理的消息总数*/
+    /**[]:计算当前消费者被分配的processQueue尚未被处理的消息总数.
+     * 实现逻辑：遍历messagequeue和它对应的processqueue，累加该队列当前待消费的消息总数（包括正在被消费的）。*/
     private long computeAccumulationTotal() {
         long msgAccTotal = 0;
         ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = this.rebalanceImpl.getProcessQueueTable();

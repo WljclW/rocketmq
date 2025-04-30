@@ -87,7 +87,7 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
             switch (type) {
                 case MEMORY_FIRST_THEN_STORE:
                 case READ_FROM_MEMORY: {
-                    ControllableOffset offset = this.offsetTable.get(mq);
+                    ControllableOffset offset = this.offsetTable.get(mq); /*获取某一个消息队列对应的偏移量信息*/
                     if (offset != null) {
                         return offset.getOffset();
                     } else if (ReadOffsetType.READ_FROM_MEMORY == type) {

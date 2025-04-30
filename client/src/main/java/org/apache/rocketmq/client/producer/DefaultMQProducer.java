@@ -70,7 +70,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * 其实是一个内部实现类，封装了各种发送消息的方法。。保证了能通过这个类拿到实现类的各个属性
      * 【原注翻译】为这类提供的所有方法，封装了底层的实现
      */
-    protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
+    protected final transient DefaultMQProducerImpl defaultMQProducerImpl; //生产者的内部默认实现
     private final Logger logger = LoggerFactory.getLogger(DefaultMQProducer.class);
     /*retryResponseCodes：RocketMQ 中用于配置消息发送失败时需要重试的响应码集合的一个属性。它允许开发者自定义哪
         些特定的 Broker 响应码会触发消息重试机制*/
@@ -90,9 +90,10 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * For non-transactional messages, it does not matter as long as it's unique per process. </p>
      * <p>
      * See <a href="https://rocketmq.apache.org/docs/introduction/02concepts">core concepts</a> for more discussion.
-     * 消息服务器在回查事务状态时，会随机选择该组中任何一个生产者发起的事务回查请求。
+     * 消息服务器在回查事务状态时，会随机选择该组中任何一个生产者发起的事务回查请求。同时如果原始生产者在事务之后崩溃，
+     * 那么broker可以联系同一生产者组的不同生产者实例来提交或者回滚事务
      */
-    private String producerGroup; //消费者组，注解指出：对于事务消息很重要
+    private String producerGroup; //生产者组，注解指出：对于事务消息很重要
 
     /**
      * Topics that need to be initialized for transaction producer
@@ -112,6 +113,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * 发送消息的超时时间
+     * 其他：不建议修改该值，该值应该与broker配置中的sendTimeout一致，发送超时，可临时修改该值，建议解决超时问题，提高broker集群的Tps。
      * Timeout for sending messages.
      */
     private int sendMsgTimeout = 3000;
@@ -123,7 +125,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
     /**
-     * 同步消息发送的重试次数
+     * 同步消息发送的重试次数，因此默认情况下消息会被投递3次。【注】可能导致消息重复
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      * <p>
      * This may potentially cause message duplication which is up to application developers to resolve.
@@ -131,7 +133,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private int retryTimesWhenSendFailed = 2;
 
     /**
-     * 异步消息发送失败后的重试次数
+     * 异步消息发送失败后的重试次数。【注】可能导致消息重复
      * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode. </p>
      * <p>
      * This may potentially cause message duplication which is up to application developers to resolve.
@@ -145,12 +147,14 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
     /**
-     * 消息体的最大的大小：默认4M
+     * "消息体"的最大的大小：默认4M
      * Maximum allowed message body size in bytes.
      */
     private int maxMessageSize = 1024 * 1024 * 4; // 4M
 
     /**
+     * 基于RPChook实现的消息轨迹插件。
+     * 开启消息轨迹之后，该类通过hook的方式把消息生产者，消息存储的broker和消费者消费消息的信息像链路一样记下来。
      * Interface of asynchronous transfer data
      */
     private TraceDispatcher traceDispatcher = null;
@@ -457,7 +461,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws MQBrokerException    if there is any error with broker.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override //同步发送消息，具体发送到哪个队列由负载均衡策略决定
+    @Override /*同步发送消息，仅在发送完成时，此方法才返回。具体发送到哪个队列由负载均衡策略决定*/
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -503,7 +507,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws RemotingException    if there is any network-tier error.
      * @throws InterruptedException if the sending thread is interrupted.
      */
-    @Override //异步发送消息，sendCallback在消息发送成功后会执行
+    @Override //异步发送消息，sendCallback在消息发送成功后会执行，此参数不能为空，为空回调时 空指针异常
     public void send(Message msg,
         SendCallback sendCallback) throws MQClientException, RemotingException, InterruptedException {
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -655,6 +659,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
+     *     参数selector实现接口MessageQueueSelector(负载均衡策略)，实现消息队列的计算。比如：可以通过自实现`MessageQueueSelector`接口，将某一类消息发送至固定的队列。比如：将同一个订单的状态变更消息投递至固定的队列。
+     *     【注】对于自定义负载均衡的实现，消息发送失败时rocketmq内部不会进行消息重试
      * Same to {@link #send(Message)} with message queue selector specified.
      *
      * @param msg      Message to send.
@@ -1101,18 +1107,21 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
         return this.defaultMQProducerImpl.queryMessageByUniqKey(withNamespace(topic), msgId);
     }
 
+    /**同步批量发送消息。*/
     @Override
     public SendResult send(
         Collection<Message> msgs) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         return this.defaultMQProducerImpl.send(batch(msgs));
     }
 
+    /**同步批量发送消息。超时时间*/
     @Override
     public SendResult send(Collection<Message> msgs,
         long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         return this.defaultMQProducerImpl.send(batch(msgs), timeout);
     }
 
+    /**向指定的消息队列发送消息。暗示着消息必须是同一个主题*/
     @Override
     public SendResult send(Collection<Message> msgs,
         MessageQueue messageQueue) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {

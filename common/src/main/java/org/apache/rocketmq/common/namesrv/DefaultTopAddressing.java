@@ -86,6 +86,7 @@ public class DefaultTopAddressing implements TopAddressing {
         return topAddressingList;
     }
 
+    /**下面的方法是有问题把*/
     @Override
     public final String fetchNSAddr() {
         if (!topAddressingList.isEmpty()) {

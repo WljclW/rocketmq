@@ -670,6 +670,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     }
 
     /**
+     * 关于SubRemotingServer的作用见官方文档“docs/cn/BrokerContainer.md”
      * The NettyRemotingServer supports bind multiple ports, each port bound by a SubRemotingServer. The
      * SubRemotingServer will delegate all the functions to NettyRemotingServer, so the sub server can share all the
      * resources from its parent server.

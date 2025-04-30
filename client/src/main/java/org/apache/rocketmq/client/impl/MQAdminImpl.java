@@ -59,7 +59,8 @@ import org.apache.rocketmq.remoting.protocol.route.BrokerData;
 import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 
 /**
- * AI:主要用于管理和操作 RocketMQ 的元数据和运行时状态。它是 MQAdmin 接口的默认实现，提供了对主题（Topic）、消费者组（Consumer Group）、Broker 和消息等资源的管理功能。
+ * AI:MQAdminImpl 是一个重要的类，它实现了 MQAdmin 接口，提供了管理 RocketMQ 集群的高级功能。MQAdminImpl 的主要作用是为开发者提供
+ * 对 RocketMQ 集群的管理和运维能力，例如创建、删除主题（Topic）、查询消费者组状态、查看消息轨迹等。
  * */
 public class MQAdminImpl {
 

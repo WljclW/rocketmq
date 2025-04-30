@@ -88,6 +88,15 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 
 import static org.apache.rocketmq.remoting.rpc.ClientMetadata.topicRouteData2EndpointsForStaticTopic;
 
+
+/**
+ * 类的作用 以及和 MQClientAPIImpl类 的区别：
+ *      RocketMQ客户端的核心管理类，负责协调生产者和消费者的运行时环境。它充当客户端的全局上下文，管理
+ * 与 RocketMQ 相关的各种资源（如网络连接、定时任务等）。
+ *      MQClientInstance 是一个高级别(贴近rocketmq，做的是与rocketmq内容相关的一些校验和处理)的类，一个高层次的抽象，负
+ * 责协调和管理客户端的整体行为。
+ *      因此只要是不同的生产者 或者 生产者，在初始化的时候都会涉及到这个类的创建以及初始化以及start！！
+ * */
 /*！！！！！！！！！！！重要
    【总述】如果消费模式是广播消费，则一个JVM中所有消费者、生产者持有同一个MQClientInstance，
         且MQClientInstance只会启动一次。
@@ -146,7 +155,7 @@ public class MQClientInstance {
     private final ConcurrentMap<String/* Topic */, ConcurrentMap<MessageQueue, String/*brokerName*/>> topicEndPointsTable = new ConcurrentHashMap<>();
     /*下面是两个可重入锁。分别是从远程获取Topic信息的时候和进行Broker心跳检测的时候，这两个时候由于会有多线程对当前信息进行读
      写，但是在同一时间只能有一个线程进行读写操作，所以这样的操作就需要进行加锁。*/
-    private final Lock lockNamesrv = new ReentrantLock();   //updateTopicRouteInfoFromNameServer和cleanOfflineBroker会用到
+    private final Lock lockNamesrv = new ReentrantLock();   //updateTopicRouteInfoFromNameServer(更新topic的路由信息)和cleanOfflineBroker(清理无用的broker)会用到
     private final Lock lockHeartbeat = new ReentrantLock(); //sendHeartbeatToAllBrokerWithLock和unregisterClientWithLock会用到
 
     /**
@@ -154,7 +163,7 @@ public class MQClientInstance {
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
      * 对集群中broker地址的缓存。。broker集群名(BrokerName)————>该集群所有的broker实例(broker的id———>broker实例的地址)。。
-     * 一个集群中所有broker的名字是一样的
+     * 一个集群中所有broker的名字是一样的。。形如：< "broker-a" , <0 , 10.189.145.29:10911> >
      */
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
 
@@ -222,14 +231,18 @@ public class MQClientInstance {
                 public void onChannelException(String remoteAddr, Channel channel) {
                 }
 
+                //处理通道空闲的事件
                 @Override
                 public void onChannelIdle(String remoteAddr, Channel channel) {
                 }
+
+
                 /*用于处理通道激活事件
                 *   当客户端与某个远程地址（remoteAddr）的连接变为活跃状态时，该方法会被触发。
                 * 它的主要功能是
                 *   根据激活的通道地址，从brokerAddrTable找到对应的 Broker 信息，并向这个Broker实例发送心跳包。如果心
-                *   跳发送成功，则立即触发负载均衡（Rebalance）。*/
+                * 跳发送成功，则立即触发负载均衡（Rebalance）。
+                *   "找对应的broker"其实就是*/
                 @Override
                 public void onChannelActive(String remoteAddr, Channel channel) {
                     for (Map.Entry<String, HashMap<Long, String>> addressEntry : brokerAddrTable.entrySet()) {
@@ -258,7 +271,7 @@ public class MQClientInstance {
             log.info("user specified name server address: {}", this.clientConfig.getNamesrvAddr());
         }
 
-        this.clientId = clientId;
+        this.clientId = clientId; //形如：10.189.145.29@6364#17703116172200
 
         this.mQAdminImpl = new MQAdminImpl(this);
         /*创建消息拉取服务*/
@@ -283,18 +296,20 @@ public class MQClientInstance {
     }
 
     /**
-     * if程序块的逻辑：
-     * else if程序块的逻辑：
-     * else程序块的逻辑：将topicRouteData中的List<QueueData> 转换成topicPublishInfo的List <MessageQueue>列表，具体实现
-     *          在topicRouteData2TopicPublishInfo中。然后更新该MQClientInstance管辖的所有消息，发送关于topic的路由信息
+     * [总述]:将 TopicRouteData（从 NameServer 获取的路由信息）转换为 TopicPublishInfo，用于生产者进行消息发送前的消息队列选择和负载均衡。
+     * if程序块的逻辑：如果是顺序消息，封装info的逻辑
+     * else if程序块的逻辑：如果不是顺序消息，是Dledger集群或静态Topic模式封装info的逻辑
+     * else程序块的逻辑：否则走else的封装逻辑。将topicRouteData中的List<QueueData> 转换成topicPublishInfo的List <MessageQueue>列
+     *          表，具体实现在topicRouteData2TopicPublishInfo中。然后更新该MQClientInstance管辖的所有消息，发送关于topic的路由信息
      * */
     public static TopicPublishInfo topicRouteData2TopicPublishInfo(final String topic, final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
         // TO DO should check the usage of raw route, it is better to remove such field
         info.setTopicRouteData(route);
+        /*情况1：如果是顺序消息，封装info*/
         if (route.getOrderTopicConf() != null && route.getOrderTopicConf().length() > 0) {
-            String[] brokers = route.getOrderTopicConf().split(";");
-            for (String broker : brokers) {
+            String[] brokers = route.getOrderTopicConf().split(";"); /*"route.getOrderTopicConf()"得到的信息比如：broker-a:4;broker-b:2*/
+            for (String broker : brokers) { /*拆解出来的broker就是"broker-a:4"这种格式*/
                 String[] item = broker.split(":");
                 int nums = Integer.parseInt(item[1]);
                 for (int i = 0; i < nums; i++) {
@@ -304,7 +319,7 @@ public class MQClientInstance {
             }
 
             info.setOrderTopic(true);
-        } else if (route.getOrderTopicConf() == null
+        } else if (route.getOrderTopicConf() == null /*esle if:存在TopicQueueMappingByBroker数据————表示这是Dledger集群或静态Topic模式下的路由信息*/
             && route.getTopicQueueMappingByBroker() != null
             && !route.getTopicQueueMappingByBroker().isEmpty()) {
             info.setOrderTopic(false);
@@ -313,11 +328,11 @@ public class MQClientInstance {
             info.getMessageQueueList().sort((mq1, mq2) -> MixAll.compareInteger(mq1.getQueueId(), mq2.getQueueId()));
         } else {
             /**
-             * 循环遍历路由信息的QueueData信息————如果队列没有写权限，则继续遍历下一个QueueData。根据brokerName找到brokerData信
-             *      息————
+             * 循环遍历路由信息的QueueData信息————
+             *    如果队列没有写权限，则继续遍历下一个QueueData。根据brokerName找到brokerData信息————
              *          如果找不到或没有找到主节点，则遍历下一个QueueData。
              *          如果找到了，根据写队列个数，topic+序号创建MessageQueue，填充topicPublishInfo的List<MessageQueue>，完
-             *               成消息发送的路由查找
+             *     成消息发送的路由查找
              * */
             List<QueueData> qds = route.getQueueDatas();
             Collections.sort(qds);
@@ -352,8 +367,14 @@ public class MQClientInstance {
         return info;
     }
 
+    /**
+     * [作用]：将从 NameServer 获取的 Topic 路由信息（TopicRouteData）转换为消费者可用的订阅队列集合（Set<MessageQueue>）。这个
+     *      方法是为更新消费者关于“更新订阅topic路由信息缓存”的前置操作，即拿到能读取的队列信息。
+     * 与本类的方法“topicRouteData2TopicPublishInfo”类似，一个是为“生产者发布”服务的，一个是为“消费者发布”服务的
+     * */
     public static Set<MessageQueue> topicRouteData2TopicSubscribeInfo(final String topic, final TopicRouteData route) {
         Set<MessageQueue> mqList = new HashSet<>();
+        /*if条件成立说明：使用的是 Dledger 集群 或 静态 Topic 映射机制*/
         if (route.getTopicQueueMappingByBroker() != null
             && !route.getTopicQueueMappingByBroker().isEmpty()) {
             ConcurrentMap<MessageQueue, String> mqEndPoints = topicRouteData2EndpointsForStaticTopic(topic, route);
@@ -361,7 +382,7 @@ public class MQClientInstance {
         }
         List<QueueData> qds = route.getQueueDatas();
         for (QueueData qd : qds) {
-            if (PermName.isReadable(qd.getPerm())) {
+            if (PermName.isReadable(qd.getPerm())) { /*确保有读权限才能订阅*/
                 for (int i = 0; i < qd.getReadQueueNums(); i++) {
                     MessageQueue mq = new MessageQueue(topic, qd.getBrokerName(), i);
                     mqList.add(mq);
@@ -372,7 +393,9 @@ public class MQClientInstance {
         return mqList;
     }
 
-    /**MQClientInstance的启动方法。由于生产者、消费者的底层在rocketmq中都是底层，因此对于二者的start通常
+    /**
+     *    消费者 和 生产者 在启动的时候都会执行的逻辑，因为这是对于客户端在rocketmq层面的封装
+     *    MQClientInstance的启动方法。由于生产者、消费者的底层在rocketmq中都是底层，因此对于二者的start通常
      * 都会使用到这个方法，以确保MQClientInstance实例启动，这样才能使用下层提供的服务。。同一个jvm内部只
      * 会创建一个MQClientInstance实例(因此可以断定，该类的方法往往只是提供底层的生产者、消费者需要使用的
      * 功能，不涉及状态的更新。。"状态"往往可以理解为对象的属性值)*/
@@ -390,7 +413,7 @@ public class MQClientInstance {
                     // Start request-response channel(实际上就是使用netty框架，启动netty客户端)
                     this.mQClientAPIImpl.start();   // 启动请求-响应通道，就是启动 和 broker进行通信的客户端
                     // Start various schedule tasks
-                    this.startScheduledTask();  //启动各种定时任务
+                    this.startScheduledTask();  //启动各种定时任务。
                     // Start pull service
                     this.pullMessageService.start();    /*消息拉取的服务————run方法逻辑：从阻塞队列拿出一个请求，根据它的类型最后执行ConsumerInner的pullMessage/popMessage方法*/
                     // Start rebalance service
@@ -408,8 +431,15 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 启动多种定时任务
+     *     比如：定时从配置中心获取namesrv地址(如果配置文件没有配置)；定时从namesrv更新topic的路由信息；定时清理下线的Broker(用到了原
+     * 子引用类型)；定时持久化消费者的消费进度；定时调整核心线程参数*/
     private void startScheduledTask() {
-        //如果配置文件 以及 环境变量 中没有指定namesrv地址(即this.clientConfig.getNamesrvAddr()为null)，则定时获取namesrv地址
+        /*如果配置文件 以及 环境变量 中没有指定namesrv地址(即this.clientConfig.getNamesrvAddr()为null)，则定时获
+        取namesrv地址.
+          比如：这里可以从配置中心拉取namesrv的地址
+        */
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(() -> {
                 try {
@@ -512,7 +542,7 @@ public class MQClientInstance {
     }
 
     /**
-     * Remove offline broker
+     * Remove offline broker。。清除所有离线的broker
      */
     private void cleanOfflineBroker() {
         try {
@@ -644,7 +674,9 @@ public class MQClientInstance {
         }
     }
 
-    /**遍历this.consumerTable，对于每一个MQConsumerInner类型的value，调用adjustThreadPool()调整线程池参数*/
+    /**遍历this.consumerTable，对于每一个MQConsumerInner类型的value，如果是DefaultMQPushConsumerImpl类型，则调
+     * 用adjustThreadPool()调整线程池参数。。。
+     * [补充说明] Pull 模式的消费者是由用户主动控制拉取消息的节奏，因此不需要自动调整线程池*/
     public void adjustThreadPool() {
         for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
@@ -949,10 +981,10 @@ public class MQClientInstance {
                         /*到这里change为true说明需要更新。会更新：
                             brokerAddrTable——根据TopicRouteData.brokerDatas更新Broker的存储信息
                             topicEndPointsTable——
-                            topicPublishInfo(与生产者和消费者相关)——
+                            topicPublishInfo(与生产者和消费者相关)——更新生产者本地缓存的topic路由信息(在类DefaultMQProducerImpl)
                             topicRouteTable——根据topic以及最新的topicRouteData更新路由信息缓存*/
                         if (changed) {
-                            //更新broker的缓存信息即brokerAddrTable的内容
+                            /*根据请求到的路由信息topicRouteData，更新本地broker的缓存信息即brokerAddrTable的内容*/
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) { //更新brokerAddrTable
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
@@ -1339,7 +1371,7 @@ public class MQClientInstance {
     }
 
     /**【】：根据BrokerName 以及 BrokerId 查找Broker的地址。
-     * (注意：返回的并不一定就是brokerId对应的那个broker,也可能是这个集群中的另一个broker)*/
+     * (注意：返回的并不一定就是brokerId对应的那个broker,也可能是这个集群中的另一个broker。细节见下面的代码逻辑)*/
     public FindBrokerResult findBrokerAddressInSubscribe(
         final String brokerName,
         final long brokerId,

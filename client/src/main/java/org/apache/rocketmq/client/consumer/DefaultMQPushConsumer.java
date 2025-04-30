@@ -180,7 +180,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     private int consumeThreadMax = 20; //最大消费者线程数
 
     /**
-     * （消息堆积数量的）Threshold for dynamic adjustment of the number of thread pool
+     * （消息堆积数量，调整线程池参数会用到）Threshold for dynamic adjustment of the number of thread pool
      */
     private long adjustThreadPoolNumsThreshold = 100000;
 

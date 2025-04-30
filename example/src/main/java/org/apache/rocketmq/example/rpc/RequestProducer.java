@@ -22,6 +22,8 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 
+import java.util.Arrays;
+
 public class RequestProducer {
     public static void main(String[] args) throws MQClientException, InterruptedException {
         String producerGroup = "please_rename_unique_group_name";
@@ -39,6 +41,7 @@ public class RequestProducer {
             Message msg = new Message(topic,
                 "",
                 "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
+//            System.out.println(Arrays.toString("Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET)));
 
             long begin = System.currentTimeMillis();
             Message retMsg = producer.request(msg, ttl);

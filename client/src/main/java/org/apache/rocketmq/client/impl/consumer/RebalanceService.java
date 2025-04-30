@@ -36,8 +36,11 @@ public class RebalanceService extends ServiceThread {
         this.mqClientFactory = mqClientFactory;
     }
 
-    /**【】：线程启动后就会执行run()。rocketmq这里服务的框架使用这种方式
-     * 【功能】该服务默认是每间隔20秒*/
+    /**【】：线程启动后就会执行run()。rocketmq这里服务的框架使用这种方式，通常都是继承于ServiceThread，start方法在父类实现，子类提供
+     *  具体的run()的逻辑
+     * 【功能】该服务默认是每间隔20秒；再平衡服务的具体逻辑依赖于"MQClientInstance.doRebalance()"，流程走到最后会依赖于消费者对象的
+     *  tryRebalance()，但是目前默认的消费者比如"DefaultMQPushConsumerImpl.tryRebalance()"是调用了“RebalanceImpl#doRebalance(boolean)”
+     *  来实现的。————这是rocketmq内部提供的一种默认的再平衡实现*/
     @Override
     public void run() {
         log.info(this.getServiceName() + " service started");
@@ -55,7 +58,7 @@ public class RebalanceService extends ServiceThread {
                     败时更快的进行下一次的再平衡)*/
                 boolean balanced = this.mqClientFactory.doRebalance();
                 realWaitInterval = balanced ? waitInterval : minInterval;
-                //从这里可以看出来lastRebalanceTimestamp时上一次再平衡时间(只要进行再平衡就会更新，并不是说再平衡成功了才更新)
+                //从这里可以看出来lastRebalanceTimestamp是上一次再平衡时间(只要进行再平衡就会更新，并不是说再平衡成功了才更新)
                 lastRebalanceTimestamp = System.currentTimeMillis();
             }
         }
