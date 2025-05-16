@@ -63,7 +63,7 @@ public class Consumer {
         /*
          * Specify where to start in case the specific consumer group is a brand-new one.
          */
-        consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
+        consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
 
         /*
          * Subscribe one more topic to consume.

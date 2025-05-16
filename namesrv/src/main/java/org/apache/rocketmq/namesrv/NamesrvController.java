@@ -72,7 +72,7 @@ public class NamesrvController {
     private RemotingClient remotingClient;
     private RemotingServer remotingServer;
 
-    private final BrokerHousekeepingService brokerHousekeepingService;
+    private final BrokerHousekeepingService brokerHousekeepingService; /*根据通道状态变化，维护路由信息*/
 
     private ExecutorService defaultExecutor;
     private ExecutorService clientRequestExecutor;

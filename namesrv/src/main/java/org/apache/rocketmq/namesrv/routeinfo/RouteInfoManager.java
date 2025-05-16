@@ -68,12 +68,16 @@ import org.apache.rocketmq.remoting.protocol.statictopic.TopicQueueMappingInfo;
 /**NameServer 的主要职责是维护集群的元数据（如 Broker 地址、主题分布等），而 RouteInfoManager 就是实现这些功能的核心类。*/
 public class RouteInfoManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
-    private final static long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
+    private final static long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2; /*默认2分钟收不到broker的心跳，则认为宕机*/
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     /*消息队列的路由信息，根据这个属性进行负载均衡。。键：topic名称；值：brokerName——>该brokerName中的QueueData信息*/
     private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;
     private final Map<String/* brokerName */, BrokerData> brokerAddrTable;  //broker名称到broker的基本信息，包括：名称->所属集群名、主备broker地址(该broker集群的所有broker实例)
     private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable; //集群名称和broker名称的映射，用于快速查找broker
+    /*
+    当前存活的 Broker,该信息不是实时的，NameServer 每10S扫描一次所有的 broker,根据心跳包的时间得知 broker的状态，该机制也是导致当
+    一个 Broker 进程假死后，消息生产者无法立即感知，可能继续向其发送消息，导致失败
+    * */
     private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;  //broker的状态信息，每次收到心跳响应时会更新此信息
     private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;   //broker上的filterserver列表，实现类模式消息过滤
     private final Map<String/* topic */, Map<String/*brokerName*/, TopicQueueMappingInfo>> topicQueueMappingInfoTable;

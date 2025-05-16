@@ -28,6 +28,10 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.protocol.body.KVTable;
 
+/**
+ * 读取或变更NameServer的配置属性，加载 NamesrvConfig 中配置的配置文件到内存.
+ * 使用 非线程安全的集合，添加读写锁保证操作安全
+ */
 public class KVConfigManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 

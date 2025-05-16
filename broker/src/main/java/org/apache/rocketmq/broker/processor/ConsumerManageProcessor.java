@@ -314,7 +314,7 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
         if (rewriteResult != null) {
             return rewriteResult;
         }
-
+        /*从消息消费进度文件中查询消费进度*/
         long offset =
             this.brokerController.getConsumerOffsetManager().queryOffset(
                 requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId());

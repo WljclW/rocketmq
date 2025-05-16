@@ -182,15 +182,19 @@ public class RebalancePushImpl extends RebalanceImpl {
             case CONSUME_FROM_MIN_OFFSET:
             case CONSUME_FROM_MAX_OFFSET:
             case CONSUME_FROM_LAST_OFFSET: {
+                /*使用offsetStore从消息消费进度文件中读取消费消费进度*/
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
+                /*如果返回的偏移量大于等于0，则直接使用该offset，这个也能理解，大于等于0，表示查询到有效的消息消费
+                进度，从该有效进度开始消费，但我们要特别留意lastOffset为0是什么场景，因为返回0，并不会执行CONSUME_FROM_LAST_OFFSET(语义)*/
                 if (lastOffset >= 0) {
                     result = lastOffset;
                 }
-                // First start,no offset
+                // First start,no offset.lastOffset为-1，表时并未存储有效偏移，可以理解为第一次消费
                 else if (-1 == lastOffset) {
+                    /*如果消息的主题是重试消息，则从重试队列0处开始消费*/
                     if (mq.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
                         result = 0L;
-                    } else {
+                    } else { /*否则的话从队列的最大偏移量位置开始消费*/
                         try {
                             result = this.mQClientFactory.getMQAdminImpl().maxOffset(mq);
                         } catch (MQClientException e) {
@@ -198,7 +202,7 @@ public class RebalancePushImpl extends RebalanceImpl {
                             throw e;
                         }
                     }
-                } else {
+                } else { /*如果从远程服务拉取最大偏移量拉取异常或其他情况，则使用-1作为第一次拉取偏移量。*/
                     throw new MQClientException(ResponseCode.QUERY_NOT_FOUND, "Failed to query consume offset from " +
                             "offset store");
                 }
