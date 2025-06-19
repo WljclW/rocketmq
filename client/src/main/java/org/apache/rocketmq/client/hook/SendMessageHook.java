@@ -16,6 +16,12 @@
  */
 package org.apache.rocketmq.client.hook;
 
+/**
+ * @author: Zhou
+ * @date: 2025/5/15 23:56
+ *      消息发送钩子函数，用于在消息发送之前、发送之后执行一定的业务逻辑。比如：
+ *  记录消息轨迹就是基于这个接口来实现的
+ */
 public interface SendMessageHook {
     String hookName();
 

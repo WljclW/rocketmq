@@ -235,6 +235,13 @@ public class MessageStoreConfig {
     private long osPageCacheBusyTimeOutMills = 1000;
     private int defaultQueryMaxNum = 32;
 
+    /*
+     引入transientStorePoolEnable能缓解pagecache的压力背后关键如下：
+        消息先写入到堆外内存中，该内存由于启用了内存锁定机制，故消息的写入是接近直接操作内存，性能能
+    得到保证。
+        消息进入到堆外内存后，后台会启动一个线程，一批一批将消息提交到pagecache，即写消息时
+    对pagecache的写操作由单条写入变成了批量写入，降低了对pagecache的压力。
+     */
     @ImportantField
     private boolean transientStorePoolEnable = false;
     private int transientStorePoolSize = 5;

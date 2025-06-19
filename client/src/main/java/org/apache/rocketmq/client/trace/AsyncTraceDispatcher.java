@@ -54,26 +54,26 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
     private final static Logger log = LoggerFactory.getLogger(AsyncTraceDispatcher.class);
     private final static AtomicInteger COUNTER = new AtomicInteger();
     private final static short MAX_MSG_KEY_SIZE = Short.MAX_VALUE - 10000;
-    private final int queueSize;
-    private final int batchSize;
-    private final int maxMsgSize;
+    private final int queueSize; /*异步转发，队列长度，默认为2048*/
+    private final int batchSize; /*批量消息条数，消息轨迹一次消息发送请求包含的数据条数，默认为100*/
+    private final int maxMsgSize; /*消息轨迹一次发送的最大消息大小，默认为128K*/
     private final long pollingTimeMil;
     private final long waitTimeThresholdMil;
-    private final DefaultMQProducer traceProducer;
-    private final ThreadPoolExecutor traceExecutor;
+    private final DefaultMQProducer traceProducer; /*用来发送消息轨迹的消息发送者*/
+    private final ThreadPoolExecutor traceExecutor; /*异步执行消息发送的线程池*/
     // The last discard number of log
-    private AtomicLong discardCount;
-    private Thread worker;
-    private final ArrayBlockingQueue<TraceContext> traceContextQueue;
+    private AtomicLong discardCount; /*记录丢弃的消息个数*/
+    private Thread worker; /*woker线程，主要负责从追加队列中获取一批待发送的消息轨迹数据，提交到线程池中执行*/
+    private final ArrayBlockingQueue<TraceContext> traceContextQueue; /*消息轨迹TraceContext队列，用来存放待发送到服务端的消息*/
     private final HashMap<String, TraceDataSegment> taskQueueByTopic;
-    private ArrayBlockingQueue<Runnable> appenderQueue;
+    private ArrayBlockingQueue<Runnable> appenderQueue; /*线程池内部队列，默认1024*/
     private volatile Thread shutDownHook;
     private volatile boolean stopped = false;
     private DefaultMQProducerImpl hostProducer;
-    private DefaultMQPushConsumerImpl hostConsumer;
+    private DefaultMQPushConsumerImpl hostConsumer; /*消费者信息，记录消息消费时的轨迹信息*/
     private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();
     private String dispatcherId = UUID.randomUUID().toString();
-    private volatile String traceTopicName;
+    private volatile String traceTopicName; /*用于跟踪消息轨迹的topic名称*/
     private AtomicBoolean isStarted = new AtomicBoolean(false);
     private volatile AccessChannel accessChannel = AccessChannel.LOCAL;
     private String group;
@@ -86,18 +86,26 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
         this.maxMsgSize = 128000;
         this.pollingTimeMil = 100;
         this.waitTimeThresholdMil = 500;
+        /*整个运行过程中，丢弃的消息轨迹数据，这里要说明一点的是，如果消息TPS发送过大，异步
+        转发线程处理不过来时，会主动丢弃消息轨迹数据*/
         this.discardCount = new AtomicLong(0L);
+        /*
+        traceContext积压队列，客户端(消息发送、消息消费者)在收到处理结果后，将消息轨迹提交到
+        该队列中，则会立即返回。见"SendMessageTraceHookImpl.sendMessageAfter"
+        * */
         this.traceContextQueue = new ArrayBlockingQueue<>(1024);
         this.taskQueueByTopic = new HashMap();
         this.group = group;
         this.type = type;
 
         this.appenderQueue = new ArrayBlockingQueue<>(queueSize);
-        if (!UtilAll.isBlank(traceTopicName)) {
+        if (!UtilAll.isBlank(traceTopicName)) { /*用于接收消息轨迹的Topic，默认为RMQ_SYS_TRANS_HALF_TOPIC*/
             this.traceTopicName = traceTopicName;
         } else {
             this.traceTopicName = TopicValidator.RMQ_SYS_TRACE_TOPIC;
         }
+        /*用于发送到Broker服务的异步线程池，核心线程数默认为10，最大线程池为20，队
+        列堆积长度2048，线程名称：MQTraceSendThread_*/
         this.traceExecutor = new ThreadPoolExecutor(//
             10, //
             20, //
@@ -105,6 +113,7 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
             TimeUnit.MILLISECONDS, //
             this.appenderQueue, //
             new ThreadFactoryImpl("MQTraceSendThread_"));
+        /*发送消息轨迹的生产者*/
         traceProducer = getAndCreateTraceProducer(rpcHook);
     }
 
@@ -145,18 +154,25 @@ public class AsyncTraceDispatcher implements TraceDispatcher {
     }
 
     public void start(String nameSrvAddr, AccessChannel accessChannel) throws MQClientException {
+        /*如果用于发送消息轨迹的发送者没有启动，则设置nameserver地址，并启动*/
         if (isStarted.compareAndSet(false, true)) {
             traceProducer.setNamesrvAddr(nameSrvAddr);
             traceProducer.setInstanceName(TRACE_INSTANCE_NAME + "_" + nameSrvAddr);
             traceProducer.start();
         }
         this.accessChannel = accessChannel;
+        /*启动一个线程，用于执行AsyncRunnable任务*/
         this.worker = new Thread(new AsyncRunnable(), "MQ-AsyncTraceDispatcher-Thread-" + dispatcherId);
         this.worker.setDaemon(true);
         this.worker.start();
         this.registerShutDownHook();
     }
 
+    /**
+     * 创建用于发送消息轨迹的Producer(消息发送者)
+     *     如果还未建立发送者，则创建用于发送消息轨迹的消息发送者，其GroupName为：_INNER_TRACE_PRODUCER，
+     * 消息发送超时时间5s，最大允许发送消息大小118K
+     */
     private DefaultMQProducer getAndCreateTraceProducer(RPCHook rpcHook) {
         DefaultMQProducer traceProducerInstance = this.traceProducer;
         if (traceProducerInstance == null) {

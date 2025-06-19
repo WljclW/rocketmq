@@ -91,7 +91,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             case RequestCode.CONSUMER_SEND_MSG_BACK:
                 return this.consumerSendMsgBack(ctx, request);
             default:
-                // 我们Producer发送过来的消息都在request里，给header解析到SendMessageRequestHeader对象里去。
+                // Producer发送过来的消息都在request里，给header解析到SendMessageRequestHeader对象里去。
                 SendMessageRequestHeader requestHeader = parseRequestHeader(request);
                 if (requestHeader == null) {
                     return null;
