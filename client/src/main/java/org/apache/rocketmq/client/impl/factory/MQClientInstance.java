@@ -215,7 +215,13 @@ public class MQClientInstance {
         this.nettyClientConfig.setSocksProxyConfig(clientConfig.getSocksProxyConfig());
         ClientRemotingProcessor clientRemotingProcessor = new ClientRemotingProcessor(this);
         ChannelEventListener channelEventListener;
-        /*如果 开启心跳事件通道监听器(if语句块逻辑)，则初始化一个；否则的话(else语句块)把监听器设置为null*/
+        /*1. 如果 开启心跳事件通道监听器(if语句块逻辑)，则初始化一个；否则的话(else语句块)把监听器设置为null.
+        * 2. 通道监听的逻辑————
+        *       ①遍历 brokerAddrTable 中所有 Broker 的地址
+                ②检查是否有某个 Broker 的地址等于 remoteAddr（即刚建立连接的地址）
+                ③如果匹配，说明这是一个到已知 Broker 的新连接
+                ④立即调用 sendHeartbeatToAllBrokerWithLockV2(false) 发送心跳
+        */
         if (clientConfig.isEnableHeartbeatChannelEventListener()) {
             channelEventListener = new ChannelEventListener() {
                 private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = MQClientInstance.this.brokerAddrTable;

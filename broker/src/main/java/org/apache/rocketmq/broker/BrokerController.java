@@ -320,17 +320,17 @@ public class BrokerController {
         this.nettyClientConfig = nettyClientConfig;
         this.messageStoreConfig = messageStoreConfig;
         /*2. 创建多种管理器*/
-        /*根据ip以及端口设置storeHost字段、给字段brokerStatsManager赋值、给字段broadcastOffsetManager赋值*/
-        this.setStoreHost(new InetSocketAddress(this.getBrokerConfig().getBrokerIP1(), getListenPort()));
+        /*根据ip以及端口设置storeHost字段(就是本机的某个IP)、给字段brokerStatsManager赋值、给字段broadcastOffsetManager赋值*/
+        this.setStoreHost(new InetSocketAddress(this.getBrokerConfig().getBrokerIP1(), getListenPort() /*在buildBrokerController方法被设置为10911*/));
         //管理Broker的统计信息(rocketmq中记录统计信息的类通常是xxxstatsManager)
         this.brokerStatsManager = messageStoreConfig.isEnableLmq() ? new LmqBrokerStatsManager(this.brokerConfig.getBrokerClusterName(), this.brokerConfig.isEnableDetailStat()) : new BrokerStatsManager(this.brokerConfig.getBrokerClusterName(), this.brokerConfig.isEnableDetailStat());
         //管理广播模式下的偏移量
         this.broadcastOffsetManager = new BroadcastOffsetManager(this);
         /* 创建三个属性，这三个属性的具体类型取决于isEnableRocksDBStore()属性 以及 isEnableLmq()
-        * topicConfigManager:管理Topic和Topic相关的配置关系(比如主题对应的队列数量、权限等)，会读取store/config/topics.json文件.
-        * subscriptionGroupManager:订阅关系管理类
-        * consumerOffsetManager：管理Consumer消费进度；会读取store/config/consumerOffset.json文件，其内部维护
-        *       了一个Map结构offsetTable*/
+             topicConfigManager:管理Topic和Topic相关的配置关系(比如主题对应的队列数量、权限等)，会读取store/config/topics.json文件.
+             subscriptionGroupManager:订阅关系管理类
+             consumerOffsetManager：管理Consumer消费进度；会读取store/config/consumerOffset.json文件，其内部维护
+               了一个Map结构offsetTable*/
         if (this.messageStoreConfig.isEnableRocksDBStore()) {
             this.topicConfigManager = messageStoreConfig.isEnableLmq() ? new RocksDBLmqTopicConfigManager(this) : new RocksDBTopicConfigManager(this);
             this.subscriptionGroupManager = messageStoreConfig.isEnableLmq() ? new RocksDBLmqSubscriptionGroupManager(this) : new RocksDBSubscriptionGroupManager(this);
@@ -781,9 +781,10 @@ public class BrokerController {
         }
     }
 
-    /**[]:从持久化存储中加载各种元数据管理器的数据——即broker。conf文件中指定的所有配置文件、日志文件。比
+    /**[aim]:从持久化存储中加载各种元数据管理器的数据——即broker。conf文件中指定的所有配置文件、日志文件。比
      *  如：Topic相关配置、Consumer消费消息进度情况、Consumer订阅关系、Consumer过滤关系，CommitLog、
-     *  ConsumeQueue日志文件。。这些文件的根路径是”config文件夹“*/
+     *  ConsumeQueue日志文件（这些文件的根路径是”config文件夹“）。。
+     *      最终实现的效果就是根据这些持久化文件信息初始化java组件的字段，还原状态*/
     public boolean initializeMetadata() {
         //从磁盘中加载Topic相关配置，文件路径：{Broker.conf配置的路径}/config/topics.json
         boolean result = this.topicConfigManager.load();
@@ -798,14 +799,14 @@ public class BrokerController {
     }
 
     /**
-     * 创建MessageStore(最终创建的MessageStore是在MessageStoreFactory.build方法完成),并进行初始化
+     * 创建MessageStore(最终创建的MessageStore是在“MessageStoreFactory.build”方法完成),并进行初始化
      * */
     public boolean initializeMessageStore() {
         boolean result = true;
         try {
             DefaultMessageStore defaultMessageStore;
-            /*1.创建消息存储类DefaultMessageStore....构造器中会做很多操作。【注】这个对象仅仅是一个参数，在后面的"MessageStoreFactory.build"才会创建
-            最终的MessageStore，在build方法中会体现到用户扩展的点*/
+            /*1.创建消息存储类DefaultMessageStore....构造器中会做很多操作。【注】这个对象仅仅是一个参数，在后面的"MessageStoreFactory.build"才会
+            完成创建最终的MessageStore，在build方法中会体现到用户扩展的点*/
             if (this.messageStoreConfig.isEnableRocksDBStore()) {
                 defaultMessageStore = new RocksDBMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener, this.brokerConfig, topicConfigManager.getTopicConfigTable());
             } else {
@@ -818,14 +819,20 @@ public class BrokerController {
                 ((DLedgerCommitLog) defaultMessageStore.getCommitLog())
                     .getdLedgerServer().getDLedgerLeaderElector().addRoleChangeHandler(roleChangeHandler);
             }
-            /*3. Broker的消息统计类*/
+            /*3. Broker的消息统计类。用于收集各种运行时指标*/
             this.brokerStats = new BrokerStats(defaultMessageStore);
 
             // Load store plugin....【扩展点】
             MessageStorePluginContext context = new MessageStorePluginContext(
                 messageStoreConfig, brokerStatsManager, messageArrivingListener, brokerConfig, configuration);
+            /*4. 真正的创建messageStore（装饰器模式）*/
             this.messageStore = MessageStoreFactory.build(context, defaultMessageStore); /*这一步才是创建了最终的MessageStore对象。提供了用户的扩展点*/
+            /*5. 添加 Dispatcher（消息分发器）*/
             this.messageStore.getDispatcherList().addFirst(new CommitLogDispatcherCalcBitMap(this.brokerConfig, this.consumerFilterManager));
+            /*6. 如果启用时间轮，初始化 TimerMessageStore
+            *           时间轮（Timing Wheel）是什么？
+                    一种高效处理 延迟消息 的数据结构（替代传统的轮询 DB 或 PriorityQueue）,支持百万级延迟消息的高并发调度。
+                    基于 分层时间轮 + 磁盘存储 + BitMap 快速定位*/
             if (messageStoreConfig.isTimerWheelEnable()) {
                 this.timerCheckpoint = new TimerCheckpoint(BrokerPathConfigHelper.getTimerCheckPath(messageStoreConfig.getStorePathRootDir()));
                 TimerMetrics timerMetrics = new TimerMetrics(BrokerPathConfigHelper.getTimerMetricsPath(messageStoreConfig.getStorePathRootDir()));
@@ -840,7 +847,10 @@ public class BrokerController {
         return result;
     }
 
-    /**BrokerController的初始化工作，主要初始化：元数据信息(config文件夹下的信息)、消息存储messagestore、恢复和初始化服务*/
+    /**BrokerController的初始化工作，主要初始化：
+     *      1. 元数据信息(持久化文件路径，config文件夹下的所有文件)。————实际上就是使用这些文件还原出rocketmq对应组件的状态
+     *      2. 消息存储messagestore
+     *      3. 恢复和初始化服务*/
     public boolean initialize() throws CloneNotSupportedException {
         /*加载多个相关的持久化配置文件，出现加载不正常时，直接返回false*/
         boolean result = this.initializeMetadata();
@@ -856,43 +866,51 @@ public class BrokerController {
         return this.recoverAndInitService();
     }
 
-    /**用于在 Broker 启动时恢复和初始化服务。该方法的核心任务是加载持久化数据、初始化资源和服务组件，并确保 Broker 能够正常对外提供服务*/
+    /**负责在加载完存储数据后，恢复服务状态并初始化所有对外服务能力。*/
     public boolean recoverAndInitService() throws CloneNotSupportedException {
 
         boolean result = true; //表示最终的处理结果
-
+        /*1. 初始化副本管理器（Controller 模式专用）
+        启用 Controller 架构模式 时，Broker 不再是独立的主从节点，而是由外部的 Controller 统一管理集群元数据。
+            ReplicasManager 负责管理当前 Broker 作为副本（Replica）的状态。
+            setFenced(true) 表示当前 Broker 刚启动，处于“隔离”状态，暂时不提供读写服务，等待 Controller 分配角色（Leader/Follower）。
+            🔐 “Fencing” 是分布式系统中防止脑裂的重要机制。
+        * */
         if (this.brokerConfig.isEnableControllerMode()) {
             this.replicasManager = new ReplicasManager(this);
             this.replicasManager.setFenced(true);
         }
-        /*加载所有消息存储相关的持久化文件（包括commitlog、consumequeue等）*/
+        /*2. 加载所有消息存储相关的持久化文件（包括commitlog、consumequeue等）*/
         if (messageStore != null) {
             registerMessageStoreHook(); //注册消息存储钩子函数
             result = this.messageStore.load(); //进行消息存储的加载。完成了持久化文件比如：consumequeue、commitlog等文件的加载
         }
-        /*开启定时消息存储功能*/
+        /*3. 开启定时消息存储功能。
+        *       ①timerMessageStore：新版时间轮 TimerWheel实现的高精度定时消息（5.x 新特性）
+        *       ②scheduleMessageService：老版延迟消息（基于SCHEDULE_TOPIC_XXXXTopic 实现）*/
         if (messageStoreConfig.isTimerWheelEnable()) {
             result = result && this.timerMessageStore.load();
         }
 
         //scheduleMessageService load after messageStore load success
         result = result && this.scheduleMessageService.load();
-        /*依次调用所有附加插件的load方法。附加插件允许开发者扩展 Broker 的功能，例如监控、审计等。*/
+        /*4. 加载附加插件。作用：支持开发者通过 SPI 或配置方式插入自定义插件
+            依次调用所有附加插件的load方法，附加插件允许开发者扩展 Broker 的功能，例如监控、审计等。*/
         for (BrokerAttachedPlugin brokerAttachedPlugin : brokerAttachedPlugins) {
             if (brokerAttachedPlugin != null) {
                 result = result && brokerAttachedPlugin.load();
             }
         }
-        /*创建 BrokerMetricsManager 实例，用于管理和报告 Broker 的运行指标（如吞吐量、延迟等）。*/
+        /*5. 创建Broker指标管理器。用于管理和报告 Broker 的运行指标（如吞吐量、延迟等）。*/
         this.brokerMetricsManager = new BrokerMetricsManager(this);
-
+        /*6. 核心服务初始化*/
         if (result) {
 
             initializeRemotingServer(); /*初始化Broker端的服务器(Broker对外提供服务的核心组件)：一个可以处理所有的请求；一个仅仅处理发送消息的请求*/
 
             initializeResources(); //初始化后面处理请求会用到的各种线程池
 
-            registerProcessor(); //注册处理器(注册时指定该处理器对应的requestCode、对应的处理器、执行处理流程的线程池)
+            registerProcessor(); //注册处理器(注册时将 请求类型（RequestCode） 映射到 处理器（Processor） 和 执行线程池)
 
             initializeScheduledTasks(); //初始化各种定时任务
 
@@ -900,9 +918,10 @@ public class BrokerController {
 
             initialAcl(); //初始化访问控制列表（ACL），用于限制客户端的权限。
 
-            initialRpcHooks(); //初始化RPC钩子。这一不会涉及到从资源文件加载类，并通过反射来创建类的对象。。---经典的操作很多值得反复看
+            initialRpcHooks(); //初始化RPC钩子，在每次 RPC 调用前后执行（类似 AOP）。这一不会涉及到从资源文件加载类，并通过反射来创建类的对象。。---经典的操作很多值得反复看
 
-            /*如果启用了TLS（传输层安全），则创建 FileWatchService，用于监控证书文件的变化并动态重新加载 SSL 上下文*/
+            /*如果启用了TLS（传输层安全），则创建 FileWatchService，用于监控证书文件的变化并动态重新加载 SSL 上下文。
+            *   目的：不重启 Broker 实现 SSL 证书热更新*/
             if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
                 // Register a listener to reload SslContext
                 try {
@@ -949,7 +968,7 @@ public class BrokerController {
         return result;
     }
 
-    /**初始化时会注册3个钩子函数、1个sendMessageHook*/
+    /**初始化时会注册3个PutMessageHook、1个sendMessageHook*/
     public void registerMessageStoreHook() {
         List<PutMessageHook> putMessageHookList = messageStore.getPutMessageHookList();
 
@@ -1702,6 +1721,10 @@ public class BrokerController {
         }
     }
 
+    /**
+     * 负责在消息存储、网络服务等基础组件初始化完成后，将 Broker 正式“上线”并加入集群，开始对外提供服务。
+     * @throws Exception
+     */
     public void start() throws Exception {
         /**???  */
         this.shouldStartTime = System.currentTimeMillis() + messageStoreConfig.getDisappearTimeAfterStart();

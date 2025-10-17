@@ -632,7 +632,11 @@ public class TopicConfigManager extends ConfigManager {
         return BrokerPathConfigHelper.getTopicConfigPath(this.brokerController.getMessageStoreConfig().getStorePathRootDir());
     }
 
-    @Override   //解码json字符串，解析为topic元数据结构
+    /*
+        使用参数jsonString构建出TopicConfigSerializeWrapper对象。将设置信息拿出来设置到此类相关字段。
+    TopicConfigSerializeWrapper相当于引入的中间类，仅仅声明了持久化的信息
+     */
+    @Override
     public void decode(String jsonString) {
         if (jsonString != null) {
             TopicConfigSerializeWrapper topicConfigSerializeWrapper =

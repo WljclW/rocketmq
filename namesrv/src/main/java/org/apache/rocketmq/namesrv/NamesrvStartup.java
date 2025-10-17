@@ -91,7 +91,7 @@ public class NamesrvStartup {
      * 1.解析命令行参数和配置文件
      * 2.该方法首先设置Remoting框架的版本属性，然后解析命令行参数，接着加载配置文件（如果有提供）
      * 3.最后，根据命令行参数和配置文件初始化相关的配置对象
-     * 4.带有-c参数即指定了配置文件，此时会拿出配置文件的东西赋值给相应的xxxxConfig对象，这些对象主要包括：namesrvConfig、
+     * 4.带有-c参数即指定了配置文件，此时会拿出配置文件的东西映射到相应的xxxxConfig对象，这些对象主要包括：namesrvConfig、
      *      nettyServerConfig、nettyClientConfig、controllerConfig、JraftConfig。
      * 5.如何根据 配置文件 的东西赋值给对象？通过反射拿到对象的setAbcd方法，判断abcd这个属性是不是在配置文件中，如果在的话
      *      就将对应的值拿出来，通过反射执行xxxConfig的setAbcd方法完成赋值.
@@ -177,7 +177,7 @@ public class NamesrvStartup {
     }
 
     /**
-     * 创建namesrvController的流程信息：
+     * 创建namesrvController的流程：
      * step1:创建一个NamesrvController对象，传入namesrvConfig、nettyServerConfig和nettyClientConfig对象，这
      *      些对象存储了namesrv的业务配置和网络配置
      * step2:调用NamesrvController对象的getConfiguration方法，获取一个Configuration对象，该对象负责管理namesrv
@@ -194,6 +194,12 @@ public class NamesrvStartup {
         return controller;
     }
 
+    /**
+     * 初始化NamesrvController、成功后注册jvm钩子、启动NamesrvController
+     * @param controller
+     * @return
+     * @throws Exception
+     */
     public static NamesrvController start(final NamesrvController controller) throws Exception {
 
         if (null == controller) {
@@ -214,7 +220,7 @@ public class NamesrvStartup {
             controller.shutdown();
             return null;
         }));
-
+        // 启动NameServer，NameServer起来后监听端口，等待Broker、Producer、Consumer连上来，相当于一个路由控制中心。
         controller.start();
 
         return controller;

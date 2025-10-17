@@ -222,26 +222,31 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService scheduledCleanQueueExecutorService =
         ThreadUtils.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreCleanQueueScheduledThread"));
 
-    /**初始化消息存储模块的核心组件。DefaultMessageStore 是 RocketMQ 的默认消息存储实现，负责管理消息的持久化、索引构建、刷盘、清理等功能*/
+    /**初始化消息存储模块的核心组件。DefaultMessageStore 是 RocketMQ 的默认消息存储实现，负责管理消息的写入、读取、索引、刷盘、
+     * 清理、主从同步等所有与持久化相关的逻辑。*/
     public DefaultMessageStore(final MessageStoreConfig messageStoreConfig, final BrokerStatsManager brokerStatsManager,
-        final MessageArrivingListener messageArrivingListener, final BrokerConfig brokerConfig, final ConcurrentMap<String, TopicConfig> topicConfigTable) throws IOException {
-        /*初始化消息存储的基础参数*/
+        final MessageArrivingListener messageArrivingListener, final BrokerConfig brokerConfig /*broker全局配置*/,
+                               final ConcurrentMap<String, TopicConfig> topicConfigTable /*当前 Broker 上的 Topic 配置表*/) throws IOException {
+        /*1. 初始化消息存储的基础参数*/
         this.messageArrivingListener = messageArrivingListener; /*消息到达监听器*/
         this.brokerConfig = brokerConfig;
         this.messageStoreConfig = messageStoreConfig;
-        this.aliveReplicasNum = messageStoreConfig.getTotalReplicas();
+        this.aliveReplicasNum = messageStoreConfig.getTotalReplicas(); //aliveReplicasNum 用于 DLedger 多副本模式，表示副本数量
         this.brokerStatsManager = brokerStatsManager; /*Broker状态管理，运行指标收集*/
         this.topicConfigTable = topicConfigTable;
-        /*初始化mappedFile（内存映射文件）创建服务————用于管理内存映射文件（MappedFile）的分配。
-        * 说明：内存映射文件是 RocketMQ 消息存储的核心机制，用于高效地读写磁盘文件。*/
+        /*2. 初始化mappedFile（内存映射文件）创建服务————负责异步预分配 MappedFile（内存映射文件），避免写入时临时创建文件导致性能抖动。
+        *   说明：内存映射文件是 RocketMQ 消息存储的核心机制，用于高效地读写磁盘文件。所有 CommitLog 和 ConsumeQueue 文件都
+        * 基于 MappedFile*/
         this.allocateMappedFileService = new AllocateMappedFileService(this);
-        /*根据配置决定使用哪一种commitlog*/
+        /*3. 根据配置决定使用哪一种commitlog————
+                ①CommitLog：普通模式，单节点或者主从结构
+                ②DLedgerCommitLog：基于 Raft 协议的多副本高可用模式（类似 Kafka 的 Controller）*/
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             this.commitLog = new DLedgerCommitLog(this);
         } else {
             this.commitLog = new CommitLog(this);
         }
-
+        /*4. 组件的创建*/
         this.consumeQueueStore = createConsumeQueueStore(); //管理consumequeue数据
 
         this.flushConsumeQueueService = createFlushConsumeQueueService(); //consumequeue刷盘线程
@@ -250,7 +255,7 @@ public class DefaultMessageStore implements MessageStore {
         this.correctLogicOffsetService = createCorrectLogicOffsetService();
         this.storeStatsService = new StoreStatsService(getBrokerIdentity());
         this.indexService = new IndexService(this);
-        /*主从同步服务*/
+        /*5. 主从复制服务*/
         if (!messageStoreConfig.isEnableDLegerCommitLog() && !this.messageStoreConfig.isDuplicationEnable()) {
             if (brokerConfig.isEnableControllerMode()) {
                 this.haService = new AutoSwitchHAService();
@@ -263,22 +268,26 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
         }
-        /* 初始化重放commitlog的服务。会根据if条件（是否允许并行构建）创建不同的服务类型
-        if的条件：判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件。
-        * reputMessageService用来把CommiteLog的数据写到consumerqueue和index文件中。就是转发commitlog的线程*/
+        /*6. 初始化 ReputMessageService（消息分发服务————重放commitlog的服务）。会根据if条件（是否允许并行构建）创建不同的服务类型
+                if的条件：判断是否允许基于CommitLog文件 并行的构建ConsumeQueue文件。
+                reputMessageService用来把CommiteLog的数据写到consumerqueue和index文件中。就是转发commitlog的线程*/
         if (!messageStoreConfig.isEnableBuildConsumeQueueConcurrently()) {
             this.reputMessageService = new ReputMessageService();
         } else {
             this.reputMessageService = new ConcurrentReputMessageService();
         }
-        /*创建这个"堆外内存池"————直接内存池。
-        * 避免了频繁创建。在异步刷盘的时候作为与pagecache的数据交换区，通过commit操作完成数据传输到pagecache*/
+        /*7. 创建"堆外内存池（transientStorePool）"————直接内存池。
+            作用：
+                预分配一批堆外内存（DirectByteBuffer），用于异步刷盘时作为中转缓冲区。
+                写消息时不直接写入 MappedFile，而是先写入 TransientStorePool 中的 buffer，再通过 commit() 刷到 PageCache。
+            避免了频繁创建。在异步刷盘的时候作为与pagecache的数据交换缓冲区，通过commit操作完成数据传输到pagecache*/
         this.transientStorePool = new TransientStorePool(messageStoreConfig.getTransientStorePoolSize(), messageStoreConfig.getMappedFileSizeCommitLog());
-        /*创建一个仅包含一个线程的定时任务线程池。会在addScheduleTask方法用到，添加定时任务*/
+        /*8. 创建定时任务线程池。会在addScheduleTask方法用到，添加定时任务
+                  执行周期性任务，如：刷盘（CommitLog、ConsumeQueue）、清理过期文件、更新统计信息、检查内存占用*/
         this.scheduledExecutorService =
             ThreadUtils.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread", getBrokerIdentity()));
-        /*初始化dispatcherList，其实就是构建消息分发链。这个东西是后续用于消息分发的处理链，会依次调用每一个的dispatch方法，这个方法的
-        具体逻辑就是将commitlog转发给某文件*/
+        /*9.  初始化消息分发链（dispatcherList）。每条消息写入 CommitLog 后，会经过这个 dispatcherList 链依次处理！
+            这个东西是后续用于消息分发的处理链，会依次调用每一个的dispatch方法，这个方法的具体逻辑就是将commitlog转发给某文件*/
         this.dispatcherList = new LinkedList<>();
         this.dispatcherList.addLast(new CommitLogDispatcherBuildConsumeQueue()); //commitlog转发给consumequeue文件
         this.dispatcherList.addLast(new CommitLogDispatcherBuildIndex()); //将commitlog分发给index文件
@@ -287,13 +296,13 @@ public class DefaultMessageStore implements MessageStore {
             this.compactionService = new CompactionService(commitLog, this, compactionStore);
             this.dispatcherList.addLast(new CommitLogDispatcherCompaction(compactionService));
         }
-        /*创建lock文件，并 校验目录结构，如果没有commitlog文件夹 以及 consumequeue文件夹 这一步会创建*/
+        /*10. 创建lock文件，并 校验目录结构，如果没有commitlog文件夹 以及 consumequeue文件夹 这一步会创建*/
         File file = new File(StorePathConfigHelper.getLockFile(messageStoreConfig.getStorePathRootDir()));
         UtilAll.ensureDirOK(file.getParent()); //整个rocketmq持久化文件存储的文件夹根路径，比如：D:\IDEA_projects\STORE_DATA\ROCKETMQ_DATA
         UtilAll.ensureDirOK(getStorePathPhysic()); //commitlog文件夹的根路径。比如：D:/IDEA_projects/STORE_DATA/ROCKETMQ_DATA\commitlog
         UtilAll.ensureDirOK(getStorePathLogic()); //consumerqueue文件夹的根路径。比如：D:/IDEA_projects/STORE_DATA/ROCKETMQ_DATA\consumequeue
         lockFile = new RandomAccessFile(file, "rw"); //创建锁文件
-        /*完成延迟时间和等级的映射，并存储*/
+        /*11 解析延迟等级。完成延迟时间和等级的映射，并存储*/
         parseDelayLevel(); //初始化delayLevelTable。延迟等级——>延迟时间
     }
 
@@ -353,7 +362,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 【作用】消息存储系统(MessageStore)的加载逻辑
+     * 【作用】消息存储系统(MessageStore)的加载逻辑………………这一步是“从磁盘恢复状态”的关键，决定了 Broker 能否正确接续上次的写入位置。
      * @throws IOException
      * 【涉及到】
      * 1. 检查上次是否是异常关闭

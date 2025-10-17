@@ -86,10 +86,10 @@ public class BrokerStartup {
         //MQ版本号
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         /*Broker启动时，需要使用的四个配置类(用于封装用户的配置信息)
-        * BrokerConfig：Broker的相关配置
-        * NettyServerConfig：netty服务端的相关配置。封装了作为堆外提供消息读写操作的MQ服务器信息
-        * NettyClientConfig：作为namesrv客户端的相关配置
-        * MessageStoreConfig：消息存储相关配置*/
+             BrokerConfig：Broker的相关配置
+             NettyServerConfig：netty服务端的相关配置。封装了作为堆外提供消息读写操作的MQ服务器信息
+             NettyClientConfig：作为namesrv客户端的相关配置
+             MessageStoreConfig：消息存储相关配置*/
         final BrokerConfig brokerConfig = new BrokerConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
         final NettyClientConfig nettyClientConfig = new NettyClientConfig();
@@ -115,8 +115,8 @@ public class BrokerStartup {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
                 CONFIG_FILE_HELPER.setFile(file);
-                BrokerPathConfigHelper.setBrokerConfigPath(file);
-                properties = CONFIG_FILE_HELPER.loadConfig();
+                BrokerPathConfigHelper.setBrokerConfigPath(file); //记录配置路径信息
+                properties = CONFIG_FILE_HELPER.loadConfig(); //加载配置信息
             }
         }
         if (properties != null) {
@@ -126,8 +126,8 @@ public class BrokerStartup {
             MixAll.properties2Object(properties, nettyClientConfig);
             MixAll.properties2Object(properties, messageStoreConfig);
         }
-        /*2.2 brokerConfig的额外处理。处理其他命令如果brokerConfig需要的话，注入到BrokerConfig中，比如：-n命令；然后
-        * 验证一下brokerConfig中设置的namesrv地址*/
+        /*2.2 brokerConfig的额外处理。处理其他命令如果brokerConfig需要的话，注入到BrokerConfig中。比如：-n命令；然后
+        * 验证一下brokerConfig中所有设置的namesrv地址*/
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
         if (null == brokerConfig.getRocketmqHome()) {
             System.out.printf("Please set the %s variable in your environment " +
@@ -150,8 +150,9 @@ public class BrokerStartup {
             }
         }
         /*2.3 messageStoreConfig的相关额外处理。
-                ①如果Broker的角色时从，设置“消息占用内存的最大比率”比默认值再小10%；
-                ②brokerConfig允许角色切换，则设置 以及 验证brokerId是不是合规*/
+                ①如果Broker的角色是从，设置“消息占用内存的最大比率”比默认值再小10%；
+                ②brokerConfig允许角色切换，则设置 以及 验证brokerId是不是合规
+                ③如果是集群自主决策，则brokerId是-1*/
         if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
             int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
             messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
@@ -178,12 +179,25 @@ public class BrokerStartup {
         if (messageStoreConfig.isEnableDLegerCommitLog()) {
             brokerConfig.setBrokerId(-1);
         }
-
+        /*为什么下面的是互斥逻辑————
+        brokerConfig.isEnableControllerMode()
+            含义：是否启用 Controller 模式（RocketMQ 5.0+ 引入的新架构）
+            作用：
+                Broker 不再自己管理主从角色（Master/Slave），角色由外部的 Controller 集群统一管理
+                实现 存算分离：计算层（Broker）与控制层（Controller）分离
+        messageStoreConfig.isEnableDLegerCommitLog()
+            含义：是否启用 DLedger 模式（RocketMQ 4.5+ 引入）
+            作用：
+                   使用 DLedger（基于 Raft 协议） 实现主从自动切换。多个 Broker 组成一个组，通过投票选
+                出主节点，消息通过 DLedger 复制日志保证一致性
+         “要么用 DLedger 自己选主，要么让 Controller 来管你，不能两头都听！” ，如果都配置为true，但是两者返回的结果不一样，这
+         种情况下怎么处理？应该听谁的？因此rocketmq直接拦截这种错误配置
+         */
         if (brokerConfig.isEnableControllerMode() && messageStoreConfig.isEnableDLegerCommitLog()) {
             System.out.printf("The config enableControllerMode and enableDLegerCommitLog cannot both be true.%n");
             System.exit(-4);
         }
-        //高可用端口，10912
+        //高可用端口：要么使用默认值10912；要麽用户自定义但要求大于0
         if (messageStoreConfig.getHaListenPort() <= 0) {
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
         }
@@ -252,7 +266,7 @@ public class BrokerStartup {
 
     public static BrokerController createBrokerController(String[] args) {
         try {
-            /*buildBrokerController方法完成命令行、配置文件的解析，利用解析的结果new一个BrokerController对象*/
+            /*buildBrokerController方法完成命令行、配置文件的解析；利用解析的结果new一个BrokerController对象*/
             BrokerController controller = buildBrokerController(args);
             /*BrokerController的初始化*/
             boolean initResult = controller.initialize();
@@ -269,6 +283,10 @@ public class BrokerStartup {
         return null;
     }
 
+    /**
+     * 支持一种 基于域名的 NameServer 地址自动发现机制
+     * @param properties 读取到的配置文件信息
+     */
     private static void properties2SystemEnv(Properties properties) {
         if (properties == null) {
             return;

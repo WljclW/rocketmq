@@ -29,6 +29,8 @@ import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.protocol.body.KVTable;
 
 /**
+ * 【说明】和Configuration的区别？
+ *      1。首先处于包不一样。Configuration用于管理 Netty 网络通信参数（内部运行时配置）位于remotiong包；
  * 读取或变更NameServer的配置属性，加载 NamesrvConfig 中配置的配置文件到内存.
  * 使用 非线程安全的集合，添加读写锁保证操作安全
  */
@@ -45,6 +47,9 @@ public class KVConfigManager {
         this.namesrvController = namesrvController;
     }
 
+    /**
+     * 从namesrvConfig中配置的kvConfig地址加载KVConfig配置
+     */
     public void load() {    //完成KVConfig(json格式)的加载。
         String content = null;
         try {
@@ -54,7 +59,7 @@ public class KVConfigManager {
         }
         if (content != null) {
             KVConfigSerializeWrapper kvConfigSerializeWrapper =
-                KVConfigSerializeWrapper.fromJson(content, KVConfigSerializeWrapper.class);
+                KVConfigSerializeWrapper.fromJson(content, KVConfigSerializeWrapper.class); //将json反序列化成java对象。
             if (null != kvConfigSerializeWrapper) {
                 this.configTable.putAll(kvConfigSerializeWrapper.getConfigTable());
                 log.info("load KV config table OK");

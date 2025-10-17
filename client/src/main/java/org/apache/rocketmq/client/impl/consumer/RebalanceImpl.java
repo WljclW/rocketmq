@@ -318,7 +318,8 @@ public abstract class RebalanceImpl {
         return subscriptionInner;
     }
 
-    /**【作用】根据消费的类型(集群消费？广播消费？)，对指定主题进行负载均衡*/
+    /** 实现Consumer端负载均衡的核心
+     * 【作用】根据消费的类型(集群消费？广播消费？)，对指定主题进行负载均衡*/
     private boolean rebalanceByTopic(final String topic, final boolean isOrder) {
         boolean balanced = true;
         switch (messageModel) {
@@ -343,7 +344,11 @@ public abstract class RebalanceImpl {
             case CLUSTERING: {
                 //1.从topicSubscribeInfoTable列表中获取与该topic相关的所有消息队列
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
-                //2. 从broker端获取消费该消费组的所有客户端clientId(思考：所有客户端id添加的时间)
+                /*2. 从broker端获取消费该消费组的所有客户端clientId(思考：所有客户端id添加的时间)
+                *       根据topic和consumerGroup为参数调用mQClientFactory.findConsumerldListO方法向Broker端发送获
+                *    取该消费组下消费者ld列表的RPC通信请求（Broker端基于前面Consumer端上报的心跳包数据而构建的consumerTable
+                *    做出响应返回，业务请求码：GET_CONSUMER_LIST_BY_GROUP)
+                * */
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -359,7 +364,12 @@ public abstract class RebalanceImpl {
                 if (mqSet != null && cidAll != null) {
                     List<MessageQueue> mqAll = new ArrayList<>();
                     mqAll.addAll(mqSet);
-
+                    /*
+                        ①    先对Topic下的消息消费队列、消费者ld排序，然后用消息队列分配策略算法（默认为：消息队列的平均分配算法)，
+                        计算出待拉取的消息队列。这里的平均分配算法，类似于分页的算法，将所有MessageQueue排好序类似于记录，将所有消
+                        费端Consumer排好序类似页数，并求出每一页需要包含的平均size和每个页面记录的范围range，最后遍历整个range而
+                        计算出当前Consumer端应该分配到的记录（这里即为：MessageQueue)。
+                    */
                     Collections.sort(mqAll);
                     Collections.sort(cidAll);
                     // 获取分配策略，在创建DefaultMQPushConsumer对象时默认设置为AllocateMessageQueueAveragely，即平均分配
@@ -503,6 +513,7 @@ public abstract class RebalanceImpl {
     }
 
     /**
+     * 关于这个方法的详细理解建议参考：https://github.com/apache/rocketmq/blob/develop/docs/cn/design.md#:~:text=Consumer%E7%AB%AF%E5%AE%9E%E7%8E%B0%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E7%9A%84%E6%A0%B8%E5%BF%83%E7%B1%BB%E2%80%94RebalanceImpl
      * @description:
      * @param topic:主题名称，表示当前需要重新平衡的消息队列所属的主题。
      * @param mqSet:一个集合，包含当前消费者应该处理的消息队列（MessageQueue）。

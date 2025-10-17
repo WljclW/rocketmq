@@ -30,6 +30,9 @@ import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.logging.org.slf4j.Logger;
 import org.apache.rocketmq.remoting.protocol.DataVersion;
 
+/**
+ *作用：维持组件相关的所有配置信息。。。比如：namesrv,broker都会持有一个Configuration对象，用于记录自己所有相关的配置
+ */
 public class Configuration {
 
     private final Logger log;
@@ -71,8 +74,8 @@ public class Configuration {
 
     /**
      * register config object
-     *  1.将参数中的配置信息,拿出来添加到allConfigs字段中;并将参数对象添加到configObjectList字段中
-     *
+     *  1. 将参数中的配置信息,拿出来添加到allConfigs字段中;并将参数对象添加到configObjectList字段中
+     *  2. 添加读写锁保证更新安全
      * @return the current Configuration object
      */
     public Configuration registerConfig(Object configObject) {
@@ -321,11 +324,11 @@ public class Configuration {
         return stringBuilder.toString();
     }
 
-    /**将from中所有的键值对，*/
+    /**将from中所有的键值对，合并到to里面去（可能会存在新值替换旧值）。。。*/
     private void merge(Properties from, Properties to) {    //从from中拿去配置设置到to里面去
         for (Entry<Object, Object> next : from.entrySet()) {
             Object fromObj = next.getValue(), toObj = to.get(next.getKey());
-            if (toObj != null && !toObj.equals(fromObj)) {  //如果to中有相同的键，就打印键值以及对应的新value 和 旧value
+            if (toObj != null && !toObj.equals(fromObj)) {  //如果to中有相同的键，就日志记录键值以及对应的新value 和 旧value
                 log.info("Replace, key: {}, value: {} -> {}", next.getKey(), toObj, fromObj);
             }
             to.put(next.getKey(), fromObj);

@@ -105,7 +105,7 @@ public class RemotingCommand {
     private SerializeType serializeTypeCurrentRPC = serializeTypeConfigInThisServer;
 
     private transient byte[] body; //消息的实质性内容，比如根据topic查询路由信息时，返回的这个字段就是具体的路由信息只不过是byte数组
-    private boolean suspended;
+    private boolean suspended; //标识请求的状态。（如果请求被挂起，会置为true。可见方法“PullRequestHoldService.suspendPullRequest”）
     private transient Stopwatch processTimer;
 
     protected RemotingCommand() {

@@ -20,7 +20,10 @@ import io.netty.channel.Channel;
 import org.apache.rocketmq.namesrv.NamesrvController;
 import org.apache.rocketmq.remoting.ChannelEventListener;
 
-/**[]:关键在于实现了ChannelEventListener接口，因此namesrv与Broker的通道在变化的时候，能够在监听的回调中更新路由信息
+/**
+ * [一句话]NameServer 用来监听 Broker 连接状态变化的“看门狗”服务，核心作用是：感知 Broker 的上线与下线事件，并触发路由
+ *      信息的更新或清理
+ * []:关键在于实现了ChannelEventListener接口，因此namesrv与Broker的通道在变化的时候，能够在监听的回调中更新路由信息
  *    1.用于管理 Broker 的生命周期事件（如连接建立、断开等）。它是 ChannelEventListener 的一个实现类——专门用于监听和处
  *      理与 Broker 通道相关的事件！！！！通过 BrokerHousekeepingService，NameServer能够动态维护集群的路由信息，并在
  *      Broker离线或异常时及时更新路由表(Broker的离线服务即BatchUnregistrationService)。

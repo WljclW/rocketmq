@@ -23,6 +23,17 @@ import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.remoting.protocol.DataVersion;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * 在 RocketMQ 中：
+         TopicConfig 表示一个 Topic 的配置（如读写队列数、权限、是否顺序消息等）;所有 Topic 的配置保存
+    在 TopicConfigManager.topicConfigTable（内存中）。当 Broker 启动或配置变更时，需要将这些配置持久
+    化到磁盘（topicConfig.json）。当 Broker 重启时，需要从磁盘文件中恢复这些配置
+      但问题来了：
+          ❌ TopicConfigManager 本身是一个复杂的管理器，包含线程池、监听器、网络组件等，不能直接序列化！
+          ✅ 所以引入 TopicConfigSerializeWrapper —— 只包装“可持久化”的那部分数据。
+ * 【补充说明】 除了这个类以外，在方法”BrokerController#initializeMetadata“中多个类加载时decode的时候，都是
+ *      使用了类似的方法————创建XxxxWrapper类，专注于持久化的字段
+ */
 public class TopicConfigSerializeWrapper extends RemotingSerializable {
     private ConcurrentMap<String, TopicConfig> topicConfigTable =
         new ConcurrentHashMap<>();

@@ -43,6 +43,9 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.srvutil.ServerUtil;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 
+/**
+ * 像Broker启动利用BrokerStartup一样，使用BrokerContainerStartup来启动BrokerContainer。
+ */
 public class BrokerContainerStartup {
     private static final String BROKER_CONTAINER_CONFIG_OPTION = "c";
     private static final String BROKER_CONFIG_OPTION = "b";

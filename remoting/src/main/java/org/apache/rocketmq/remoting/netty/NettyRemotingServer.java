@@ -102,7 +102,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private final ScheduledExecutorService scheduledExecutorService;
     private final ChannelEventListener channelEventListener;
 
-    //定时扫描，对NettyRemotingAbstract 中的responseTable 进行扫描，将超时的请求移除。
+    /*aim：定时扫描，对NettyRemotingAbstract 中的responseTable 进行扫描，将超时的请求移除。用于start方法
+        有一个优化change用netty的HashedWheelTimer替换了jdk内部的Timer。二者的区别————
+        JDK：固定速率调度（自动周期）、单线程任务串行、一个任务异常可能导致Timer终止、是用于少量任务场景；
+        HashedWheelTimer：需手动递归调度、多线程可并发、单个任务异常不影响其他的任务、适合于大规模定时任务
+    * */
     private final HashedWheelTimer timer = new HashedWheelTimer(r -> new Thread(r, "ServerHouseKeepingService"));
 
     private DefaultEventExecutorGroup defaultEventExecutorGroup;    //用来处理Handler的线程池或说Netty ChannelHandler线程执行组。
@@ -141,8 +145,8 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this.publicExecutor = buildPublicExecutor(nettyServerConfig);
         this.scheduledExecutorService = buildScheduleExecutor();
 
-        this.eventLoopGroupBoss = buildBossEventLoopGroup(); //创建处理accept的线程池
-        this.eventLoopGroupSelector = buildEventLoopGroupSelector(); //创建业务线程池，可以理解为事件循环线程组
+        this.eventLoopGroupBoss = buildBossEventLoopGroup(); //创建处理accept的线程池，通常一个线程
+        this.eventLoopGroupSelector = buildEventLoopGroupSelector(); //创建业务线程池，可以理解为事件循环线程组（处理已建立连接的读写事件（I/O 线程））
 
         loadSslContext();
     }
@@ -212,7 +216,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)  //根据os是否支持epoll进行选择
             .option(ChannelOption.SO_BACKLOG, 1024) //待连接的队列大小。超过时其他的连接丢弃
             .option(ChannelOption.SO_REUSEADDR, true) //允许地址服用。处于TIME_WAIT状态的接口可以被别的进程绑定
-            .childOption(ChannelOption.SO_KEEPALIVE, false)
+            .childOption(ChannelOption.SO_KEEPALIVE, false) //childOptin是ServerBootstrap独有的方法，设置每一个客户端连接的参数
             .childOption(ChannelOption.TCP_NODELAY, true) //禁用nagle算法
             .localAddress(new InetSocketAddress(this.nettyServerConfig.getBindAddress(),
                 this.nettyServerConfig.getListenPort()))
@@ -288,17 +292,17 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     /**根据nettyServerConfig的字段设置“每一个客户端建立的通道”的几个参数。*/
     private void addCustomConfig(ServerBootstrap childHandler) {
-        /*发送缓冲区的大小。超出此大小发送操作将被阻塞直到有空间可以使用。*/
+        /*发送缓冲区的大小。当应用调用 channel.write() 时，数据先写入这个缓冲区。如果缓冲区满，写操作会阻塞或失败（取决于是否异步）。 */
         if (nettyServerConfig.getServerSocketSndBufSize() > 0) {
             log.info("server set SO_SNDBUF to {}", nettyServerConfig.getServerSocketSndBufSize());
             childHandler.childOption(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize());
         }
-        /*接收缓冲区的大小。用于接收从网络接收到的数据，满了的话将将会暂停接收数据*/
+        /*接收缓冲区的大小。用于存放从网络接收但是尚未被应用读取的数据*/
         if (nettyServerConfig.getServerSocketRcvBufSize() > 0) {
             log.info("server set SO_RCVBUF to {}", nettyServerConfig.getServerSocketRcvBufSize());
             childHandler.childOption(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize());
         }
-        /**/
+        /*写缓冲水位线。etty 为每个 Channel 维护一个待发送数据队列（ChannelOutboundBuffer）。这两个水位线用于控制 背压机制（Backpressure）*/
         if (nettyServerConfig.getWriteBufferLowWaterMark() > 0 && nettyServerConfig.getWriteBufferHighWaterMark() > 0) {
             log.info("server set netty WRITE_BUFFER_WATER_MARK to {},{}",
                 nettyServerConfig.getWriteBufferLowWaterMark(), nettyServerConfig.getWriteBufferHighWaterMark());
@@ -306,7 +310,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 nettyServerConfig.getWriteBufferLowWaterMark(), nettyServerConfig.getWriteBufferHighWaterMark()));
         }
 
-        /*判断相关配置。使用netty的默认内存池分配策略————PooledByteBufAllocator.DEFAULT*/
+        /*启用池化内存分配器。PooledByteBufAllocator表示使用内存池复用ByteBuf，显著降低 GC 频率，提升性能*/
         if (nettyServerConfig.isServerPooledByteBufAllocatorEnable()) {
             childHandler.childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         }
@@ -314,15 +318,15 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     /**
      * 服务优雅的关闭，是指在服务需要关闭的时候，在关闭之前，需要把任务处理完，而且在收到关闭时，不再接收
-     * 新的任务。在所有的Netty业务中，有业务相关的线程池就是NettyRemotingServer中创建的四个线程池，所以在
-     * 关闭服务的时候，只需要关闭这几个线程池即可。并等待线程池中的任务处理完。
+     *      新的任务。在所有的Netty业务中，有业务相关的线程池就是NettyRemotingServer中创建的四个线程池，所以在
+     *      关闭服务的时候，只需要关闭这几个线程池即可。并等待线程池中的任务处理完。
      * shutdownGracefully()就是优雅关闭连接的实现
      * 何时调用的这个shutdown()方法呢？？在RocketMQ服务启动的时候，会添加一个回调钩子，比如Namesrv服务在
-     * 启动的时候会执行 Runtime.getRuntime().addShutdownHook，这个方法就是添加了shutdown钩子方法。这样在
-     * 服务器关闭的时候，就会触发controller.shudown()。然后执行关闭线程池的操作。
+     *      启动的时候会执行 Runtime.getRuntime().addShutdownHook，这个方法就是添加了shutdown钩子方法。这样在
+     *      服务器关闭的时候，就会触发controller.shudown()。然后执行关闭线程池的操作。
      * 注意，关闭服务器一般使用kill pid的命令，RocketMQ的发布包里面的bin下面，有一个mqshutdown的脚本，就是
-     * 使用的kill pid 命令，mqshutdown脚本的执行逻辑就是先“`ps ax | grep -i '”得到rocketmq进程，然后使用kill
-     * 命令杀死进程。。但不是kill-9，因为这个命令不会等待进程进行收尾工作
+     *      使用的kill pid 命令，mqshutdown脚本的执行逻辑就是先“`ps ax | grep -i '”得到rocketmq进程，然后使用kill
+     *      命令杀死进程。。但不是kill-9，因为这个命令不会等待进程进行收尾工作
      * */
     @Override
     public void shutdown() {
@@ -476,17 +480,34 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         return distributionHandler;
     }
 
+    /**
+     * 一个 Netty 的解码器（Decoder），用于在连接建立初期，根据客户端发送的第一段数据，动态判断通信协议类型，并相应地调整 ChannelPipeline
+
+     ===========补充，这里其实之前使用的是 继承于SimpleChannelInboundHandler的类，但是有问题-issue 7010
+     具体问题：收到半包时，导致消息丢失直接return
+     用 SimpleChannelInboundHandler 做解码工作，违背 Netty 设计原则（之前的版本是这样实现的，有问题），使用场景：用于处理「已经解
+        码完成」的业务消息对象。————SimpleChannelInboundHandler 的最佳用途是：处理那些已经通过解码器（Decoder）完整转换出来
+        的、可以直接用于业务逻辑的消息对象。
+     疑问1：根据上面的最佳用途，有一个问题”既然已经有消息对象了，为什么还需要使用SimpleChannelInboundHandler做处理？“
+        “转换成消息对象”只是完成了「数据的解析」，而 SimpleChannelInboundHandler 的职责是完成「行为的调度」—— 即：这个消
+        息（What to do）。
+        打个比方：就像你收到一封加密邮件：先解密 → 得到明文（解码）；再读内容 → 看是“请假申请”还是“会议通知” ；然后转给 HR 或
+        日历系统（处理）
+        Spring MVC 的 DispatcherServlet，它不处理“创建用户”的逻辑，只负责把请求分发到正确的 @PostMapping("/api/user") 方法
+     【注】前面必须有 Decoder 把原始数据转成对象；后面用 SimpleChannelInboundHandler 做业务
+     */
     public class HandshakeHandler extends ByteToMessageDecoder {
 
         public HandshakeHandler() {
         }
 
+        /*在连接建立初期，通过分析第一个数据包，动态判断通信协议类型，并调整 ChannelPipeline*/
         @Override
         protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> out) throws Exception {
             try {
                 ProtocolDetectionResult<HAProxyProtocolVersion> detectionResult = HAProxyMessageDecoder.detectProtocol(byteBuf);
                 if (detectionResult.state() == ProtocolDetectionState.NEEDS_MORE_DATA) {
-                    return;
+                    return; //ByteToMessageDecoder内部有缓冲区，return缓冲区内容保存不会丢失
                 }
                 if (detectionResult.state() == ProtocolDetectionState.DETECTED) {
                     ctx.pipeline().addAfter(defaultEventExecutorGroup, ctx.name(), HA_PROXY_DECODER, new HAProxyMessageDecoder())
@@ -671,6 +692,11 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
     /**
      * 关于SubRemotingServer的作用见官方文档“docs/cn/BrokerContainer.md”
+     * 文档中的相关关键信息如下：
+     *      BrokerContainer中的所有broker共享同一个传输层，就像RocketMQ客户端中同进程的Consumer和Producer共享同一个传输层一样。
+     *      这里为NettyRemotingServer提供SubRemotingServer支持，通过为一个RemotingServer绑定另一个端口即可生成SubRemotingServer，
+     *   其共享NettyRemotingServer的Netty实例、计算资源、以及协议栈等，但拥有不同的端口以及ProcessorTable。另外同一个BrokerContainer
+     *   中的所有的broker也会共享同一个BrokerOutAPI（RemotingClient）。
      * The NettyRemotingServer supports bind multiple ports, each port bound by a SubRemotingServer. The
      * SubRemotingServer will delegate all the functions to NettyRemotingServer, so the sub server can share all the
      * resources from its parent server.

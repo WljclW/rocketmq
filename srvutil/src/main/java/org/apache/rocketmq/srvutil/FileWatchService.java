@@ -36,6 +36,7 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
  * FileWatchService文件变更监听服务实现逻辑，内部维护了需要监听的文件列表、监听文件列表的hash消息摘要、监听器。当调用线程的
  *      start()函数后，就会执行当前类的run(函数)，只要系统没有停止，就会无限循环切间隔形式.扫描文件又没有变更。如果有变更，
  *      则将它维护到内存列表，并且调用消息监听器changed()回调函数。
+ * 【使用方法】见run0()。
 */
 public class FileWatchService extends LifecycleAwareServiceThread {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
@@ -62,8 +63,8 @@ public class FileWatchService extends LifecycleAwareServiceThread {
         return "FileWatchService";
     }
 
-    /**[]:该服务启动后就是不断的执行这个runo()。最根处的地方其实是从父类LifecycleAwareServiceThread的run()方法执
-     *      行的，然后父类的方法调用到了子类具体实现的run0().——有点类似于模板方法。
+    /**[作用]:该服务启动后就是不断的执行这个run0()，发现文件变化后会调用Listener的onChanged方法（比如见方法oNamesrvController#initiateSslContext()）
+     *      最根处的地方其实是从父类LifecycleAwareServiceThread的run()方法执行的，然后父类的方法调用到了子类具体实现的run0().————有点类似于模板方法。
      * */
     @Override
     public void run0() {

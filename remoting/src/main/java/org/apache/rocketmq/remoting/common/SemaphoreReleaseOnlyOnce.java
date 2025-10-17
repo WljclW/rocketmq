@@ -19,7 +19,13 @@ package org.apache.rocketmq.remoting.common;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * @description: 在高并发异步通信中防止 信号量（Semaphore）被重复释放导致计数错误 的关键设计。
+ * @author: Zhou
+ * @date: 2025/8/21 22:49
+ */
 public class SemaphoreReleaseOnlyOnce {
+    //关键是使用这个原子布尔型变量来保证只释放一次
     private final AtomicBoolean released = new AtomicBoolean(false);
     private final Semaphore semaphore;
 

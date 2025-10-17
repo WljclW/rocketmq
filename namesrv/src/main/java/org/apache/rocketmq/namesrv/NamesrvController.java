@@ -87,6 +87,7 @@ public class NamesrvController {
         this(namesrvConfig, nettyServerConfig, new NettyClientConfig());
     }
 
+    /**初始化field，并且用Configuration来记住namesrvConfig、nettyServerConfig的所有配置*/
     public NamesrvController(NamesrvConfig namesrvConfig, NettyServerConfig nettyServerConfig, NettyClientConfig nettyClientConfig) {
         this.namesrvConfig = namesrvConfig;
         this.nettyServerConfig = nettyServerConfig;
@@ -104,7 +105,7 @@ public class NamesrvController {
         initiateThreadExecutors(); //初始化线程池。一个是clientRequestThreadPoolQueue；另一个是defaultThreadPoolQueue
         registerProcessor();    //注册处理接收到请求的处理器。一个处理请求码为"GET_ROUTE_BY_TOPIC"的请求，一个是defaultProcessor
         startScheduleService(); //开启三个定时任务。一个是定时扫描不活跃broker的路由信息，一个是定时扫描KV配置表，一个是定时打印线程池的水位日志
-        initiateSslContext();   //
+        initiateSslContext();   //关于ssl通信的文件监听服务创建
         initiateRpcHooks(); //【注意】这种是用户的扩展逻辑，不是jvm钩子函数
         return true;
     }
@@ -148,12 +149,12 @@ public class NamesrvController {
     }
 
     /**
-     *     创建两个阻塞队列，并初始化两个线程池，一个是defaultExecutor，用于处理默认的远程请求；
-     * 另一个是clientRequestExecutor，用于处理客户端的路由信息请求。
+     * 创建两个阻塞队列，并初始化两个线程池，一个是defaultExecutor，用于处理默认的远程请求；
+     *      另一个是clientRequestExecutor，用于处理客户端的路由信息请求。
      * [这两个线程池的区别？]看下面的registerProcessor方法，clientRequestExecutor线程池是特
      *      定的处理器使用的，这种处理器只处理请求码是“GET_ROUTE_BY_TOPIC”的这类请求；另外
      *      一个defaultExecutor线程池是默认处理器处理请求时使用的
-     * 这两个线程池都使用了LinkedBlockingQueue作为任务队列，并且重写了newTaskFor方法，使
+     * 这两个线程池都使用了LinkedBlockingQueue作为任务队列；并且继续深入源码的创建过程会发现重写了newTaskFor方法，使
      *      用FutureTaskExt包装了Runnable任务。
      * */
     private void initiateThreadExecutors() {
@@ -166,14 +167,17 @@ public class NamesrvController {
         this.clientRequestExecutor = ThreadUtils.newThreadPoolExecutor(this.namesrvConfig.getClientRequestThreadPoolNums(), this.namesrvConfig.getClientRequestThreadPoolNums(), 1000 * 60, TimeUnit.MILLISECONDS, this.clientRequestThreadPoolQueue, new ThreadFactoryImpl("ClientRequestExecutorThread_"));
     }
 
-    //初始化SSL上下文，即配置remotingServer使用TLS协议进行安全通信
+    /*初始化SSL上下文，即配置remotingServer使用TLS协议进行安全通信
+    初始化一个文件监听服务，监控 SSL 证书、私钥和信任链文件的变化，并在文件变更时自动重新加载 SslContext，实现证书
+            的“热更新”而无需重启 NameServer
+     */
     private void initiateSslContext() {
         if (TlsSystemConfig.tlsMode == TlsMode.DISABLED) {
             return;
         }
-
+        //服务器证书、服务器私钥、信任的CA证书
         String[] watchFiles = {TlsSystemConfig.tlsServerCertPath, TlsSystemConfig.tlsServerKeyPath, TlsSystemConfig.tlsServerTrustCertPath};
-
+        //创建监听器。指明文件变化后应该做什么！
         FileWatchService.Listener listener = new FileWatchService.Listener() {
             boolean certChanged, keyChanged = false;
 
@@ -189,7 +193,7 @@ public class NamesrvController {
                 if (path.equals(TlsSystemConfig.tlsServerKeyPath)) {
                     keyChanged = true;
                 }
-                if (certChanged && keyChanged) {
+                if (certChanged && keyChanged) { //证书和私钥都变了 → 安全地重新加载（证书文件（.crt）和私钥文件（.key）通常是成对更新的，但是os可能会分两次触发这个事件）
                     LOGGER.info("The certificate and private key changed, reload the ssl context");
                     certChanged = keyChanged = false;
                     ((NettyRemotingServer) remotingServer).loadSslContext();
@@ -245,9 +249,8 @@ public class NamesrvController {
      *      品环境名称、请求时间等
      * DefaultRequestProcessor是一个用于正常运行的处理器，它会根据请求的类型，调用不同的方法来处理，比
      *      如注册Broker、获取路由信息、更新配置等。
-     * 在 namesrvConfig.isClusterTest() = false 时如果收到请求的 requestCode 等
-     *      于 RequestCode.GET_ROUTEINFO_BY_TOPIC 则会使用ClientRequestProcessor来
-     *      处理；当收到其他请求时，会使用DefaultRequestProcessor来处理。
+     * 在 namesrvConfig.isClusterTest() = false 时如果收到请求的 requestCode 等于 RequestCode.GET_ROUTEINFO_BY_TOPIC 则
+     *      会使用ClientRequestProcessor来处理；当收到其他请求时，会使用DefaultRequestProcessor来处理。
      * */
     private void registerProcessor() {
         if (namesrvConfig.isClusterTest()) {
@@ -268,8 +271,9 @@ public class NamesrvController {
     }
 
     /**
+     * 【一句话】启动remotingServer、启动remotingClient、启动证书监视服务、启动路由信息管理服务
      * 调用remotingServer对象的start方法，启动一个NettyRemotingServer，用于接收和处理客户端的请求。
-     * 如果nettyServerConfig对象的listenPort属性为0，说明是由操作系统自动分配一个可用端口，那么
+     *      如果nettyServerConfig对象的listenPort属性为0，说明是由操作系统自动分配一个可用端口，那么
      *      将remotingServer对象的localListenPort属性赋值给nettyServerConfig对象的listenPort属
      *      性，保持一致。
      * 调用remotingClient对象的updateNameServerAddressList方法，更新本地地址列表，只包含当前机器
@@ -282,6 +286,7 @@ public class NamesrvController {
         this.remotingServer.start();    //用于接收和处理客户端的请求
 
         // In test scenarios where it is up to OS to pick up an available port, set the listening port back to config
+        // 如果端口号是0（OS随机分配端口），将实际监听的端口写回配置
         if (0 == nettyServerConfig.getListenPort()) {
             nettyServerConfig.setListenPort(this.remotingServer.localListenPort());
         }
@@ -290,11 +295,11 @@ public class NamesrvController {
             + ":" + nettyServerConfig.getListenPort()));
         this.remotingClient.start();    //用于向其他服务发送请求
 
-        if (this.fileWatchService != null) {    //动态加载证书文件的服务
+        if (this.fileWatchService != null) {    //实现ssl相关证书、密钥等变化后的动态更新（热加载）
             this.fileWatchService.start();
         }
 
-        this.routeInfoManager.start(); //路由信息管理器启动，目的是维护Broker和Topic的路由关系
+        this.routeInfoManager.start(); //路由信息管理器启动，目的是维护Broker、Topic和队列的路由关系
     }
 
     /**

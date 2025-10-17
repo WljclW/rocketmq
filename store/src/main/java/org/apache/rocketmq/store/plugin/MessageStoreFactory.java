@@ -26,7 +26,9 @@ public final class MessageStoreFactory {
      * 【】：根据MessageStorePluginContext和MessageStore来构建出最终的MessageStore。。
      * [使用方法]：在brokerConfig的“messageStorePlugIn”属性值设置为“class1的全类名,class2的全类名”这样的形式；
      *        并且由于for循环的最后一步是“messageStore = pluginMessageStore;”，因此很多个class构造的时候类似
-     *        于链式调用，后一个for循环创建的时候会用到前一个创建的结果
+     *        于链式调用，后一个for循环创建的时候会用到前一个创建的结果———— 本质是一个 装饰器模式（Decorator Pattern），把
+     *        原始的 defaultMessageStore 一层层包装。
+     *        ————扩展点的使用，比如：可以实现自己的 MessageStoreFactoryPlugin 来扩展功能。
      * */
     public static MessageStore build(MessageStorePluginContext context,
         MessageStore messageStore) throws IOException {

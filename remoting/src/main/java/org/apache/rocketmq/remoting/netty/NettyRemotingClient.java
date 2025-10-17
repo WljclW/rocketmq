@@ -195,6 +195,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /*初始化并启动 Netty 客户端，建立与 Broker、NameServer 的长连接，准备发送和接收 RPC 请求。 */
     @Override
     public void start() {
         //创建默认事件执行线程组，后续事件处理器即（ChannelPipeline 中 addLast 中事件处理器）在该线程组中执行
@@ -251,7 +252,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
         nettyEventExecutor.start();
 
-        /*跟NettyRemotingServer类似，用于删除过期的请求，并调用对应的callback*/
+        /*扫描所有等待响应的异步请求；如果超时（默认 3s），触发 InvokeCallback.onException() 回调。防止异步调用无限等待*/
         TimerTask timerTaskScanResponseTable = new TimerTask() {
             @Override
             public void run(Timeout timeout) {
@@ -267,7 +268,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         this.timer.newTimeout(timerTaskScanResponseTable, 1000 * 3, TimeUnit.MILLISECONDS);
 
         int connectTimeoutMillis = this.nettyClientConfig.getConnectTimeoutMillis();
-        TimerTask timerTaskScanAvailableNameSrv = new TimerTask() {
+        TimerTask timerTaskScanAvailableNameSrv = new TimerTask() { //定期检查 nameServerAddressList 中的每个地址是否可达
             @Override
             public void run(Timeout timeout) {
                 try {
@@ -522,7 +523,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         boolean update = false;
         /*对比addrs 和 old，看看是不是有变化。如果有变化，update需要被更新为true。*/
         if (!addrs.isEmpty()) {
-            /*step1:判断addrs是不是都在old中，设置标志变量update(如果部分在old中没有则update被设置为ture)*/
+            /*step1:判断addrs是不是都在old中。设置标志变量update(如果部分在old中没有则update被设置为ture)*/
             if (null == old) {
                 update = true;
             } else if (addrs.size() != old.size()) {
@@ -535,13 +536,14 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     }
                 }
             }
-            /*如果update为true，表示需要更新；更新完成后关闭无效的channel*/
+            /*step2：如果update为true，表示需要更新。更新完成后关闭无效的channel*/
             if (update) {
                 Collections.shuffle(addrs); //随机排序
                 LOGGER.info("name server address updated. NEW : {} , OLD: {}", addrs, old);
                 this.namesrvAddrList.set(addrs);
 
                 // should close the channel if choosed addr is not exist.
+                // step3: 如果当前选中的 namesrv 不在新列表中，则关闭相关 channel
                 if (this.namesrvAddrChoosed.get() != null && !addrs.contains(this.namesrvAddrChoosed.get())) {
                     String namesrvAddr = this.namesrvAddrChoosed.get();
                     for (String addr : this.channelTables.keySet()) {
@@ -825,6 +827,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /*
+    根据目标地址 addr 获取或创建 Netty Channel，然后调用 invokeImpl 发起异步请求
+    * */
     @Override
     public CompletableFuture<RemotingCommand> invoke(String addr, RemotingCommand request,
         long timeoutMillis) {
@@ -847,12 +852,23 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return future;
     }
 
+    /**
+     * 在已知 Channel 的前提下，发送请求并返回 CompletableFuture<ResponseFuture>，并支持 GO_AWAY 状态下的自动重连与透明重试
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @return
+     */
     @Override
     public CompletableFuture<ResponseFuture> invokeImpl(final Channel channel, final RemotingCommand request,
         final long timeoutMillis) {
-        Stopwatch stopwatch = Stopwatch.createStarted();
+        Stopwatch stopwatch = Stopwatch.createStarted(); //记录本次调用已耗时间，用于后续重试时计算剩余超时时间
         return super.invokeImpl(channel, request, timeoutMillis).thenCompose(responseFuture -> {
             RemotingCommand response = responseFuture.getResponseCommand();
+            /*
+                 GO_AWAY是 RocketMQ 自定义的一种响应码（类似 HTTP/2 的 GOAWAY）表示 服务端主动告知客户端：“我要关闭这个连接了，请重连”
+            常见于：Broker 重启前通知客户端、连接迁移、主从切换预通知
+            * */
             if (response.getCode() == ResponseCode.GO_AWAY) {
                 if (nettyClientConfig.isEnableReconnectForGoAway()) {
                     ChannelWrapper channelWrapper = channelWrapperTables.computeIfPresent(channel, (channel0, channelWrapper0) -> {
@@ -1013,6 +1029,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * RocketMQ 客户端中用于封装和管理 Netty Channel 的包装类，负责连接的生命周期管理、状态维护、重连控制等
+     */
     class ChannelWrapper {
         private final ReentrantReadWriteLock lock;
         private ChannelFuture channelFuture;

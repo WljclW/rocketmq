@@ -42,6 +42,12 @@ import org.apache.rocketmq.remoting.rpc.TopicRequestHeader;
 
 import static org.apache.rocketmq.remoting.protocol.RemotingCommand.buildErrorResponse;
 
+/**
+ *      RocketMQ 5.0+ 版本中引入的一个核心组件，它的主要作用是：管理 Topic 队列的动态映射关系（Topic Queue Mapping），支
+ * 持 Broker 的弹性扩缩容、无缝迁移和跨集群复制等高级功能。
+ *      TopicQueueMappingManager 是 RocketMQ 实现 “队列位置透明化” 的关键组件，它记录了每个 Topic 的队列（Queue）在哪
+ * 些 Broker 上可用，并允许客户端通过统一视图访问消息，即使底层 Broker 发生了变化。
+ */
 public class TopicQueueMappingManager extends ConfigManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final long LOCK_TIMEOUT_MILLIS = 3000;

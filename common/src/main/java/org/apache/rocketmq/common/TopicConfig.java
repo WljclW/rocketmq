@@ -36,6 +36,7 @@ public class TopicConfig {
     };
     //主题名称
     private String topicName;
+    //读写队列数量
     private int readQueueNums = defaultReadQueueNums;
     private int writeQueueNums = defaultWriteQueueNums;
     //权限

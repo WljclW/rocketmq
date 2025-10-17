@@ -33,11 +33,14 @@ public abstract class ConfigManager {
     protected RocksDBConfigManager rocksDBConfigManager;
 
     /**【作用】加载子类方法configFilePath()指定的文件，并调用decode方法解析(decode方法由子类重写)。因此
-     *      这个方法在父类就相当于流程规定好了，但是具体的操作 或者 数据由子类提供
-     * 【流程】类似于模板方法，父类这里制定了加载的流程，但是具体的文件名等信息是子类通过重写父类的
-     *      某些方法提供。。从子类中拿到文件名(如果有非空内容)，则尝试加载...下面的流程中重要的是
-     *      decode方法，会根据json创建具体的类，以“ConsumerOffsetManager#decode”为例做了注
-     *      释，其他的持久化文件的加载也是类似的道理*/
+     *      这个方法在父类就相当于流程规定好了，但是具体的操作 或者 数据由子类提供————模板方法
+     * 【总结】类似于模板方法，父类这里制定了加载的流程，但是具体的文件名等信息是子类通过重写父类的
+     *      某些方法提供。。从子类中拿到文件名(如果有非空内容)，则尝试加载...下然后会调用decode方
+     *      法（这是一个抽象方法，要子类重写），这个方法的逻辑就是根据得到的jsonString初始化自己的字段，
+     *      由于子类需要重写，因此往往这种初始化的字段就是子类需要的某些属性。。
+     *          以“ConsumerOffsetManager#decode”为例做了注释，其他的持久化文件的加载也是类似的道理.
+     * 【流程】1. 调用子类重写的configFilePath()拿到文件路径 并且 读取文件内容为字符串
+     *       2. 如果解析到的字符串不是null则解析 JSON 字符串到当前对象（如果为空则使用备份文件this.loadBak()）*/
     public boolean load() {
         String fileName = null;
         try {

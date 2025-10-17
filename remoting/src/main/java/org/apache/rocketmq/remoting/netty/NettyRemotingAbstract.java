@@ -116,8 +116,9 @@ public abstract class NettyRemotingAbstract {
         new ConcurrentHashMap<>(256);
 
     /**
-     * 注册的请求处理命令。RocketMQ 的设计中采用了不同
-     * 请求命令支持不同的线程池，即实现业务线程池的隔离。
+     * 注册的请求处理命令。RocketMQ 的设计中采用了不同请求命令支持不同的线程池，即实现业务线程池的隔离。
+     * 存放”请求码——>(请求处理器，线程池)“的映射，处理请求时根据请求码获取
+     *
      * This container holds all processors per request code, aka, for each incoming request, we may look up the
      * responding processor in this map to handle the request.
      */
@@ -477,7 +478,7 @@ public abstract class NettyRemotingAbstract {
     /**
      * <p>
      * This method is periodically invoked to scan and expire deprecated request.
-     * 定期调用这个方法来检测并移除过期的请求
+     * 定期扫描 responseTable，清理掉已经超时的请求，并触发回调逻辑。
      * </p>
      */
     public void scanResponseTable() {
@@ -511,7 +512,7 @@ public abstract class NettyRemotingAbstract {
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
         try {
             return invokeImpl(channel, request, timeoutMillis).thenApply(ResponseFuture::getResponseCommand)
-                .get(timeoutMillis, TimeUnit.MILLISECONDS);
+                .get(timeoutMillis, TimeUnit.MILLISECONDS); //.get同步等待结果
         } catch (ExecutionException e) {
             throw new RemotingSendRequestException(channel.remoteAddress().toString(), e.getCause());
         } catch (TimeoutException e) {
@@ -534,8 +535,8 @@ public abstract class NettyRemotingAbstract {
         });
     }
 
-    /**【功能】实现异步远程调用（RPC）的核心方法 invoke0，它的主要作用是通过指定的网络通道（Channel）发送
-     *      请求，并返回一个异步结果（CompletableFuture<ResponseFuture>）
+    /**【功能】实现异步远程调用（RPC）的核心方法 invoke0，它的主要作用是在指定的 Netty Channel 上发起一个异步请求，通过信号量限流，将
+     *      请求放入 responseTable 等待响应，并返回一个 CompletableFuture<ResponseFuture>
      * @param channel 网络连接通道
      * @param request 请求
      * @param timeoutMillis 超时时间
@@ -605,7 +606,7 @@ public abstract class NettyRemotingAbstract {
         } else {
             if (timeoutMillis <= 0) {
                 future.completeExceptionally(new RemotingTooMuchRequestException("invokeAsyncImpl invoke too fast"));
-            } else {
+            } else { //等待超时，可能”系统负载较高“
                 String info =
                     String.format("invokeAsyncImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreAsyncValue: %d",
                         timeoutMillis,

@@ -61,6 +61,9 @@ import org.apache.rocketmq.remoting.protocol.route.TopicRouteData;
 /**
  * AI:MQAdminImpl 是一个重要的类，它实现了 MQAdmin 接口，提供了管理 RocketMQ 集群的高级功能。MQAdminImpl 的主要作用是为开发者提供
  * 对 RocketMQ 集群的管理和运维能力，例如创建、删除主题（Topic）、查询消费者组状态、查看消息轨迹等。
+ *      MQAdminImpl 是 上层管理接口，面向用户（开发者），提供更高阶的管理操作（如创建 Topic、查询状态），类似于————
+ *          MQClientAPIImpl ≈ JDBC 驱动（底层通信）
+ *          MQAdminImpl ≈ MyBatis 或 Spring Data JPA（上层抽象）
  * */
 public class MQAdminImpl {
 

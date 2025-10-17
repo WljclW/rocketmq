@@ -57,7 +57,15 @@ public class HookUtils {
      */
     private static final Integer MAX_TOPIC_LENGTH = 255;
 
+    /**
+     *      RocketMQ 在真正写入消息到 CommitLog 之前的关键前置校验方法，它位于 MessageStore 的外围逻辑中（通常在 putMessage 调用前
+     * 被调用），用于提前拦截非法或不可处理的消息请求，避免无效操作进入核心写入流程。
+     * @param brokerController
+     * @param msg
+     * @return
+     */
     public static PutMessageResult checkBeforePutMessage(BrokerController brokerController, final MessageExt msg) {
+        /*1. 关于broker、messageStore状态的相关校验*/
         if (brokerController.getMessageStore().isShutdown()) {
             LOG.warn("message store has shutdown, so putMessage is forbidden");
             return new PutMessageResult(PutMessageStatus.SERVICE_NOT_AVAILABLE, null);
@@ -82,7 +90,7 @@ public class HookUtils {
         } else {
             PRINT_TIMES.set(0);
         }
-
+        /*2. 关于topic长度的校验*/
         final byte[] topicData = msg.getTopic().getBytes(MessageDecoder.CHARSET_UTF8);
         boolean retryTopic = msg.getTopic() != null && msg.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX);
         if (!retryTopic && topicData.length > Byte.MAX_VALUE) {
@@ -96,12 +104,12 @@ public class HookUtils {
                 msg.getTopic(), topicData.length);
             return new PutMessageResult(PutMessageStatus.MESSAGE_ILLEGAL, null);
         }
-
+        /*3. 消息体不能为空校验*/
         if (msg.getBody() == null) {
             LOG.warn("putMessage message topic[{}], but message body is null", msg.getTopic());
             return new PutMessageResult(PutMessageStatus.MESSAGE_ILLEGAL, null);
         }
-
+        /*4. 校验pagecache是否繁忙*/
         if (brokerController.getMessageStore().isOSPageCacheBusy()) {
             return new PutMessageResult(PutMessageStatus.OS_PAGE_CACHE_BUSY, null);
         }

@@ -249,7 +249,20 @@ public class MessageStoreConfig {
 
     /* DLedger message store config
     * 用于启用或禁用基于 DLedger 协议 的 CommitLog 实现。DLedger 是一种分布式一致性协议，类似于 Raft，专门
-    * 用于实现高可用的日志复制和管理。*/
+    * 用于实现高可用的日志复制和管理。
+    * 【chatgpt的补充，待验证】
+    *       当启用 DLedger CommitLog 后：
+                1. 消息写入
+                    写入 CommitLog 时，不再只写本地文件，而是 同步到 DLedger 集群中的多数节点。
+                    只有多数副本确认写入成功后，写操作才返回成功给客户端。
+                2. Broker 高可用
+                    Broker 之间可以组成 DLedger 集群（通常是三个或五个节点）。
+                    主节点挂掉，其他节点可选举新的 Leader，继续处理消息。
+
+                3. 数据安全性增强
+                    消息不会因单节点故障而丢失。提供类似 Kafka ISR 的机制保证高可靠性。
+                4. 性能影响
+                    相比本地 CommitLog，写入延迟会稍高，因为需要等待多数副本同步完成。*/
     private boolean enableDLegerCommitLog = false;
     private String dLegerGroup;
     private String dLegerPeers;

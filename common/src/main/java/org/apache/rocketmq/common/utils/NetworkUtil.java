@@ -88,18 +88,28 @@ public class NetworkUtil {
         return isLinuxPlatform;
     }
 
+    /**
+     *[aim]用来获取当前机器可用 IP 地址的核心工具方法，它在 Broker、NameServer、Producer、Consumer 启动时
+     *      被调用，用于确定本机的网络标识（IP），以便注册到集群、建立连接或对外提供服务
+     *[步骤]该方法通过遍历所有网络接口，排除无效地址（如回环、私有、虚拟网卡），优先选择非 192.168.x.x/127.0.0.1
+     *      的公网或局域网 IP，尽可能返回一个“可被其他节点访问”的真实 IP 地址。
+     * @return
+     */
     public static String getLocalAddress() {
         try {
             // Traversal Network interface to get the first non-loopback and non-private address
+            // 获取系统中所有网卡（如 eth0, lo, docker0, vethxxx 等）
             Enumeration<NetworkInterface> enumeration = NetworkInterface.getNetworkInterfaces();
             ArrayList<String> ipv4Result = new ArrayList<>();
             ArrayList<String> ipv6Result = new ArrayList<>();
             while (enumeration.hasMoreElements()) {
                 final NetworkInterface nif = enumeration.nextElement();
+                //过滤无效网卡
                 if (isBridge(nif) || nif.isVirtual() || nif.isPointToPoint() || !nif.isUp()) {
                     continue;
                 }
 
+                //遍历网卡的每一个ip地址。排除回环地址：!address.isLoopbackAddress() → 跳过 127.0.0.1、::1；按照协议分类加入ArrayList
                 final Enumeration<InetAddress> en = nif.getInetAddresses();
                 while (en.hasMoreElements()) {
                     final InetAddress address = en.nextElement();
@@ -113,13 +123,13 @@ public class NetworkUtil {
                 }
             }
 
-            // prefer ipv4
+            // prefer ipv4（优先选择 IPv4，并排除常见私有地址）
             if (!ipv4Result.isEmpty()) {
                 for (String ip : ipv4Result) {
                     if (ip.startsWith("127.0") || ip.startsWith("192.168") || ip.startsWith("0.")) {
                         continue;
                     }
-
+                    //返回第一个非私有、非回环的 IPv4 地址（如 10.10.10.10 或公网 IP）
                     return ip;
                 }
 
@@ -128,6 +138,7 @@ public class NetworkUtil {
                 return ipv6Result.get(0);
             }
             //If failed to find,fall back to localhost
+            //如果前面都失败，使用 JDK 默认方式获取主机地址；可能返回 127.0.0.1 或主机名，不够可靠
             final InetAddress localHost = InetAddress.getLocalHost();
             return normalizeHostAddress(localHost);
         } catch (Exception e) {
@@ -145,9 +156,9 @@ public class NetworkUtil {
         }
     }
 
-    /**根据“主机：端口号”生成InetSocketAddress对象*/
+    /**根据“主机：端口号”生成InetSocketAddress*/
     public static SocketAddress string2SocketAddress(final String addr) {
-        int split = addr.lastIndexOf(":");
+        int split = addr.lastIndexOf(":"); //实现对于ipv6的支持
         String host = addr.substring(0, split);
         String port = addr.substring(split + 1);
         InetSocketAddress isa = new InetSocketAddress(host, Integer.parseInt(port));

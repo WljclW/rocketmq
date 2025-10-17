@@ -1,0 +1,43 @@
+==============================================语法问题======================================
+1. this.scheduledExecutorService.scheduleAtFixedRate(NamesrvController.this.kvConfigManager::printAllPeriodically,
+               1, 10, TimeUnit.MINUTES);
+        看一下上述语句的第一个参数：这里的参数应该是一个Runnable，然后本意是执行printAllPeriodically方法，但是这个方法正好也是没有
+   参数的，因此可以直接简化成这种写法。
+        如果我们想执行的方法是带参数的，比如”someMethod(int param1,int param2)“，此时就不能使用上述的简化写法了，可以使用如下的写
+   法————
+        scheduledExecutorService.scheduleAtFixedRate(
+            () -> yourObject.yourMethod("arg1", "arg2"),
+            1,
+            10,
+            TimeUnit.SECONDS
+        );
+===============================================fastJson相关API=======================================
+1. broker在启动的时候会加载持久化数据到内存还原成需要的对象（见方法：BrokerController.initializeMetadata），这个过程中会使用
+    到“com.alibaba.fastjson.JSON.parseObject(java.lang.String, java.lang.Class<T>)”————使用第一个参数的信息（往往是
+    json字符串），还原出一个第二个参数指定的类对象。要求：
+        ①必须有 public 的无参构造函数；
+        ②字段必须是 可访问的（public / 有 setter / 或使用 @JSONField）
+             FastJSON 赋值字段时，按以下顺序尝试：
+                 public 字段 → 直接赋值
+                 private 字段 + public setter 方法 → 调用 setter
+                 private 字段 + @JSONField(serialize = true) → 可通过 ASM 直接访问字段（反射）
+                 如果都没有，字段将 被忽略
+        ③ 字段名匹配（大小写敏感，默认按字段名匹配）
+            如果 JSON 字段名和 Java 字段名不一致，可以用 @JSONField 注解指定，比如————
+                @JSONField(name = "username")
+                private String userName;
+    关于这里的其他问题————
+        final字段————通常不支持赋值，除非是 primitive 或 String 常量
+        static字段————默认不序列化，需要@JSONField(serialze=true)
+        接口或抽象类————不能直接实例化。如：JSON.parseObject(json, List.class)
+        泛型擦除（如List<User>）————⚠️ 不能直接用Class<T>，需要用TypeReference
+    关于"泛型擦除"的例子：
+        List<User> list = JSON.parseObject(json, List.class); // ❌ 不推荐！
+        List<User> list = JSON.parseObject(json, new TypeReference<List<User>>() {}); //✅ 推荐的方式！
+==============================================设计模式的使用=============================================
+1. 装饰器模式
+    初始化MessageStore的时候，通过将原始 MessageStore 实例逐层包装在多个插件中，动态扩展其功能而不修改原有逻辑，实现了“责任链式”的
+    可插拔增强机制。————见方法org.apache.rocketmq.broker.BrokerController.initializeMessageStore
+2.
+==============================================异步的使用===============================================
+1. 比如：

@@ -152,9 +152,17 @@ public class RpcClientImpl implements RpcClient {
     }
 
 
+    /**
+     * 封装一次“从 Broker 拉取消息”的异步 RPC 调用，将底层的 RemotingCommand 通信细节屏蔽，对外提供一个标准的 Promise<RpcResponse> 接口
+     * @param addr
+     * @param rpcRequest
+     * @param timeoutMillis
+     * @return
+     * @throws Exception
+     */
     public Promise<RpcResponse> handlePullMessage(final String addr, RpcRequest rpcRequest, long timeoutMillis)  throws Exception {
         final RemotingCommand requestCommand = RpcClientUtils.createCommandForRpcRequest(rpcRequest);
-
+        //Promise来自于netty：是一个特殊的（可写）的Future（netty中的，继承于JDK的Future）
         final Promise<RpcResponse> rpcResponsePromise = createResponseFuture();
 
         InvokeCallback callback = new InvokeCallback() {
@@ -190,7 +198,7 @@ public class RpcClientImpl implements RpcClient {
             public void operationFail(Throwable throwable) {
                 String errorMessage = "process failed. addr: " + addr + ". Request: " + requestCommand;
                 RpcResponse rpcResponse = new RpcResponse(new RpcException(ResponseCode.RPC_UNKNOWN, errorMessage, throwable));
-                rpcResponsePromise.setSuccess(rpcResponse);
+                rpcResponsePromise.setSuccess(rpcResponse);  //Promise<RpcResponse> 的设计是：只要“收到了明确的结果”（即使是失败），就算 success.然后RPC根据getException()判断是不是失败
             }
         };
 

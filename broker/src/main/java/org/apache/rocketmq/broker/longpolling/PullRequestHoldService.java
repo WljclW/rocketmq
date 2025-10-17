@@ -30,17 +30,36 @@ import org.apache.rocketmq.logging.org.slf4j.LoggerFactory;
 import org.apache.rocketmq.store.ConsumeQueueExt;
 
 /**[]：用于实现长轮询机制的核心服务(服务端长轮询消息拉取组件)。它的主要作用是处理消费者的拉取消息请求，并在消息未准备好时将请求
- *      挂起，直到有新消息到达或超时为止。这种机制能够有效减少无效的轮询请求，提高系统的性能和资源利用率。
+ *      挂起，直到有新消息到达或超时为止。再通知消费者，从而实现近实时的消息推送效果。
+ *    是 RocketMQ 实现 高效、低延迟消息拉取 的关键组件，它通过“挂起 + 唤醒”机制，避免了客户端频繁空轮询，降低了网络开销，提
+ *      升了消息实时性。
  * 【】：
  * 1. RocketMQ 为了提高网络性能，在拉取消息时如果没有新消息，不会马上返回，而是会将该查询请求挂起一段时间，然后再重试
- *      查询。如果一直没有新消息，直到轮询时间超过设定的阈值才会返回。*/
+ *      查询。如果一直没有新消息，直到轮询时间超过设定的阈值才会返回。
+ *【形象的理解】
+ *      1. 如果没有长轮询，过程如下：
+                  Consumer: 有新消息吗？
+                  Broker: 没有。
+                  Consumer: （1s后）有新消息吗？
+                  Broker: 没有。
+                  Consumer: （1s后）有新消息吗？
+                  Broker: 有，给你。
+            问题：大量空请求：浪费网络和 CPU 资源；延迟高：最长可能延迟 1s 才能收到消息
+        2. 有长轮询的话，过程如下：
+                     Consumer: 有新消息吗？（timeout=15s）
+                     Broker: 没有，我先不回复你...
+                     ↓
+                     （3s后，新消息到达）
+                     Broker: 有！这是消息。
+ *          ✅ 客户端一次请求，Broker 挂起等待，直到有消息或超时再返回。
+ * */
 public class PullRequestHoldService extends ServiceThread {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     protected static final String TOPIC_QUEUEID_SEPARATOR = "@";
     protected final BrokerController brokerController;
     //系统时钟
     private final SystemClock systemClock = new SystemClock();
-    // 长轮询消息拉取请求表,key为topic@queueId,value为PullRequest集合
+    // 长轮询消息拉取请求表,key为topic@queueId,value为PullRequest集合。是一个线程安全的 Map，保存所有被挂起的拉取请求
     protected ConcurrentMap<String/* topic@queueId */, ManyPullRequest /*是一个很多拉取请求的包装类*/> pullRequestTable =
         new ConcurrentHashMap<>(1024);
 
@@ -111,7 +130,8 @@ public class PullRequestHoldService extends ServiceThread {
         return PullRequestHoldService.class.getSimpleName();
     }
 
-    /**【】：检查是不是又可以处理的"拉取消息的请求"
+    /**【】：PullRequestHoldService 类的一个定时任务方法，它的核心作用是：定期检查所有被“挂起”的长轮询拉
+     *      取请求（Hold Request），看看是否有新消息到达，如果有，就主动唤醒这些请求，避免它们因等待超时才返回，从而提升消息消费的实时性。
      * 思路：遍历pullRequestTable，根据每一个键中的topic和queueId来获取该消息队列的偏移量，然后调用notifyMessageArriving看看是
      *      不是处理一些挂起的请求*/
     protected void checkHoldRequest() {
@@ -157,7 +177,7 @@ public class PullRequestHoldService extends ServiceThread {
                     if (newestOffset <= request.getPullFromThisOffset()) {
                         newestOffset = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId);
                     }
-                    // 如果拉取请求对应的消息队列的最大偏移量 大于 当前拉取的起始偏移量(正常的情况)，则说明消息存储组件有消息，则唤醒请求
+                    // 如果拉取请求对应的消息队列的最大偏移量 大于 当前拉取的起始偏移量(正常的情况)，则说明消息存储组件有新消息，则唤醒请求
                     if (newestOffset > request.getPullFromThisOffset()) {
                         boolean match = request.getMessageFilter().isMatchedByConsumeQueue(tagsCode,
                             new ConsumeQueueExt.CqExtUnit(tagsCode, msgStoreTime, filterBitMap));

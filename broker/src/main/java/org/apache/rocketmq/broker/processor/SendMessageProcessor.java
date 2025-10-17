@@ -239,6 +239,23 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         return true;
     }
 
+    /**
+     * Broker 端处理生产者发送消息的核心入口方法，位于 SendMessageProcessor 类中。它是 SEND_MESSAGE 请求的最终处理逻辑，负责:
+          解析请求
+          构建消息对象
+          权限校验
+          事务消息处理
+          调用存储层写入消息
+          构造响应并返回
+     * @param ctx
+     * @param request
+     * @param sendMessageContext
+     * @param requestHeader
+     * @param mappingContext
+     * @param sendMessageCallback
+     * @return
+     * @throws RemotingCommandException
+     */
     public RemotingCommand sendMessage(final ChannelHandlerContext ctx,
         final RemotingCommand request,
         final SendMessageContext sendMessageContext,
@@ -254,14 +271,14 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         final SendMessageResponseHeader responseHeader = (SendMessageResponseHeader) response.readCustomHeader();
 
         final byte[] body = request.getBody();
-
+        /*2. 选择queueId。生产者可以指定，如果是-1，就随机选择一个*/
         int queueIdInt = requestHeader.getQueueId();
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
 
         if (queueIdInt < 0) {
             queueIdInt = randomQueueId(topicConfig.getWriteQueueNums());
         }
-
+        /*3. 构建MessageExtBrokerInner。这是 Broker 内部使用的消息对象，比客户端消息多了一些元数据字段。*/
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
@@ -273,7 +290,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         msgInner.setBody(body);
         msgInner.setFlag(requestHeader.getFlag());
-
+        /*4. 构建唯一ID
+        * 每条消息必须有唯一 ID，用于去重、索引、排查
+          如果客户端未设置，Broker 自动生成（格式：IP@PID@TIMESTAMP@COUNTER）*/
         String uniqKey = oriProps.get(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX);
         if (uniqKey == null || uniqKey.length() <= 0) {
             uniqKey = MessageClientIDSetter.createUniqID();
@@ -281,7 +300,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         MessageAccessor.setProperties(msgInner, oriProps);
-
+        /*5. 压缩主题（Compaction Topic）校验
+            如果 Topic 配置为 COMPACTION 模式（只保留最新 key 的消息），则 必须设置 keys；否则无法做 key-based 压缩
+          不通过校验直接return构建的response*/
         CleanupPolicy cleanupPolicy = CleanupPolicyUtils.getDeletePolicy(Optional.of(topicConfig));
         if (Objects.equals(cleanupPolicy, CleanupPolicy.COMPACTION)) {
             if (StringUtils.isBlank(msgInner.getKeys())) {
@@ -290,7 +311,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 return response;
             }
         }
-
+        /*6. 设置消息元数据
+        这些字段用于：消息追踪（bornHost）、跨集群传播（PROPERTY_CLUSTER）、消费重试统计、存储索引（tagsCode）*/
         msgInner.setTagsCode(MessageExtBrokerInner.tagsString2tagsCode(topicConfig.getTopicFilterType(), msgInner.getTags()));
         msgInner.setBornTimestamp(requestHeader.getBornTimestamp());
         msgInner.setBornHost(ctx.channel().remoteAddress());
@@ -300,9 +322,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_CLUSTER, clusterName);
 
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
-
+        /*7. 针对事务消息的处理
+        事务消息不会立即投递，而是等待 Commit 或 Rollback；如果 Broker 配置 rejectTransactionMessage=true，则拒绝事务消息
+        * */
         // Map<String, String> oriProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
-        String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
+        String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED); //PROPERTY_TRANSACTION_PREPARED=true 表示这是 半消息（Half Message）
         boolean sendTransactionPrepareMessage;
         if (Boolean.parseBoolean(traFlag)
             && !(msgInner.getReconsumeTimes() > 0 && msgInner.getDelayTimeLevel() > 0)) { //For client under version 4.6.1
@@ -319,7 +343,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         long beginTimeMillis = this.brokerController.getMessageStore().now();
-
+        /*8. 核心写入逻辑：异步 或 同步
+            根据 asyncSendEnable 配置，选择 异步非阻塞 或 同步阻塞 方式将消息写入存储层（CommitLog），并在写入完成后构造响应返回给 Producer
+        */
         if (brokerController.getBrokerConfig().isAsyncSendEnable()) {
             CompletableFuture<PutMessageResult> asyncPutMessageFuture;
             if (sendTransactionPrepareMessage) {

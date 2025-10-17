@@ -22,12 +22,14 @@ public class NettyServerConfig implements Cloneable {
      * Bind address may be hostname, IPv4 or IPv6.
      * By default, it's wildcard address, listening all network interfaces.
      */
-    private String bindAddress = "0.0.0.0";     // NameServer 默认绑定地址
+    private String bindAddress = "0.0.0.0";     // NameServer 默认绑定地址（新增的set/get允许通过配置文件设置具体的地址，使broker只监听特定的地址）
     private int listenPort = 0;
     private int serverWorkerThreads = 8;    // Netty 业务线程池线程个数
     /*业务线程池
     *   Netty public 任务线程池线程个数， Netty 网络根据业务类型会创建不同的线程池，比如处理消息发送、消息消费、心跳检测等。
-    * 如果该业务类型（RequestCode）未注册线程池， 则由 public线程池执行
+    * 如果该业务类型（RequestCode）未注册线程池， 则由 public线程池执行。。
+    *   这里的设置是从配置文件读，如果配置文件没有设置，在方法”org.apache.rocketmq.remoting.netty.NettyRemotingServer.buildPublicExecutor“
+    * 中会被初始化为4
     * */
     private int serverCallbackExecutorThreads = 0;
     /*解析请求并转发给特定的业务线程池
@@ -36,7 +38,7 @@ public class NettyServerConfig implements Cloneable {
     * */
     private int serverSelectorThreads = 3;
     private int serverOnewaySemaphoreValue = 256;  // send oneway 消息请求的并发度（Broker 端参数）
-    private int serverAsyncSemaphoreValue = 64;  // 异步消息发送最大并发度（Broker端参数）
+    private int serverAsyncSemaphoreValue = 64;  // 异步（Async）消息发送最大并发度（Broker端参数）
     /*网络连接所允许的最大空闲时间，默认120s。如果连接空闲时间超过该参数设置的值，连接将被关闭*/
     private int serverChannelMaxIdleTimeSeconds = 120;
 
